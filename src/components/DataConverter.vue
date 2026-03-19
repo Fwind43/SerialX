@@ -112,36 +112,40 @@ const intToBytes = (value, bits, signed) => {
   return bytes
 }
 
-// 字节数组转浮点数
+// 字节数组转浮点数（支持字节序）
 const bytesToFloat = (bytes, bits) => {
   if (bytes.length !== bits / 8) return null
 
   const buffer = new Uint8Array(bytes).buffer
+  const view = new DataView(buffer)
+
+  const isLittleEndian = byteOrder.value === 'little'
 
   if (bits === 32) {
-    return new Float32Array(buffer)[0]
+    return view.getFloat32(0, isLittleEndian)
   } else if (bits === 64) {
-    return new Float64Array(buffer)[0]
+    return view.getFloat64(0, isLittleEndian)
   }
   return null
 }
 
-// 浮点数转字节数组
+// 浮点数转字节数组（支持字节序）
 const floatToBytes = (value, bits) => {
   const numBytes = bits / 8
   const bytes = new Uint8Array(numBytes)
+  const buffer = new ArrayBuffer(numBytes)
+  const view = new DataView(buffer)
+
+  const isLittleEndian = byteOrder.value === 'little'
 
   if (bits === 32) {
-    const buffer = new Float32Array([value]).buffer
-    bytes.set(new Uint8Array(buffer))
+    view.setFloat32(0, value, isLittleEndian)
   } else if (bits === 64) {
-    const buffer = new Float64Array([value]).buffer
-    bytes.set(new Uint8Array(buffer))
+    view.setFloat64(0, value, isLittleEndian)
   }
 
-  // 处理字节序
-  if (byteOrder.value === 'big') {
-    bytes.reverse()
+  for (let i = 0; i < numBytes; i++) {
+    bytes[i] = view.getUint8(i)
   }
 
   return Array.from(bytes)
