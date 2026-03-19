@@ -816,146 +816,208 @@ const getPatternPlaceholder = () => {
 
 /* 常用命令面板 */
 .commands-panel {
-  padding: 8px 16px;
-  background-color: #2d2d30;
-  border-bottom: 1px solid #3e3e42;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(45, 45, 48, 0.95) 0%, rgba(30, 30, 30, 0.95) 100%);
+  border-bottom: 1px solid rgba(62, 62, 66, 0.8);
 }
 
 .commands-header {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .commands-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
 }
 
 .command-item {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  transition: opacity 0.2s;
+  gap: 8px;
+  transition: all 0.3s ease;
 }
 
 .command-item.disabled {
   opacity: 0.5;
+  filter: grayscale(0.5);
 }
 
 .command-btn {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 10px 12px;
+  justify-content: center;
+  padding: 14px 16px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
   color: #ffffff;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   width: 100%;
+  overflow: hidden;
+}
+
+.command-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.command-btn:hover::before {
+  left: 100%;
 }
 
 .command-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.command-btn:active:not(:disabled) {
+  transform: translateY(-2px) scale(0.98);
 }
 
 .command-btn:disabled {
-  background: #3e3e42;
+  background: linear-gradient(135deg, #3e3e42 0%, #2d2d30 100%);
   cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.05);
 }
 
 .command-name {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  opacity: 0.9;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.3px;
 }
 
 .command-value {
   font-size: 10px;
   font-family: 'Consolas', 'Monaco', monospace;
-  opacity: 0.7;
-  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 6px;
+  padding: 2px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
 }
 
 .command-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   justify-content: center;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.2s ease;
+}
+
+.command-item:hover .command-actions {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .cmd-action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 12px;
-  transition: all 0.15s;
+  font-size: 13px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
 }
 
 .cmd-action-btn.enabled {
-  background-color: #4ec9b0;
+  background: linear-gradient(135deg, #4ec9b0 0%, #45b8a0 100%);
   color: #1e1e1e;
+  box-shadow: 0 2px 8px rgba(78, 201, 176, 0.3);
 }
 
 .cmd-action-btn.disabled {
-  background-color: #3e3e42;
+  background: #3e3e42;
   color: #858585;
 }
 
 .cmd-action-btn.edit {
-  background-color: #569cd6;
+  background: linear-gradient(135deg, #569cd6 0%, #4a8dc7 100%);
   color: #ffffff;
+  box-shadow: 0 2px 8px rgba(86, 156, 214, 0.3);
 }
 
 .cmd-action-btn.delete {
-  background-color: #c42b1c;
+  background: linear-gradient(135deg, #c42b1c 0%, #a82518 100%);
   color: #ffffff;
+  box-shadow: 0 2px 8px rgba(196, 43, 28, 0.3);
 }
 
 .cmd-action-btn:hover {
-  transform: scale(1.1);
+  transform: scale(1.15) translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.cmd-action-btn:active {
+  transform: scale(1.05);
 }
 
 .commands-footer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #3e3e42;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(62, 62, 66, 0.5);
 }
 
 .add-command-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 16px;
-  background: linear-gradient(135deg, #4ec9b0 0%, #4a9db8 100%);
-  border: none;
-  border-radius: 6px;
+  gap: 8px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #4ec9b0 0%, #45b8a0 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
   color: #1e1e1e;
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.add-command-btn::before {
+  content: '+';
+  font-size: 16px;
+  font-weight: bold;
 }
 
 .add-command-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(78, 201, 176, 0.5);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(78, 201, 176, 0.4);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.add-command-btn:active {
+  transform: translateY(-1px);
 }
 
 .commands-hint {
   font-size: 11px;
-  color: #858585;
+  color: #6a6a6a;
   text-align: center;
+  font-style: italic;
+  letter-spacing: 0.3px;
 }
 
 /* 命令管理弹窗 */
@@ -965,124 +1027,161 @@ const getPatternPlaceholder = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .command-modal {
   background: linear-gradient(145deg, #2d2d30 0%, #1e1e1e 100%);
-  border: 1px solid #3e3e42;
-  border-radius: 12px;
-  padding: 20px;
-  min-width: 400px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(62, 62, 66, 0.8);
+  border-radius: 16px;
+  padding: 24px;
+  min-width: 420px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(62, 62, 66, 0.5);
 }
 
 .modal-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   color: #ffffff;
+  letter-spacing: 0.5px;
 }
 
 .modal-close {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: none;
-  border: none;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #858585;
   cursor: pointer;
-  font-size: 16px;
-  border-radius: 4px;
-  transition: all 0.15s;
+  font-size: 18px;
+  border-radius: 8px;
+  transition: all 0.2s;
 }
 
 .modal-close:hover {
-  background-color: #c42b1c;
+  background: rgba(196, 43, 28, 0.3);
+  border-color: rgba(196, 43, 28, 0.5);
   color: #ffffff;
+  transform: rotate(90deg);
 }
 
 .modal-body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .form-group label {
   font-size: 12px;
   color: #858585;
-  font-weight: 500;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .form-input {
-  padding: 10px 12px;
-  background-color: #1e1e1e;
-  border: 1px solid #3e3e42;
-  border-radius: 6px;
+  padding: 12px 14px;
+  background: rgba(30, 30, 30, 0.8);
+  border: 1px solid rgba(62, 62, 66, 0.8);
+  border-radius: 8px;
   color: #ffffff;
   font-size: 14px;
   font-family: 'Consolas', 'Monaco', monospace;
+  transition: all 0.2s;
 }
 
 .form-input:focus {
   outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+  background: rgba(30, 30, 30, 1);
+}
+
+.form-input::placeholder {
+  color: #555;
 }
 
 .modal-footer {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid rgba(62, 62, 66, 0.5);
 }
 
 .modal-btn {
-  padding: 8px 20px;
-  border-radius: 6px;
+  padding: 10px 24px;
+  border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
-  border: none;
+  transition: all 0.2s;
+  border: 1px solid transparent;
 }
 
 .modal-btn.cancel {
-  background-color: #3e3e42;
+  background: transparent;
+  border-color: rgba(62, 62, 66, 0.8);
   color: #cccccc;
 }
 
 .modal-btn.cancel:hover {
-  background-color: #4a4a4a;
+  background: rgba(62, 62, 66, 0.5);
+  border-color: rgba(85, 85, 85, 0.8);
 }
 
 .modal-btn.save {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: #ffffff;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
 .modal-btn.save:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
 }
 
 /* 终端显示区 */
