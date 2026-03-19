@@ -13,9 +13,16 @@ const serialStore = useSerialStore()
 const terminalRef = ref(null)
 const showFilters = ref(false)
 const showSearch = ref(false)
+const showCommands = ref(false)
 const searchQuery = ref('')
 const currentMatchIndex = ref(0)
 const matchedLogIndices = ref([])
+
+// 执行常用命令
+const executeCommand = async (command) => {
+  serialStore.setPortSendingData(props.portPath, command)
+  await serialStore.sendData(props.portPath)
+}
 
 // 搜索匹配
 const performSearch = () => {
@@ -283,6 +290,9 @@ const getPatternPlaceholder = () => {
           <input type="checkbox" v-model="serialStore.isAutoScroll" />
           自动滚动
         </label>
+        <button @click="showCommands = !showCommands" class="action-btn commands" :class="{ active: showCommands }" title="常用命令">
+          <span>⚡</span>
+        </button>
         <button @click="showFilters = !showFilters" class="action-btn filter" :class="{ active: showFilters }" title="数据过滤">
           <span>🔍</span>
         </button>
@@ -374,6 +384,24 @@ const getPatternPlaceholder = () => {
         <span v-else>
           ℹ️ 启用过滤后，RX 数据会根据匹配规则进行过滤
         </span>
+      </div>
+    </div>
+
+    <!-- 常用命令面板 -->
+    <div v-if="showCommands" class="commands-panel">
+      <div class="commands-list">
+        <button
+          v-for="cmd in serialStore.getEnabledCommands"
+          :key="cmd.id"
+          @click="executeCommand(cmd.command)"
+          class="command-btn"
+        >
+          <span class="command-name">{{ cmd.name }}</span>
+          <span class="command-value">{{ cmd.command }}</span>
+        </button>
+      </div>
+      <div class="commands-hint">
+        <span>点击按钮快速发送命令到当前串口</span>
       </div>
     </div>
 
@@ -579,6 +607,16 @@ const getPatternPlaceholder = () => {
   color: #ffffff;
 }
 
+.action-btn.commands {
+  padding: 4px 10px;
+}
+
+.action-btn.commands.active {
+  background-color: #007acc;
+  border-color: #007acc;
+  color: #ffffff;
+}
+
 /* 过滤器面板 */
 .filter-panel {
   padding: 8px 16px;
@@ -661,6 +699,63 @@ const getPatternPlaceholder = () => {
 }
 
 .filter-hint {
+  font-size: 11px;
+  color: #858585;
+  padding-top: 4px;
+  border-top: 1px solid #3e3e42;
+}
+
+/* 常用命令面板 */
+.commands-panel {
+  padding: 8px 16px;
+  background-color: #2d2d30;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.commands-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.command-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 100px;
+}
+
+.command-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+}
+
+.command-btn:active {
+  transform: translateY(0);
+}
+
+.command-name {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.command-value {
+  font-size: 10px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+
+.commands-hint {
   font-size: 11px;
   color: #858585;
   padding-top: 4px;

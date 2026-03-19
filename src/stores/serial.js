@@ -29,6 +29,14 @@ export const useSerialStore = defineStore('serial', () => {
   const loopInterval = ref(1000)
   let loopTimer = null
 
+  // 常用命令配置（全局统一配置）
+  const commonCommands = ref([
+    { id: 1, name: '复位', command: 'RESET', enabled: true },
+    { id: 2, name: '状态查询', command: 'STATUS?', enabled: true },
+    { id: 3, name: '版本信息', command: 'VERSION', enabled: true },
+    { id: 4, name: '帮助', command: 'HELP', enabled: true }
+  ])
+
   // Getters
   const availableBaudRates = computed(() => [
     300, 1200, 2400, 4800, 9600, 14400, 19200, 28800,
@@ -317,6 +325,38 @@ export const useSerialStore = defineStore('serial', () => {
     defaultSettings.value[key] = value
   }
 
+  // 常用命令操作
+  const addCommonCommand = (name, command) => {
+    commonCommands.value.push({
+      id: Date.now(),
+      name,
+      command,
+      enabled: true
+    })
+  }
+
+  const removeCommonCommand = (id) => {
+    commonCommands.value = commonCommands.value.filter(cmd => cmd.id !== id)
+  }
+
+  const updateCommonCommand = (id, updates) => {
+    const cmd = commonCommands.value.find(c => c.id === id)
+    if (cmd) {
+      Object.assign(cmd, updates)
+    }
+  }
+
+  const toggleCommandEnabled = (id) => {
+    const cmd = commonCommands.value.find(c => c.id === id)
+    if (cmd) {
+      cmd.enabled = !cmd.enabled
+    }
+  }
+
+  const getEnabledCommands = computed(() => {
+    return commonCommands.value.filter(cmd => cmd.enabled)
+  })
+
   // Set up event listeners
   function setupEventListeners() {
     window.electronAPI.onSerialData(({ port, data }) => {
@@ -354,8 +394,10 @@ export const useSerialStore = defineStore('serial', () => {
     isAutoScroll,
     isLoopSend,
     loopInterval,
+    commonCommands,
     // Getters
     availableBaudRates,
+    getEnabledCommands,
     getPortStatus,
     getPortSettings,
     getPortSendingData,
@@ -379,6 +421,10 @@ export const useSerialStore = defineStore('serial', () => {
     clearLogs,
     formatDisplayData,
     updateDefaultSetting,
-    setupEventListeners
+    setupEventListeners,
+    addCommonCommand,
+    removeCommonCommand,
+    updateCommonCommand,
+    toggleCommandEnabled
   }
 })
