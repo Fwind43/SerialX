@@ -45,8 +45,14 @@ onBeforeUnmount(() => {
 
 const handleGlobalKey = (e) => {
   // Ctrl+W 或 Alt+F4 关闭
-  if ((e.ctrlKey && e.key === 'w') || e.key === 'F4' && e.altKey) {
+  if ((e.ctrlKey && e.key === 'w') || (e.key === 'F4' && e.altKey)) {
     e.preventDefault()
+    closeWindow()
+  }
+}
+
+const closeWindow = () => {
+  if (props.standalone && typeof window !== 'undefined') {
     window.close()
   }
 }
@@ -260,13 +266,15 @@ const clearAll = () => {
 <template>
   <div class="converter-container" :class="{ standalone: standalone }">
     <div class="converter-header" v-if="standalone">
-      <span class="title-icon">🔢</span>
-      <span class="title-text">进制转换工具</span>
+      <div class="header-left">
+        <span class="title-icon">🔢</span>
+        <span class="title-text">进制转换工具</span>
+      </div>
       <div class="header-actions">
         <button @click="clearAll" class="icon-btn" title="清空 (C)">
           <span>🗑️</span>
         </button>
-        <button @click="window.close()" class="icon-btn close" title="关闭 (Ctrl+W)">
+        <button @click="closeWindow" class="icon-btn close" title="关闭 (Ctrl+W)">
           <span>✕</span>
         </button>
       </div>
@@ -435,33 +443,52 @@ const clearAll = () => {
   flex-direction: column;
   height: 100%;
   padding: 12px;
-  background-color: #1e1e1e;
+  background: linear-gradient(145deg, #1e1e1e 0%, #252526 100%);
   overflow-y: auto;
 }
 
 /* 独立窗口模式 */
 .converter-container.standalone {
-  position: fixed;
-  top: 100px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 450px;
-  max-height: 600px;
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  border: 1px solid #3e3e42;
-  z-index: 1000;
+  height: 100vh;
+  background: linear-gradient(180deg, #0f0f23 0%, #1a1a2e 40%, #16213e 100%);
 }
 
-.converter-container.standalone .converter-header {
+/* 独立窗口标题栏 */
+.standalone .converter-header {
   cursor: move;
   user-select: none;
+  padding: 14px 18px;
+  margin: -12px -12px 20px -12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 14px 14px 0 0;
+  border-bottom: none;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+}
+
+.standalone .title-icon {
+  font-size: 24px;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3));
+}
+
+.standalone .title-text {
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
 }
 
 /* 独立窗口标题栏动作 */
 .header-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   margin-left: auto;
 }
 
@@ -469,62 +496,65 @@ const clearAll = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  background-color: #3c3c3c;
-  border: 1px solid #555;
-  border-radius: 4px;
-  color: #cccccc;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #ffffff;
   cursor: pointer;
-  font-size: 14px;
-  transition: all 0.15s;
+  font-size: 16px;
+  transition: all 0.2s;
 }
 
 .icon-btn:hover {
-  background-color: #4a4a4a;
-  border-color: #007acc;
-  color: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .icon-btn.close:hover {
-  background-color: #c42b1c;
-  border-color: #a02015;
+  background: rgba(239, 68, 68, 0.8);
+  border-color: rgba(239, 68, 68, 1);
 }
 
 .converter-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #3e3e42;
-  margin-bottom: 12px;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(62, 62, 66, 0.5);
 }
 
 .title-icon {
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .title-text {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: #ffffff;
 }
 
 .clear-btn {
   margin-left: auto;
-  padding: 4px 12px;
-  background-color: #3c3c3c;
-  border: 1px solid #555;
-  color: #cccccc;
-  border-radius: 3px;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: #ffffff;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s;
 }
 
 .clear-btn:hover {
-  background-color: #c42b1c;
-  border-color: #a02015;
-  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
 /* 字节序选择 */
@@ -532,16 +562,18 @@ const clearAll = () => {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 8px 12px;
-  background-color: #252526;
-  border-radius: 4px;
-  margin-bottom: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(62, 62, 66, 0.5) 0%, rgba(45, 45, 48, 0.5) 100%);
+  border-radius: 8px;
+  margin-bottom: 16px;
   font-size: 13px;
   color: #cccccc;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .byte-order-section label {
   color: #858585;
+  font-weight: 500;
 }
 
 .radio-label {
@@ -561,47 +593,54 @@ const clearAll = () => {
 
 /* 格式区域 */
 .format-section {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .section-title {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   color: #858585;
   text-transform: uppercase;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid #3e3e42;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, rgba(62, 62, 66, 0.3) 0%, rgba(45, 45, 48, 0.3) 100%);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  letter-spacing: 1px;
 }
 
 .input-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .input-row label {
-  width: 70px;
+  width: 75px;
   font-size: 12px;
-  color: #cccccc;
+  color: #999999;
   text-align: right;
+  font-weight: 500;
 }
 
 .format-input {
   flex: 1;
-  padding: 8px 10px;
-  background-color: #2d2d30;
-  border: 1px solid #3e3e42;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, rgba(45, 45, 48, 0.8) 0%, rgba(30, 30, 30, 0.8) 100%);
+  border: 1px solid rgba(62, 62, 66, 0.8);
   color: #ffffff;
-  border-radius: 3px;
+  border-radius: 6px;
   font-size: 13px;
   font-family: 'Consolas', 'Monaco', monospace;
+  transition: all 0.2s;
 }
 
 .format-input:focus {
   outline: none;
-  border-color: #007acc;
+  border-color: rgba(102, 126, 234, 0.6);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+  background: linear-gradient(135deg, rgba(45, 45, 48, 1) 0%, rgba(30, 30, 30, 1) 100%);
 }
 
 .format-input.hex {
