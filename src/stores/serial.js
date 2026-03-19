@@ -63,7 +63,8 @@ export const useSerialStore = defineStore('serial', () => {
   const saveCommonCommands = async () => {
     try {
       const config = await window.electronAPI.loadConfig()
-      config.commonCommands = commonCommands.value
+      // 使用 JSON 序列化处理响应式对象，避免无法克隆的错误
+      config.commonCommands = JSON.parse(JSON.stringify(commonCommands.value))
       await window.electronAPI.saveConfig(config)
     } catch (error) {
       console.error('[Store] Error saving config:', error)
