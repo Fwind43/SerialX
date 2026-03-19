@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isOpen: (portPath) => ipcRenderer.invoke('serial:isOpen', portPath),
   getOpenPorts: () => ipcRenderer.invoke('serial:get-open-ports'),
 
+  // Config Operations - 配置持久化
+  loadConfig: () => ipcRenderer.invoke('config:load'),
+  saveConfig: (config) => ipcRenderer.invoke('config:save', config),
+
   // Window Operations
   openConverterWindow: () => ipcRenderer.send('window:open-converter'),
 

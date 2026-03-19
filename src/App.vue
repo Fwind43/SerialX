@@ -12,8 +12,10 @@ const isConverterMode = computed(() => {
   return window.location.hash === '#/converter'
 })
 
-onMounted(() => {
+onMounted(async () => {
   serialStore.refreshPorts()
+  // 加载常用命令配置
+  serialStore.loadCommonCommands()
 })
 </script>
 

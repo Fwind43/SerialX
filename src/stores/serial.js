@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 export const useSerialStore = defineStore('serial', () => {
   // State
@@ -29,13 +29,51 @@ export const useSerialStore = defineStore('serial', () => {
   const loopInterval = ref(1000)
   let loopTimer = null
 
-  // 常用命令配置（全局统一配置）
-  const commonCommands = ref([
-    { id: 1, name: '复位', command: 'RESET', enabled: true },
-    { id: 2, name: '状态查询', command: 'STATUS?', enabled: true },
-    { id: 3, name: '版本信息', command: 'VERSION', enabled: true },
-    { id: 4, name: '帮助', command: 'HELP', enabled: true }
-  ])
+  // 常用命令配置（全局统一配置）- 初始为空，从配置文件加载
+  const commonCommands = ref([])
+
+  // 从配置文件加载常用命令
+  const loadCommonCommands = async () => {
+    try {
+      const config = await window.electronAPI.loadConfig()
+      if (config.commonCommands && config.commonCommands.length > 0) {
+        commonCommands.value = config.commonCommands
+      } else {
+        // 使用默认配置
+        commonCommands.value = [
+          { id: 1, name: '复位', command: 'RESET', enabled: true },
+          { id: 2, name: '状态查询', command: 'STATUS?', enabled: true },
+          { id: 3, name: '版本信息', command: 'VERSION', enabled: true },
+          { id: 4, name: '帮助', command: 'HELP', enabled: true }
+        ]
+      }
+    } catch (error) {
+      console.error('[Store] Error loading config:', error)
+      // 使用默认配置
+      commonCommands.value = [
+        { id: 1, name: '复位', command: 'RESET', enabled: true },
+        { id: 2, name: '状态查询', command: 'STATUS?', enabled: true },
+        { id: 3, name: '版本信息', command: 'VERSION', enabled: true },
+        { id: 4, name: '帮助', command: 'HELP', enabled: true }
+      ]
+    }
+  }
+
+  // 保存常用命令到配置文件
+  const saveCommonCommands = async () => {
+    try {
+      const config = await window.electronAPI.loadConfig()
+      config.commonCommands = commonCommands.value
+      await window.electronAPI.saveConfig(config)
+    } catch (error) {
+      console.error('[Store] Error saving config:', error)
+    }
+  }
+
+  // 监听常用命令变化，自动保存
+  watch(() => commonCommands.value, () => {
+    saveCommonCommands()
+  }, { deep: true })
 
   // Getters
   const availableBaudRates = computed(() => [
@@ -425,6 +463,8 @@ export const useSerialStore = defineStore('serial', () => {
     addCommonCommand,
     removeCommonCommand,
     updateCommonCommand,
-    toggleCommandEnabled
+    toggleCommandEnabled,
+    loadCommonCommands,
+    saveCommonCommands
   }
 })

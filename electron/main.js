@@ -1,10 +1,46 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { SerialPort } from 'serialport'
 import { execSync } from 'child_process'
+import fs from 'fs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// 配置文件路径（用户数据目录）
+const getConfigPath = () => {
+  const configDir = path.join(app.getPath('userData'), 'config')
+  if (!fs.existsSync(configDir)) {
+    fs.mkdirSync(configDir, { recursive: true })
+  }
+  return path.join(configDir, 'settings.json')
+}
+
+// 加载配置
+function loadConfig() {
+  try {
+    const configPath = getConfigPath()
+    if (fs.existsSync(configPath)) {
+      const data = fs.readFileSync(configPath, 'utf8')
+      return JSON.parse(data)
+    }
+  } catch (error) {
+    console.error('[Config] Error loading config:', error)
+  }
+  return {}
+}
+
+// 保存配置
+function saveConfig(config) {
+  try {
+    const configPath = getConfigPath()
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8')
+    return { success: true }
+  } catch (error) {
+    console.error('[Config] Error saving config:', error)
+    return { success: false, error: error.message }
+  }
+}
 
 // 通过注册表获取串口列表（兼容 com0com 等虚拟串口）
 function getPortsFromRegistry() {
@@ -309,6 +345,15 @@ app.whenReady().then(() => {
   // 打开进制转换工具窗口
   ipcMain.on('window:open-converter', () => {
     createConverterWindow()
+  })
+
+  // 配置管理 - 常用命令持久化
+  ipcMain.handle('config:load', async () => {
+    return loadConfig()
+  })
+
+  ipcMain.handle('config:save', async (event, config) => {
+    return saveConfig(config)
   })
 })
 
