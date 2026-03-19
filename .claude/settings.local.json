@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(*)",
+      "Bash(npm init:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(tee build.log)",
+      "Bash(dir:*)",
+      "Bash(npx vite:*)",
+      "Bash(node:*)",
+      "Bash(wmic path:*)",
+      "Bash(powershell -Command \"Get-WmiObject Win32_SerialPort | Select-Object DeviceID,Name,Status | Format-Table\")",
+      "Bash(npm list:*)",
+      "Bash(powershell -Command \"Get-WmiObject Win32_SerialPort | ForEach-Object { $_.DeviceID + ',' + $_.Name }\")",
+      "Bash(git add:*)"
+    ],
+    "deny": [
+      "Bash(rm:*)",
+      "Bash(git push *)"
+    ]
+  }
+}
