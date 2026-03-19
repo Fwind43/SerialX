@@ -1,6 +1,10 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useSerialStore } from '../stores/serial'
+import DataConverter from './DataConverter.vue'
+
+const serialStore = useSerialStore()
+const showConverter = ref(false)
 
 const serialStore = useSerialStore()
 
@@ -44,6 +48,14 @@ const handleRefresh = async () => {
     <div class="sidebar-title">
       <span class="title-icon">🔌</span>
       <span class="title-text">串口设备</span>
+      <button @click="showConverter = !showConverter" class="tool-btn" :class="{ active: showConverter }" title="进制转换">
+        <span>🔢</span>
+      </button>
+    </div>
+
+    <!-- 进制转换工具 -->
+    <div v-if="showConverter" class="converter-panel">
+      <DataConverter />
     </div>
 
     <!-- 已连接的串口列表 -->
@@ -148,6 +160,14 @@ const handleRefresh = async () => {
   overflow: hidden;
 }
 
+/* 进制转换面板 */
+.converter-panel {
+  flex: 1;
+  overflow: hidden;
+  border-bottom: 1px solid #3e3e42;
+  min-height: 0;
+}
+
 /* 侧边栏标题 */
 .sidebar-title {
   display: flex;
@@ -168,6 +188,31 @@ const handleRefresh = async () => {
   color: #ffffff;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* 工具按钮 */
+.tool-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid #555;
+  color: #cccccc;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+
+.tool-btn:hover {
+  background-color: #3e3e42;
+  border-color: #007acc;
+  color: #ffffff;
+}
+
+.tool-btn.active {
+  background-color: #007acc;
+  border-color: #007acc;
+  color: #ffffff;
 }
 
 /* 模拟模式开关 */
