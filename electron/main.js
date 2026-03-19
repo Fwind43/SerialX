@@ -264,7 +264,9 @@ function createWindow() {
     mainWindow.loadURL('http://localhost:5173')
     mainWindow.webContents.openDevTools()
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+    // 生产环境：使用 file:// 协议加载打包后的文件
+    const indexPath = path.join(__dirname, '../out/renderer/index.html')
+    mainWindow.loadFile(indexPath)
   }
 
   mainWindow.on('closed', () => {
@@ -295,7 +297,7 @@ function createConverterWindow() {
   if (process.env.NODE_ENV === 'development') {
     converterWindow.loadURL('http://localhost:5173/#/converter')
   } else {
-    converterWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+    converterWindow.loadFile(path.join(__dirname, '../out/renderer/index.html'), {
       hash: '/converter'
     })
   }
