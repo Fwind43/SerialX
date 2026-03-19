@@ -79,6 +79,7 @@ const handleRefresh = async () => {
           :key="port.path"
           :class="['port-item', { selected: serialStore.selectedPort === port.path }]"
           @click="serialStore.selectedPort = port.path"
+          @dblclick="handleConnect(port.path)"
         >
           <span class="port-icon">🔌</span>
           <span class="port-path">{{ port.path }}</span>
