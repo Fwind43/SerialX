@@ -6,8 +6,6 @@ import DataConverter from './DataConverter.vue'
 const serialStore = useSerialStore()
 const showConverter = ref(false)
 
-const serialStore = useSerialStore()
-
 // 获取已打开的串口列表
 const openedPorts = computed(() => {
   return Array.from(serialStore.openPorts.entries())
