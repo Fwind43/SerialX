@@ -77,36 +77,59 @@ const bytesToHex = (bytes) => {
   return bytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')
 }
 
-// 字节数组转有符号整数
+// 字节数组转有符号整数（使用 DataView 支持字节序）
 const bytesToInt = (bytes, bits, signed) => {
   if (bytes.length !== bits / 8) return null
 
-  let value = 0
-  for (let i = 0; i < bytes.length; i++) {
-    const idx = byteOrder.value === 'little' ? i : bytes.length - 1 - i
-    value |= bytes[idx] << (i * 8)
+  const buffer = new Uint8Array(bytes).buffer
+  const view = new DataView(buffer)
+  const isLittleEndian = byteOrder.value === 'little'
+
+  if (bits === 8) {
+    let value = bytes[0]
+    if (signed && (value & 0x80)) {
+      value = value - 256
+    }
+    return value
   }
 
-  if (signed && (value & (1 << (bits - 1)))) {
-    value = value - Math.pow(2, bits)
+  if (bits === 16) {
+    return signed ? view.getInt16(0, isLittleEndian) : view.getUint16(0, isLittleEndian)
   }
 
-  return value
+  if (bits === 32) {
+    return signed ? view.getInt32(0, isLittleEndian) : view.getUint32(0, isLittleEndian)
+  }
+
+  return null
 }
 
-// 有符号整数转字节数组
+// 有符号整数转字节数组（使用 DataView 支持字节序）
 const intToBytes = (value, bits, signed) => {
-  const bytes = []
   const numBytes = bits / 8
+  const buffer = new ArrayBuffer(numBytes)
+  const view = new DataView(buffer)
+  const isLittleEndian = byteOrder.value === 'little'
 
-  // 处理负数
-  if (signed && value < 0) {
-    value = Math.pow(2, bits) + value
+  if (bits === 8) {
+    view.setInt8(0, value)
+  } else if (bits === 16) {
+    if (signed) {
+      view.setInt16(0, value, isLittleEndian)
+    } else {
+      view.setUint16(0, value, isLittleEndian)
+    }
+  } else if (bits === 32) {
+    if (signed) {
+      view.setInt32(0, value, isLittleEndian)
+    } else {
+      view.setUint32(0, value, isLittleEndian)
+    }
   }
 
+  const bytes = []
   for (let i = 0; i < numBytes; i++) {
-    const idx = byteOrder.value === 'little' ? i : numBytes - 1 - i
-    bytes[idx] = (value >> (i * 8)) & 0xFF
+    bytes[i] = view.getUint8(i)
   }
 
   return bytes
@@ -192,26 +215,44 @@ const convertFromHex = () => {
   inputBinary.value = bytes.map(b => b.toString(2).padStart(8, '0')).join(' ')
 }
 
-// 从十进制转换
+// 从十进制转换（使用 DataView 支持字节序）
 const convertFromDecimal = () => {
   const value = parseInt(inputDecimal.value, 10)
   if (isNaN(value)) return
 
-  const bytes = []
-  let tempValue = value
-  do {
-    bytes.push(tempValue & 0xFF)
-    tempValue = Math.floor(tempValue / 256)
-  } while (tempValue > 0)
+  // 根据数值范围确定字节数
+  let bits = 8
+  if (value > 127 || value < -128) bits = 16
+  if (value > 32767 || value < -32768) bits = 32
+  if (value > 2147483647 || value < -2147483648) bits = 64
 
-  if (byteOrder.value === 'big') {
-    bytes.reverse()
+  const buffer = new ArrayBuffer(bits / 8)
+  const view = new DataView(buffer)
+  const isLittleEndian = byteOrder.value === 'little'
+
+  if (bits === 8) {
+    view.setInt8(0, value)
+  } else if (bits === 16) {
+    view.setInt16(0, value, isLittleEndian)
+  } else if (bits === 32) {
+    view.setInt32(0, value, isLittleEndian)
+  } else if (bits === 64) {
+    view.setBigInt64(0, BigInt(value), isLittleEndian)
+  }
+
+  const bytes = []
+  for (let i = 0; i < bits / 8; i++) {
+    bytes.push(view.getUint8(i))
   }
 
   inputHex.value = bytesToHex(bytes)
   inputBinary.value = bytes.map(b => b.toString(2).padStart(8, '0')).join(' ')
-  inputInt8.value = bytesToInt(bytes.slice(0, 1), 8, true)
-  inputUint8.value = bytesToInt(bytes.slice(0, 1), 8, false)
+
+  // 更新其他字段
+  if (bits >= 8) {
+    inputInt8.value = bytesToInt(bytes.slice(0, 1), 8, true)
+    inputUint8.value = bytesToInt(bytes.slice(0, 1), 8, false)
+  }
 }
 
 // 从二进制转换
