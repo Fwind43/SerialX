@@ -208,6 +208,7 @@ class SerialManager {
 }
 
 let mainWindow = null
+let converterWindow = null
 let serialManager = null
 
 function createWindow() {
@@ -233,6 +234,41 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+}
+
+function createConverterWindow() {
+  if (converterWindow) {
+    converterWindow.focus()
+    return converterWindow
+  }
+
+  converterWindow = new BrowserWindow({
+    width: 500,
+    height: 700,
+    minWidth: 400,
+    minHeight: 500,
+    resizable: true,
+    maximizable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  if (process.env.NODE_ENV === 'development') {
+    converterWindow.loadURL('http://localhost:5173/#/converter')
+  } else {
+    converterWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+      hash: '/converter'
+    })
+  }
+
+  converterWindow.on('closed', () => {
+    converterWindow = null
+  })
+
+  return converterWindow
 }
 
 app.whenReady().then(() => {
@@ -268,6 +304,11 @@ app.whenReady().then(() => {
 
   ipcMain.handle('serial:get-open-ports', async () => {
     return serialManager.getOpenPorts()
+  })
+
+  // 打开进制转换工具窗口
+  ipcMain.on('window:open-converter', () => {
+    createConverterWindow()
   })
 })
 

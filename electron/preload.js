@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isOpen: (portPath) => ipcRenderer.invoke('serial:isOpen', portPath),
   getOpenPorts: () => ipcRenderer.invoke('serial:get-open-ports'),
 
+  // Window Operations
+  openConverterWindow: () => ipcRenderer.send('window:open-converter'),
+
   // Serial Data Events (from main to renderer) - 数据包含串口路径
   onSerialData: (callback) => {
     ipcRenderer.removeAllListeners('serial:data')

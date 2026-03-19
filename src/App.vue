@@ -1,10 +1,16 @@
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, computed } from 'vue'
 import { useSerialStore } from './stores/serial'
 import SerialSidebar from './components/SerialSidebar.vue'
 import TerminalView from './components/TerminalView.vue'
+import DataConverter from './components/DataConverter.vue'
 
 const serialStore = useSerialStore()
+
+// 检查是否是转换器独立窗口
+const isConverterMode = computed(() => {
+  return window.location.hash === '#/converter'
+})
 
 onMounted(() => {
   serialStore.refreshPorts()
@@ -12,7 +18,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app-container">
+  <div class="app-container" v-if="!isConverterMode">
     <!-- 顶部标题栏 -->
     <header class="app-header">
       <div class="header-content">
@@ -49,6 +55,11 @@ onMounted(() => {
         <span class="status-value">{{ serialStore.openPorts.size }}</span>
       </span>
     </footer>
+  </div>
+
+  <!-- 转换器独立模式 -->
+  <div v-else class="converter-only">
+    <DataConverter standalone />
   </div>
 </template>
 
@@ -147,5 +158,12 @@ onMounted(() => {
 
 .status-value {
   font-weight: 500;
+}
+
+/* 转换器独立模式 */
+.converter-only {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
 }
 </style>

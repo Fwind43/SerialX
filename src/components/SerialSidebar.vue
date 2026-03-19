@@ -6,6 +6,13 @@ import DataConverter from './DataConverter.vue'
 const serialStore = useSerialStore()
 const showConverter = ref(false)
 
+// 打开弹出窗口
+const openConverterPopup = () => {
+  if (window.electronAPI?.openConverterWindow) {
+    window.electronAPI.openConverterWindow()
+  }
+}
+
 // 获取已打开的串口列表
 const openedPorts = computed(() => {
   return Array.from(serialStore.openPorts.entries())
@@ -46,9 +53,14 @@ const handleRefresh = async () => {
     <div class="sidebar-title">
       <span class="title-icon">🔌</span>
       <span class="title-text">串口设备</span>
-      <button @click="showConverter = !showConverter" class="tool-btn" :class="{ active: showConverter }" title="进制转换">
-        <span>🔢</span>
-      </button>
+      <div class="title-actions">
+        <button @click="openConverterPopup" class="tool-btn" title="进制转换工具 (弹出窗口)">
+          <span>🔢</span>
+        </button>
+        <button @click="showConverter = !showConverter" class="tool-btn" :class="{ active: showConverter }" title="进制转换 (侧边栏)">
+          <span>📋</span>
+        </button>
+      </div>
     </div>
 
     <!-- 进制转换工具 -->
@@ -190,7 +202,6 @@ const handleRefresh = async () => {
 
 /* 工具按钮 */
 .tool-btn {
-  margin-left: auto;
   background: none;
   border: 1px solid #555;
   color: #cccccc;
@@ -211,6 +222,12 @@ const handleRefresh = async () => {
   background-color: #007acc;
   border-color: #007acc;
   color: #ffffff;
+}
+
+.title-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
 }
 
 /* 模拟模式开关 */

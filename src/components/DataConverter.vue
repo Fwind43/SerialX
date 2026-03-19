@@ -1,5 +1,12 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+
+const props = defineProps({
+  standalone: {
+    type: Boolean,
+    default: false
+  }
+})
 
 const inputHex = ref('')
 const inputDecimal = ref('')
@@ -21,6 +28,27 @@ let debounceTimer = null
 const debouncedConvert = (fn) => {
   clearTimeout(debounceTimer)
   debounceTimer = setTimeout(fn, 50)
+}
+
+// 独立窗口时添加全局快捷键 Alt+C 和 Ctrl+W 关闭
+onMounted(() => {
+  if (props.standalone) {
+    window.addEventListener('keydown', handleGlobalKey)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (props.standalone) {
+    window.removeEventListener('keydown', handleGlobalKey)
+  }
+})
+
+const handleGlobalKey = (e) => {
+  // Ctrl+W 或 Alt+F4 关闭
+  if ((e.ctrlKey && e.key === 'w') || e.key === 'F4' && e.altKey) {
+    e.preventDefault()
+    window.close()
+  }
 }
 
 // Hex 转字节数组
@@ -230,8 +258,21 @@ const clearAll = () => {
 </script>
 
 <template>
-  <div class="converter-container">
-    <div class="converter-header">
+  <div class="converter-container" :class="{ standalone: standalone }">
+    <div class="converter-header" v-if="standalone">
+      <span class="title-icon">🔢</span>
+      <span class="title-text">进制转换工具</span>
+      <div class="header-actions">
+        <button @click="clearAll" class="icon-btn" title="清空 (C)">
+          <span>🗑️</span>
+        </button>
+        <button @click="window.close()" class="icon-btn close" title="关闭 (Ctrl+W)">
+          <span>✕</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="converter-header" v-else>
       <span class="title-icon">🔢</span>
       <span class="title-text">进制转换</span>
       <button @click="clearAll" class="clear-btn" title="清空">清空</button>
@@ -396,6 +437,58 @@ const clearAll = () => {
   padding: 12px;
   background-color: #1e1e1e;
   overflow-y: auto;
+}
+
+/* 独立窗口模式 */
+.converter-container.standalone {
+  position: fixed;
+  top: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 450px;
+  max-height: 600px;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  border: 1px solid #3e3e42;
+  z-index: 1000;
+}
+
+.converter-container.standalone .converter-header {
+  cursor: move;
+  user-select: none;
+}
+
+/* 独立窗口标题栏动作 */
+.header-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background-color: #3c3c3c;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #cccccc;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+
+.icon-btn:hover {
+  background-color: #4a4a4a;
+  border-color: #007acc;
+  color: #ffffff;
+}
+
+.icon-btn.close:hover {
+  background-color: #c42b1c;
+  border-color: #a02015;
 }
 
 .converter-header {
