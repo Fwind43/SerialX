@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useSerialStore } from '../stores/serial'
 
 const props = defineProps({
@@ -77,42 +77,53 @@ watch(searchQuery, () => {
   performSearch()
 })
 
-// Ctrl+F 快捷键
+// Ctrl+F 快捷键 - 在终端区域上监听（模板中绑定 @keydown）
 const handleKeyDown = (e) => {
-  // 全局 Ctrl+F 打开搜索
-  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-    e.preventDefault()
-    showSearch.value = true
-    nextTick(() => {
-      const input = document.querySelector('.search-input')
-      if (input) input.focus()
-    })
+  // 如果正在拖拽，不处理任何快捷键
+  if (e.target.classList.contains('tab-icon') || e.target.classList.contains('tab-list')) {
+    return
   }
+
+  // 全局 Ctrl+F 打开搜索 - 只有在没有输入框获得焦点时才触发
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    const activeElement = document.activeElement
+    const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
+    // 检查是否在当前面板的搜索框中
+    const isInCurrentSearchWidget = terminalRef.value?.contains(activeElement)
+
+    if (!isInputFocused || isInCurrentSearchWidget) {
+      e.preventDefault()
+      e.stopPropagation()
+      showSearch.value = true
+      nextTick(() => {
+        const input = terminalRef.value?.querySelector('.search-input')
+        if (input) input.focus()
+      })
+    }
+    return
+  }
+
   // Escape 关闭搜索
   if (e.key === 'Escape' && showSearch.value) {
     e.preventDefault()
+    e.stopPropagation()
     clearSearch()
+    return
   }
-  // F3 和 Shift+F3 导航（搜索打开时）
-  if (showSearch.value && matchedLogIndices.value.length > 0) {
-    if (e.key === 'F3') {
-      e.preventDefault()
-      if (e.shiftKey) {
-        goToPreviousMatch()
-      } else {
-        goToNextMatch()
-      }
+
+  // F3 和 Shift+F3 导航（只有当前面板搜索打开时才响应）
+  if (showSearch.value && matchedLogIndices.value.length > 0 && e.key === 'F3') {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.shiftKey) {
+      goToPreviousMatch()
+    } else {
+      goToNextMatch()
     }
   }
 }
 
-// 组件挂载时添加全局键盘监听
-window.addEventListener('keydown', handleKeyDown)
-
-// 组件卸载时清理
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', handleKeyDown)
-})
+// 组件挂载/卸载时不需要全局监听，使用模板中的 @keydown
 
 // 获取当前串口的设置和状态
 const portSettings = computed(() => {
