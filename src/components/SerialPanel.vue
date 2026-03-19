@@ -13,57 +13,24 @@ const serialStore = useSerialStore()
 const terminalRef = ref(null)
 const showFilters = ref(false)
 const showSearch = ref(false)
-const showCommands = ref(false)
-const showCommandManager = ref(false)
 const searchQuery = ref('')
 const currentMatchIndex = ref(0)
 const matchedLogIndices = ref([])
 
-// 编辑命令表单
-const editingCommand = ref({ name: '', command: '', id: null })
-const isEditing = ref(false)
+// 快速命令选择
+const selectedCommandId = ref('')
+const sendSelectedCommand = () => {
+  const cmd = serialStore.commonCommands.find(c => c.id === parseInt(selectedCommandId.value))
+  if (cmd) {
+    executeCommand(cmd.command)
+  }
+  selectedCommandId.value = '' // 重置选择
+}
 
 // 执行常用命令
 const executeCommand = async (command) => {
   serialStore.setPortSendingData(props.portPath, command)
   await serialStore.sendData(props.portPath)
-}
-
-// 打开命令管理（添加新模式）
-const openCommandManager = (cmd = null) => {
-  if (cmd) {
-    editingCommand.value = { ...cmd }
-    isEditing.value = true
-  } else {
-    editingCommand.value = { name: '', command: '', id: null }
-    isEditing.value = false
-  }
-  showCommandManager.value = true
-}
-
-// 保存命令
-const saveCommand = () => {
-  if (!editingCommand.value.name || !editingCommand.value.command) return
-
-  if (isEditing.value) {
-    serialStore.updateCommonCommand(editingCommand.value.id, {
-      name: editingCommand.value.name,
-      command: editingCommand.value.command
-    })
-  } else {
-    serialStore.addCommonCommand(editingCommand.value.name, editingCommand.value.command)
-  }
-  showCommandManager.value = false
-}
-
-// 删除命令
-const deleteCommand = (id) => {
-  serialStore.removeCommonCommand(id)
-}
-
-// 切换命令启用状态
-const toggleCommand = (id) => {
-  serialStore.toggleCommandEnabled(id)
 }
 
 // 搜索匹配
@@ -332,9 +299,24 @@ const getPatternPlaceholder = () => {
           <input type="checkbox" v-model="serialStore.isAutoScroll" />
           自动滚动
         </label>
-        <button @click="showCommands = !showCommands" class="action-btn commands" :class="{ active: showCommands }" title="常用命令">
-          <span>⚡</span>
-        </button>
+        <!-- 常用命令快速发送 -->
+        <div class="command-dropdown">
+          <select
+            v-model="selectedCommandId"
+            @change="sendSelectedCommand"
+            class="command-select"
+            :disabled="!isConnected"
+          >
+            <option value="">⚡ 快速命令</option>
+            <option
+              v-for="cmd in serialStore.getEnabledCommands"
+              :key="cmd.id"
+              :value="cmd.id"
+            >
+              {{ cmd.name }} ({{ cmd.command }})
+            </option>
+          </select>
+        </div>
         <button @click="showFilters = !showFilters" class="action-btn filter" :class="{ active: showFilters }" title="数据过滤">
           <span>🔍</span>
         </button>
@@ -426,91 +408,6 @@ const getPatternPlaceholder = () => {
         <span v-else>
           ℹ️ 启用过滤后，RX 数据会根据匹配规则进行过滤
         </span>
-      </div>
-    </div>
-
-    <!-- 常用命令面板 -->
-    <div v-if="showCommands" class="commands-panel">
-      <div class="commands-header">
-        <div class="commands-list">
-          <div
-            v-for="cmd in serialStore.commonCommands"
-            :key="cmd.id"
-            :class="['command-item', { disabled: !cmd.enabled }]"
-          >
-            <button
-              @click="executeCommand(cmd.command)"
-              class="command-btn"
-              :disabled="!cmd.enabled"
-            >
-              <span class="command-name">{{ cmd.name }}</span>
-              <span class="command-value">{{ cmd.command }}</span>
-            </button>
-            <div class="command-actions">
-              <button
-                @click="toggleCommand(cmd.id)"
-                :class="['cmd-action-btn', cmd.enabled ? 'enabled' : 'disabled']"
-                :title="cmd.enabled ? '禁用' : '启用'"
-              >
-                {{ cmd.enabled ? '✓' : '○' }}
-              </button>
-              <button
-                @click="openCommandManager(cmd)"
-                class="cmd-action-btn edit"
-                title="编辑"
-              >
-                ✎
-              </button>
-              <button
-                @click="deleteCommand(cmd.id)"
-                class="cmd-action-btn delete"
-                title="删除"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        </div>
-        <div class="commands-footer">
-          <button @click="openCommandManager()" class="add-command-btn">
-            <span>＋ 添加新命令</span>
-          </button>
-          <span class="commands-hint">点击命令按钮快速发送，✕删除，✎编辑</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 命令管理弹窗 -->
-    <div v-if="showCommandManager" class="command-modal-overlay" @click.self="showCommandManager = false">
-      <div class="command-modal">
-        <div class="modal-header">
-          <span class="modal-title">{{ isEditing ? '编辑命令' : '添加新命令' }}</span>
-          <button @click="showCommandManager = false" class="modal-close">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label>命令名称</label>
-            <input
-              v-model="editingCommand.name"
-              type="text"
-              class="form-input"
-              placeholder="例：复位、状态查询"
-            />
-          </div>
-          <div class="form-group">
-            <label>命令内容</label>
-            <input
-              v-model="editingCommand.command"
-              type="text"
-              class="form-input"
-              placeholder="例：RESET、STATUS?"
-            />
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button @click="showCommandManager = false" class="modal-btn cancel">取消</button>
-          <button @click="saveCommand" class="modal-btn save">保存</button>
-        </div>
       </div>
     </div>
 
@@ -666,6 +563,56 @@ const getPatternPlaceholder = () => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* 命令下拉选择 */
+.command-dropdown {
+  position: relative;
+}
+
+.command-select {
+  padding: 6px 12px;
+  padding-right: 36px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
+.command-select::-ms-expand {
+  display: none;
+}
+
+.command-select:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.command-select:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.command-select:disabled {
+  background: #3e3e42;
+  border-color: #555;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.command-select option {
+  background: #2d2d30;
+  color: #ffffff;
 }
 
 .checkbox-label {
