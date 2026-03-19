@@ -23,6 +23,13 @@ const inputUint32 = ref('')
 // 字节序：little-endian 或 big-endian
 const byteOrder = ref('little')
 
+// 监听字节序变化，重新转换
+watch(byteOrder, () => {
+  if (inputHex.value) {
+    convertFromHex()
+  }
+})
+
 // 防抖转换
 let debounceTimer = null
 const debouncedConvert = (fn) => {
