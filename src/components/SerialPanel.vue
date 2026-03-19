@@ -14,14 +14,56 @@ const terminalRef = ref(null)
 const showFilters = ref(false)
 const showSearch = ref(false)
 const showCommands = ref(false)
+const showCommandManager = ref(false)
 const searchQuery = ref('')
 const currentMatchIndex = ref(0)
 const matchedLogIndices = ref([])
+
+// 编辑命令表单
+const editingCommand = ref({ name: '', command: '', id: null })
+const isEditing = ref(false)
 
 // 执行常用命令
 const executeCommand = async (command) => {
   serialStore.setPortSendingData(props.portPath, command)
   await serialStore.sendData(props.portPath)
+}
+
+// 打开命令管理（添加新模式）
+const openCommandManager = (cmd = null) => {
+  if (cmd) {
+    editingCommand.value = { ...cmd }
+    isEditing.value = true
+  } else {
+    editingCommand.value = { name: '', command: '', id: null }
+    isEditing.value = false
+  }
+  showCommandManager.value = true
+}
+
+// 保存命令
+const saveCommand = () => {
+  if (!editingCommand.value.name || !editingCommand.value.command) return
+
+  if (isEditing.value) {
+    serialStore.updateCommonCommand(editingCommand.value.id, {
+      name: editingCommand.value.name,
+      command: editingCommand.value.command
+    })
+  } else {
+    serialStore.addCommonCommand(editingCommand.value.name, editingCommand.value.command)
+  }
+  showCommandManager.value = false
+}
+
+// 删除命令
+const deleteCommand = (id) => {
+  serialStore.removeCommonCommand(id)
+}
+
+// 切换命令启用状态
+const toggleCommand = (id) => {
+  serialStore.toggleCommandEnabled(id)
 }
 
 // 搜索匹配
@@ -389,19 +431,86 @@ const getPatternPlaceholder = () => {
 
     <!-- 常用命令面板 -->
     <div v-if="showCommands" class="commands-panel">
-      <div class="commands-list">
-        <button
-          v-for="cmd in serialStore.getEnabledCommands"
-          :key="cmd.id"
-          @click="executeCommand(cmd.command)"
-          class="command-btn"
-        >
-          <span class="command-name">{{ cmd.name }}</span>
-          <span class="command-value">{{ cmd.command }}</span>
-        </button>
+      <div class="commands-header">
+        <div class="commands-list">
+          <div
+            v-for="cmd in serialStore.commonCommands"
+            :key="cmd.id"
+            :class="['command-item', { disabled: !cmd.enabled }]"
+          >
+            <button
+              @click="executeCommand(cmd.command)"
+              class="command-btn"
+              :disabled="!cmd.enabled"
+            >
+              <span class="command-name">{{ cmd.name }}</span>
+              <span class="command-value">{{ cmd.command }}</span>
+            </button>
+            <div class="command-actions">
+              <button
+                @click="toggleCommand(cmd.id)"
+                :class="['cmd-action-btn', cmd.enabled ? 'enabled' : 'disabled']"
+                :title="cmd.enabled ? '禁用' : '启用'"
+              >
+                {{ cmd.enabled ? '✓' : '○' }}
+              </button>
+              <button
+                @click="openCommandManager(cmd)"
+                class="cmd-action-btn edit"
+                title="编辑"
+              >
+                ✎
+              </button>
+              <button
+                @click="deleteCommand(cmd.id)"
+                class="cmd-action-btn delete"
+                title="删除"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="commands-footer">
+          <button @click="openCommandManager()" class="add-command-btn">
+            <span>＋ 添加新命令</span>
+          </button>
+          <span class="commands-hint">点击命令按钮快速发送，✕删除，✎编辑</span>
+        </div>
       </div>
-      <div class="commands-hint">
-        <span>点击按钮快速发送命令到当前串口</span>
+    </div>
+
+    <!-- 命令管理弹窗 -->
+    <div v-if="showCommandManager" class="command-modal-overlay" @click.self="showCommandManager = false">
+      <div class="command-modal">
+        <div class="modal-header">
+          <span class="modal-title">{{ isEditing ? '编辑命令' : '添加新命令' }}</span>
+          <button @click="showCommandManager = false" class="modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>命令名称</label>
+            <input
+              v-model="editingCommand.name"
+              type="text"
+              class="form-input"
+              placeholder="例：复位、状态查询"
+            />
+          </div>
+          <div class="form-group">
+            <label>命令内容</label>
+            <input
+              v-model="editingCommand.command"
+              type="text"
+              class="form-input"
+              placeholder="例：RESET、STATUS?"
+            />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="showCommandManager = false" class="modal-btn cancel">取消</button>
+          <button @click="saveCommand" class="modal-btn save">保存</button>
+        </div>
       </div>
     </div>
 
@@ -712,34 +821,51 @@ const getPatternPlaceholder = () => {
   border-bottom: 1px solid #3e3e42;
 }
 
-.commands-list {
+.commands-header {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 6px;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.commands-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.command-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: opacity 0.2s;
+}
+
+.command-item.disabled {
+  opacity: 0.5;
 }
 
 .command-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px 16px;
+  padding: 10px 12px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
   border-radius: 6px;
   color: #ffffff;
   cursor: pointer;
   transition: all 0.2s;
-  min-width: 100px;
+  width: 100%;
 }
 
-.command-btn:hover {
+.command-btn:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
 }
 
-.command-btn:active {
-  transform: translateY(0);
+.command-btn:disabled {
+  background: #3e3e42;
+  cursor: not-allowed;
 }
 
 .command-name {
@@ -755,11 +881,208 @@ const getPatternPlaceholder = () => {
   margin-top: 4px;
 }
 
+.command-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+
+.cmd-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.cmd-action-btn.enabled {
+  background-color: #4ec9b0;
+  color: #1e1e1e;
+}
+
+.cmd-action-btn.disabled {
+  background-color: #3e3e42;
+  color: #858585;
+}
+
+.cmd-action-btn.edit {
+  background-color: #569cd6;
+  color: #ffffff;
+}
+
+.cmd-action-btn.delete {
+  background-color: #c42b1c;
+  color: #ffffff;
+}
+
+.cmd-action-btn:hover {
+  transform: scale(1.1);
+}
+
+.commands-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #3e3e42;
+}
+
+.add-command-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #4ec9b0 0%, #4a9db8 100%);
+  border: none;
+  border-radius: 6px;
+  color: #1e1e1e;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-command-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(78, 201, 176, 0.5);
+}
+
 .commands-hint {
   font-size: 11px;
   color: #858585;
-  padding-top: 4px;
-  border-top: 1px solid #3e3e42;
+  text-align: center;
+}
+
+/* 命令管理弹窗 */
+.command-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.command-modal {
+  background: linear-gradient(145deg, #2d2d30 0%, #1e1e1e 100%);
+  border: 1px solid #3e3e42;
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 400px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: none;
+  border: none;
+  color: #858585;
+  cursor: pointer;
+  font-size: 16px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.modal-close:hover {
+  background-color: #c42b1c;
+  color: #ffffff;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 12px;
+  color: #858585;
+  font-weight: 500;
+}
+
+.form-input {
+  padding: 10px 12px;
+  background-color: #1e1e1e;
+  border: 1px solid #3e3e42;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 14px;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+.modal-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.modal-btn {
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+}
+
+.modal-btn.cancel {
+  background-color: #3e3e42;
+  color: #cccccc;
+}
+
+.modal-btn.cancel:hover {
+  background-color: #4a4a4a;
+}
+
+.modal-btn.save {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+}
+
+.modal-btn.save:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
 }
 
 /* 终端显示区 */
