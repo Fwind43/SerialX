@@ -59,7 +59,9 @@ const closeWindow = () => {
 
 // Hex 转字节数组
 const hexToBytes = (hex) => {
-  const cleanHex = hex.replace(/\s+/g, '').replace(/0x/gi, '')
+  // 清理空格、逗号、0x 前缀
+  const cleanHex = hex.replace(/[\s,]+/g, '').replace(/0x/gi, '')
+  if (cleanHex.length === 0) return []
   if (cleanHex.length % 2 !== 0) return null
   if (!/^[0-9A-Fa-f]*$/.test(cleanHex)) return null
 
@@ -310,7 +312,7 @@ const clearAll = () => {
           @input="debouncedConvert(() => convertFromHex())"
           type="text"
           class="format-input hex"
-          placeholder="例：48 65 6C 6C 6F"
+          placeholder="例：41 42 43 44 或 41424344"
         />
       </div>
 
@@ -419,7 +421,7 @@ const clearAll = () => {
           @input="debouncedConvert(() => convertFromFloat32())"
           type="text"
           class="format-input float"
-          placeholder="单精度浮点数"
+          placeholder="IEEE 754 单精度浮点数"
         />
       </div>
 
