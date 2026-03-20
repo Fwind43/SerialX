@@ -23,6 +23,12 @@ let fitAddon = null
 let logEntries = [] // 存储所有日志条目 { id, line }
 const MAX_LOG_COUNT = 1000 // xterm 最大行数
 
+// 搜索功能
+const showSearch = ref(false)
+const searchQuery = ref('')
+const currentMatchIndex = ref(0)
+const matchedLogIndices = ref([])
+
 // 获取当前串口的显示设置
 const portDisplaySettings = computed(() => {
   return serialStore.getPortDisplaySettings(props.portPath)
@@ -236,6 +242,102 @@ const refreshDisplay = () => {
   loadHistoryLogs()
 }
 
+// 搜索功能
+const performSearch = () => {
+  if (!searchQuery.value || !terminal) {
+    matchedLogIndices.value = []
+    currentMatchIndex.value = 0
+    return
+  }
+
+  const query = searchQuery.value.toLowerCase()
+  matchedLogIndices.value = []
+
+  // 遍历所有行查找匹配
+  const buffer = terminal.buffer.active
+  for (let i = 0; i < buffer.length; i++) {
+    const line = buffer.getLine(i)
+    if (line) {
+      const text = line.translateToString().toLowerCase()
+      if (text.includes(query)) {
+        matchedLogIndices.value.push(i)
+      }
+    }
+  }
+
+  currentMatchIndex.value = 0
+  if (matchedLogIndices.value.length > 0) {
+    scrollToCurrentMatch()
+  }
+}
+
+// 滚动到当前匹配项
+const scrollToCurrentMatch = () => {
+  if (matchedLogIndices.value.length === 0 || !terminal) return
+  terminal.scrollToLine(matchedLogIndices.value[currentMatchIndex.value])
+}
+
+// 导航到下一个匹配项
+const goToNextMatch = () => {
+  if (matchedLogIndices.value.length === 0) return
+  currentMatchIndex.value = (currentMatchIndex.value + 1) % matchedLogIndices.value.length
+  scrollToCurrentMatch()
+}
+
+// 导航到上一个匹配项
+const goToPreviousMatch = () => {
+  if (matchedLogIndices.value.length === 0) return
+  currentMatchIndex.value = (currentMatchIndex.value - 1 + matchedLogIndices.value.length) % matchedLogIndices.value.length
+  scrollToCurrentMatch()
+}
+
+// 清除搜索
+const clearSearch = () => {
+  showSearch.value = false
+  searchQuery.value = ''
+  matchedLogIndices.value = []
+  currentMatchIndex.value = 0
+  if (terminal) {
+    terminal.clearSelection()
+  }
+}
+
+// 监听搜索输入
+watch(searchQuery, () => {
+  performSearch()
+})
+
+// 处理键盘快捷键
+const handleKeyDown = (e) => {
+  // Ctrl+F 打开搜索
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault()
+    showSearch.value = true
+    nextTick(() => {
+      const input = document.querySelector('.search-input')
+      if (input) input.focus()
+    })
+    return
+  }
+
+  // Escape 关闭搜索
+  if (e.key === 'Escape' && showSearch.value) {
+    e.preventDefault()
+    clearSearch()
+    return
+  }
+
+  // F3 和 Shift+F3 导航
+  if (showSearch.value && matchedLogIndices.value.length > 0 && e.key === 'F3') {
+    e.preventDefault()
+    if (e.shiftKey) {
+      goToPreviousMatch()
+    } else {
+      goToNextMatch()
+    }
+  }
+}
+
 // 监听日志变化
 watch(() => portLogs.value?.length, () => {
   if (!terminal) return
@@ -268,10 +370,13 @@ onMounted(() => {
   nextTick(() => {
     initTerminal()
   })
+  // 添加全局键盘监听
+  document.addEventListener('keydown', handleKeyDown)
 })
 
 // 组件卸载
 onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeyDown)
   if (terminal) {
     terminal.dispose()
     terminal = null
@@ -285,7 +390,33 @@ defineExpose({
 </script>
 
 <template>
-  <div class="terminal-wrapper">
+  <div class="terminal-wrapper" @keydown="handleKeyDown" tabindex="0">
+    <!-- 搜索浮窗 -->
+    <div v-if="showSearch" class="search-widget">
+      <div class="search-input-wrapper">
+        <input
+          v-model="searchQuery"
+          type="text"
+          class="search-input"
+          placeholder="搜索日志内容..."
+        />
+        <div class="search-controls">
+          <span class="search-count" v-if="searchQuery">
+            {{ matchedLogIndices.length > 0 ? currentMatchIndex + 1 : 0 }} / {{ matchedLogIndices.length }}
+          </span>
+          <button @click="goToPreviousMatch" class="search-btn" title="上一个匹配项 (Shift+F3)">
+            <span>↑</span>
+          </button>
+          <button @click="goToNextMatch" class="search-btn" title="下一个匹配项 (F3)">
+            <span>↓</span>
+          </button>
+          <button @click="clearSearch" class="search-btn close" title="关闭 (Esc)">
+            <span>✕</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- xterm 容器 -->
     <div ref="terminalContainer" class="terminal-container"></div>
   </div>
@@ -350,5 +481,87 @@ defineExpose({
 /* 确保 xterm 内部元素不显示额外边框 */
 .terminal-container ::v-deep(.xterm) {
   background: transparent !important;
+}
+
+/* 搜索浮窗 */
+.search-widget {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: 100;
+  background-color: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-input {
+  padding: 6px 10px;
+  background-color: #1e1e1e;
+  border: 1px solid #3e3e42;
+  border-radius: 3px;
+  color: #cccccc;
+  font-size: 13px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  width: 250px;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: #007acc;
+}
+
+.search-input::placeholder {
+  color: #6a6a6a;
+}
+
+.search-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search-count {
+  font-size: 12px;
+  color: #858585;
+  min-width: 50px;
+  text-align: right;
+  padding: 0 4px;
+}
+
+.search-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background-color: #3c3c3c;
+  border: 1px solid #555;
+  border-radius: 3px;
+  color: #cccccc;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  transition: all 0.15s;
+}
+
+.search-btn:hover {
+  background-color: #4a4a4a;
+  border-color: #007acc;
+}
+
+.search-btn.close:hover {
+  background-color: #c42b1c;
+  border-color: #a02015;
 }
 </style>
