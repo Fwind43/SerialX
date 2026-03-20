@@ -87,18 +87,13 @@ const togglePauseLoopSend = () => {
     startLoopSend()
     return
   }
-  // 切换暂停状态
-  const isPaused = serialStore.portLoopSendPaused.get(props.portPath) || false
-  if (isPaused) {
-    serialStore.resumeLoopSendForPort(props.portPath)
-  } else {
-    serialStore.pauseLoopSendForPort(props.portPath)
-  }
+  // 切换暂停状态 - 直接使用 store 的 toggle 函数
+  serialStore.togglePauseLoopSendForPort(props.portPath)
 }
 
-// 获取暂停状态
+// 获取暂停状态 - 使用 store 的 getter 函数确保响应式
 const isPaused = computed(() => {
-  return serialStore.portLoopSendPaused.get(props.portPath) || false
+  return serialStore.isLoopSendPaused(props.portPath)
 })
 
 // 获取当前串口的循环发送次数
