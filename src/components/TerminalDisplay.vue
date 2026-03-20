@@ -313,31 +313,42 @@ defineExpose({
   bottom: 0;
 }
 
-/* 自定义滚动条 - VS Code 风格 */
+/* 隐藏 xterm 默认滚动条样式，使用自定义样式 */
 .terminal-container ::v-deep(.xterm-viewport) {
   width: 14px !important;
-  background-color: #1e1e1e;
+  background-color: #1e1e1e !important;
+  border-left: none !important;
+}
+
+.terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar) {
+  width: 14px !important;
 }
 
 .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-track) {
-  background: #1e1e1e;
+  background: #1e1e1e !important;
+  border: none !important;
 }
 
 .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-thumb) {
-  background: #424242;
-  border-radius: 7px;
-  border: 2px solid #1e1e1e;
+  background: #424242 !important;
+  border-radius: 7px !important;
+  border: 2px solid #1e1e1e !important;
 }
 
 .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-thumb:hover) {
-  background: #555;
+  background: #555 !important;
 }
 
 .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-thumb:active) {
-  background: #666;
+  background: #666 !important;
 }
 
 .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-corner) {
-  background: #1e1e1e;
+  background: #1e1e1e !important;
+}
+
+/* 确保 xterm 内部元素不显示额外边框 */
+.terminal-container ::v-deep(.xterm) {
+  background: transparent !important;
 }
 </style>
