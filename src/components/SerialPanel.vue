@@ -455,6 +455,7 @@ const enabledCommands = computed(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   background-color: #1e1e1e;
   overflow: hidden;
 }

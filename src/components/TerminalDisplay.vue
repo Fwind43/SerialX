@@ -292,11 +292,13 @@ defineExpose({
 </template>
 
 <style scoped>
+/* 自定义滚动条 - VS Code 风格 */
 .terminal-wrapper {
   flex: 1;
   overflow: hidden;
   position: relative;
   background-color: #1e1e1e;
+  min-height: 0;
 }
 
 .terminal-container {
@@ -304,6 +306,11 @@ defineExpose({
   height: 100%;
   padding: 4px 8px;
   box-sizing: border-box;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
 /* 自定义滚动条 - VS Code 风格 */
