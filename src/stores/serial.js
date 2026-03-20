@@ -267,9 +267,9 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
-  async function sendData(portPath = null, data = null) {
+  async function sendData(portPath = null, data = null, isHex = false) {
     const targetPort = portPath || selectedPort.value
-    const dataToSend = data !== null ? data : getPortSendingData(targetPort)
+    let dataToSend = data !== null ? data : getPortSendingData(targetPort)
 
     if (!targetPort) {
       return { success: false, error: '请选择串口' }
@@ -284,10 +284,33 @@ export const useSerialStore = defineStore('serial', () => {
       return { success: false, error: `串口 ${targetPort} 未打开` }
     }
 
+    // Hex 模式：将十六进制字符串转换为字节数组
+    let actualData = dataToSend
+    let logData = dataToSend
+    if (isHex) {
+      try {
+        // 移除空格和常见分隔符，只保留十六进制字符
+        const hexString = dataToSend.replace(/[\s,-]/g, '').toUpperCase()
+        // 验证是否为有效的十六进制字符串
+        if (!/^[0-9A-F]*$/.test(hexString)) {
+          return { success: false, error: '无效的 Hex 格式' }
+        }
+        // 转换为字节数组
+        const bytes = []
+        for (let i = 0; i < hexString.length; i += 2) {
+          bytes.push(parseInt(hexString.substr(i, 2), 16))
+        }
+        actualData = Buffer.from(bytes)
+        logData = dataToSend // 日志仍显示原始输入的 Hex 字符串
+      } catch (error) {
+        return { success: false, error: `Hex 转换失败：${error.message}` }
+      }
+    }
+
     try {
-      const result = await window.electronAPI.writeData(targetPort, dataToSend)
+      const result = await window.electronAPI.writeData(targetPort, actualData)
       if (result.success) {
-        addPortLog(targetPort, `TX: ${dataToSend}`, 'tx')
+        addPortLog(targetPort, `TX: ${logData}`, 'tx')
         return { success: true }
       } else {
         addPortLog(targetPort, `发送失败：${result.error}`, 'error')
@@ -308,7 +331,7 @@ export const useSerialStore = defineStore('serial', () => {
       const portStatus = openPorts.value.get(targetPort)
       const dataToSend = getPortSendingData(targetPort)
       if (portStatus?.isConnected && dataToSend) {
-        sendData(targetPort, dataToSend)
+        sendData(targetPort, dataToSend, isHexMode.value)
       }
     }, loopInterval.value)
 
