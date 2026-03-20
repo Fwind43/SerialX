@@ -51,35 +51,34 @@ if (typeof document !== 'undefined') {
 
 <template>
   <div class="app-container" v-if="!isConverterMode">
-    <!-- 顶部菜单栏 -->
-    <header class="app-menubar">
-      <div class="menubar-items">
-        <div class="menubar-item">
-          <span class="menubar-label">文件</span>
-        </div>
-        <div class="menubar-item" @click.stop="showToolsMenu = !showToolsMenu">
-          <span class="menubar-label">工具</span>
-          <div v-if="showToolsMenu" class="menubar-dropdown">
-            <div class="dropdown-item" @click="openConverter">
-              <span class="dropdown-icon">🔢</span>
-              <span class="dropdown-text">进制转换工具</span>
-            </div>
-          </div>
-        </div>
-        <div class="menubar-item">
-          <span class="menubar-label">帮助</span>
-        </div>
-      </div>
-    </header>
-
     <!-- 顶部标题栏 -->
     <header class="app-header">
-      <div class="header-content">
+      <div class="header-left">
+        <!-- 菜单栏 -->
+        <div class="menubar-items">
+          <div class="menubar-item">
+            <span class="menubar-label">文件</span>
+          </div>
+          <div class="menubar-item" @click.stop="showToolsMenu = !showToolsMenu">
+            <span class="menubar-label">工具</span>
+            <div v-if="showToolsMenu" class="menubar-dropdown">
+              <div class="dropdown-item" @click="openConverter">
+                <span class="dropdown-icon">🔢</span>
+                <span class="dropdown-text">进制转换工具</span>
+              </div>
+            </div>
+          </div>
+          <div class="menubar-item">
+            <span class="menubar-label">帮助</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-center">
         <span class="app-icon">📡</span>
         <span class="app-title">SerialX</span>
         <span class="app-subtitle">串口调试工具</span>
       </div>
-      <div class="window-controls">
+      <div class="header-right window-controls">
         <button class="window-btn minimize-btn" @click="minimizeWindow" title="最小化">
           <svg width="12" height="12" viewBox="0 0 12 12">
             <rect x="1" y="5" width="10" height="1" fill="currentColor"/>
@@ -138,16 +137,36 @@ if (typeof document !== 'undefined') {
   overflow: hidden;
 }
 
-/* 顶部菜单栏 */
-.app-menubar {
+/* 顶部标题栏 */
+.app-header {
   display: flex;
   align-items: center;
-  height: 30px;
-  padding: 0 8px;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 16px;
   background-color: #323233;
   border-bottom: 1px solid #3e3e42;
   flex-shrink: 0;
   -webkit-app-region: drag;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.header-center {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
 }
 
 .menubar-items {
@@ -208,25 +227,6 @@ if (typeof document !== 'undefined') {
 .dropdown-text {
   font-size: 13px;
   color: #cccccc;
-}
-
-/* 顶部标题栏 */
-.app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 36px;
-  padding: 0 16px;
-  background-color: #2d2d30;
-  border-bottom: 1px solid #3e3e42;
-  flex-shrink: 0;
-  -webkit-app-region: drag;
-}
-
-.header-content {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .app-icon {
