@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Window Operations
   openConverterWindow: () => ipcRenderer.send('window:open-converter'),
+  minimizeWindow: () => ipcRenderer.send('window:minimize'),
+  closeWindow: () => ipcRenderer.send('window:close'),
 
   // Serial Data Events (from main to renderer) - 数据包含串口路径
   onSerialData: (callback) => {

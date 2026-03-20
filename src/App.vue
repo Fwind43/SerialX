@@ -12,6 +12,15 @@ const isConverterMode = computed(() => {
   return window.location.hash === '#/converter'
 })
 
+// 窗口控制
+const minimizeWindow = () => {
+  window.electronAPI?.minimizeWindow()
+}
+
+const closeWindow = () => {
+  window.electronAPI?.closeWindow()
+}
+
 onMounted(async () => {
   serialStore.refreshPorts()
   // 加载常用命令配置
@@ -27,6 +36,18 @@ onMounted(async () => {
         <span class="app-icon">📡</span>
         <span class="app-title">SerialX</span>
         <span class="app-subtitle">串口调试工具</span>
+      </div>
+      <div class="window-controls">
+        <button class="window-btn minimize-btn" @click="minimizeWindow" title="最小化">
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <rect x="1" y="5" width="10" height="1" fill="currentColor"/>
+          </svg>
+        </button>
+        <button class="window-btn close-btn" @click="closeWindow" title="关闭">
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" stroke-width="1.2"/>
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -79,11 +100,13 @@ onMounted(async () => {
 .app-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   height: 40px;
   padding: 0 16px;
   background-color: #323233;
   border-bottom: 1px solid #3e3e42;
   flex-shrink: 0;
+  -webkit-app-region: drag;
 }
 
 .header-content {
@@ -105,6 +128,47 @@ onMounted(async () => {
 .app-subtitle {
   font-size: 12px;
   color: #858585;
+}
+
+/* 窗口控制按钮 */
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+}
+
+.window-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #cccccc;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.window-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.window-btn.close-btn:hover {
+  background-color: #e81123;
+  color: #ffffff;
+}
+
+.window-btn:active {
+  transform: scale(0.95);
+}
+
+.window-btn svg {
+  display: block;
 }
 
 /* 工作区：左侧边栏 + 中间内容 */

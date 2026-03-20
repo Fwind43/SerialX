@@ -253,6 +253,8 @@ function createWindow() {
     height: 900,
     minWidth: 800,
     minHeight: 600,
+    frame: false,
+    transparent: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -285,6 +287,7 @@ function createConverterWindow() {
     height: 700,
     minWidth: 400,
     minHeight: 500,
+    frame: false,
     resizable: true,
     maximizable: false,
     webPreferences: {
@@ -347,6 +350,19 @@ app.whenReady().then(() => {
   // 打开进制转换工具窗口
   ipcMain.on('window:open-converter', () => {
     createConverterWindow()
+  })
+
+  // 窗口控制
+  ipcMain.on('window:minimize', () => {
+    if (mainWindow) {
+      mainWindow.minimize()
+    }
+  })
+
+  ipcMain.on('window:close', () => {
+    if (mainWindow) {
+      mainWindow.close()
+    }
   })
 
   // 配置管理 - 常用命令持久化
