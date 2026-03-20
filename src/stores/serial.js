@@ -23,11 +23,31 @@ export const useSerialStore = defineStore('serial', () => {
 
   // 全局配置
   const logs = ref([])
-  const isHexMode = ref(false)
+  const isHexMode = ref(false) // 发送 Hex 模式
   const isAutoScroll = ref(true)
   const isLoopSend = ref(false)
   const loopInterval = ref(1000)
   let loopTimer = null
+
+  // 每个串口的显示设置（独立配置）
+  const portDisplaySettings = ref(new Map()) // path -> { hexMode: boolean, showAscii: boolean }
+
+  // 获取串口显示设置
+  const getPortDisplaySettings = (portPath) => {
+    if (!portDisplaySettings.value.has(portPath)) {
+      portDisplaySettings.value.set(portPath, {
+        hexMode: false,
+        showAscii: true
+      })
+    }
+    return portDisplaySettings.value.get(portPath)
+  }
+
+  // 更新串口显示设置
+  const updatePortDisplaySettings = (portPath, updates) => {
+    const current = getPortDisplaySettings(portPath)
+    portDisplaySettings.value.set(portPath, { ...current, ...updates })
+  }
 
   // 常用命令配置（全局统一配置）- 初始为空，从配置文件加载
   const commonCommands = ref([])
@@ -327,7 +347,7 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
-  function addPortLog(portPath, message, type = 'info') {
+  function addPortLog(portPath, message, type = 'info', rawData = null) {
     if (!portLogs.value.has(portPath)) {
       portLogs.value.set(portPath, [])
     }
@@ -338,7 +358,9 @@ export const useSerialStore = defineStore('serial', () => {
       id: Date.now() + Math.random(),
       timestamp,
       message,
-      type
+      type,
+      hexData: rawData?.hexData || null,
+      rawBytes: rawData?.rawBytes || null
     })
 
     // Limit log history per port
@@ -398,12 +420,13 @@ export const useSerialStore = defineStore('serial', () => {
 
   // Set up event listeners
   function setupEventListeners() {
-    window.electronAPI.onSerialData(({ port, data }) => {
+    window.electronAPI.onSerialData(({ port, data, hexData, rawBytes }) => {
       // 过滤检查：如果数据被过滤，直接丢弃不显示
       if (shouldFilterLog(port, 'rx', data)) {
         return
       }
-      addPortLog(port, `RX: ${data}`, 'rx')
+      // 存储原始数据用于 Hex 显示
+      addPortLog(port, `RX: ${data}`, 'rx', { hexData, rawBytes })
     })
 
     window.electronAPI.onSerialError(({ port, error }) => {
@@ -445,6 +468,8 @@ export const useSerialStore = defineStore('serial', () => {
     setPortFilters,
     shouldFilterLog,
     getFilteredCount,
+    getPortDisplaySettings,
+    updatePortDisplaySettings,
     // Actions
     refreshPorts,
     connect,

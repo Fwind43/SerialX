@@ -161,9 +161,18 @@ class SerialManager {
       // 监听原始数据（每个字节都触发）
       serialPort.on('data', (data) => {
         const text = data.toString('utf8')
+        // 同时发送文本和原始字节（用于 Hex 显示）
+        const hexData = data.toString('hex').toUpperCase()
+        // 每两个字符添加空格
+        const hexFormatted = hexData.match(/.{1,2}/g)?.join(' ') || ''
         console.log('[SerialManager] Raw data from', portPath, ':', JSON.stringify(text))
         if (mainWindow) {
-          mainWindow.webContents.send('serial:data', { port: portPath, data: text })
+          mainWindow.webContents.send('serial:data', {
+            port: portPath,
+            data: text,
+            hexData: hexFormatted,
+            rawBytes: Array.from(data) // 原始字节数组，用于转换 ASCII
+          })
         }
       })
 

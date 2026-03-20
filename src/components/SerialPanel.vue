@@ -17,6 +17,35 @@ const searchQuery = ref('')
 const currentMatchIndex = ref(0)
 const matchedLogIndices = ref([])
 
+// 获取当前串口的显示设置
+const portDisplaySettings = computed(() => {
+  return serialStore.getPortDisplaySettings(props.portPath)
+})
+
+// Hex 模式切换
+const toggleHexMode = () => {
+  serialStore.updatePortDisplaySettings(props.portPath, {
+    hexMode: !portDisplaySettings.value.hexMode
+  })
+}
+
+// ASCII 显示切换
+const toggleShowAscii = () => {
+  serialStore.updatePortDisplaySettings(props.portPath, {
+    showAscii: !portDisplaySettings.value.showAscii
+  })
+}
+
+// 字节转 ASCII（可打印字符显示，不可打印显示为.）
+const bytesToAscii = (bytes) => {
+  if (!bytes || !Array.isArray(bytes)) return ''
+  return bytes.map(b => {
+    const char = String.fromCharCode(b)
+    // 可打印 ASCII 字符范围：32-126
+    return (b >= 32 && b <= 126) ? char : '.'
+  }).join('')
+}
+
 // 快速命令选择
 const selectedCommandId = ref('')
 const sendSelectedCommand = () => {
@@ -299,6 +328,24 @@ const getPatternPlaceholder = () => {
           <input type="checkbox" v-model="serialStore.isAutoScroll" />
           自动滚动
         </label>
+        <!-- Hex 显示模式 -->
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            :checked="portDisplaySettings.hexMode"
+            @change="toggleHexMode"
+          />
+          <span class="option-text">Hex</span>
+        </label>
+        <!-- ASCII 转换显示 -->
+        <label class="checkbox-label" v-if="portDisplaySettings.hexMode">
+          <input
+            type="checkbox"
+            :checked="portDisplaySettings.showAscii"
+            @change="toggleShowAscii"
+          />
+          <span class="option-text">ASCII</span>
+        </label>
         <!-- 常用命令快速发送 -->
         <div class="command-dropdown">
           <select
@@ -460,7 +507,19 @@ const getPatternPlaceholder = () => {
       >
         <span class="log-timestamp">{{ log.timestamp }}</span>
         <span class="log-prefix">{{ getLogPrefix(log.type) }}</span>
-        <span class="log-message" v-html="highlightMatch(log.message)"></span>
+        <span class="log-message">
+          <!-- Hex 模式显示 -->
+          <template v-if="log.type === 'rx' && portDisplaySettings.hexMode && log.hexData">
+            <span class="hex-data">{{ log.hexData }}</span>
+            <span v-if="portDisplaySettings.showAscii" class="ascii-data">
+              [{{ bytesToAscii(log.rawBytes) }}]
+            </span>
+          </template>
+          <!-- 普通模式或 TX 数据 -->
+          <template v-else>
+            <span v-html="highlightMatch(log.message)"></span>
+          </template>
+        </span>
       </div>
     </div>
 
@@ -1364,6 +1423,18 @@ const getPatternPlaceholder = () => {
 
 .log-warning .log-message {
   color: #cca700;
+}
+
+/* Hex 数据显示 */
+.hex-data {
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #ce9178;
+  letter-spacing: 0.5px;
+}
+
+.ascii-data {
+  color: #6a9955;
+  font-family: 'Consolas', 'Monaco', monospace;
 }
 
 /* 发送控制台 */
