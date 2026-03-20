@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import { useSerialStore } from './stores/serial'
 import SerialSidebar from './components/SerialSidebar.vue'
 import TerminalView from './components/TerminalView.vue'
@@ -12,6 +12,9 @@ const isConverterMode = computed(() => {
   return window.location.hash === '#/converter'
 })
 
+// 菜单控制
+const showToolsMenu = ref(false)
+
 // 窗口控制
 const minimizeWindow = () => {
   window.electronAPI?.minimizeWindow()
@@ -21,15 +24,54 @@ const closeWindow = () => {
   window.electronAPI?.closeWindow()
 }
 
+// 打开进制转换工具
+const openConverter = () => {
+  window.electronAPI?.openConverterWindow()
+  showToolsMenu.value = false
+}
+
 onMounted(async () => {
   serialStore.refreshPorts()
   // 加载常用命令配置
   serialStore.loadCommonCommands()
 })
+
+// 点击外部关闭菜单
+const handleClickOutside = (event) => {
+  if (!event.target.closest('.menubar-item')) {
+    showToolsMenu.value = false
+  }
+}
+
+// 监听全局点击事件
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', handleClickOutside)
+}
 </script>
 
 <template>
   <div class="app-container" v-if="!isConverterMode">
+    <!-- 顶部菜单栏 -->
+    <header class="app-menubar">
+      <div class="menubar-items">
+        <div class="menubar-item">
+          <span class="menubar-label">文件</span>
+        </div>
+        <div class="menubar-item" @click.stop="showToolsMenu = !showToolsMenu">
+          <span class="menubar-label">工具</span>
+          <div v-if="showToolsMenu" class="menubar-dropdown">
+            <div class="dropdown-item" @click="openConverter">
+              <span class="dropdown-icon">🔢</span>
+              <span class="dropdown-text">进制转换工具</span>
+            </div>
+          </div>
+        </div>
+        <div class="menubar-item">
+          <span class="menubar-label">帮助</span>
+        </div>
+      </div>
+    </header>
+
     <!-- 顶部标题栏 -->
     <header class="app-header">
       <div class="header-content">
@@ -96,14 +138,86 @@ onMounted(async () => {
   overflow: hidden;
 }
 
+/* 顶部菜单栏 */
+.app-menubar {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 8px;
+  background-color: #323233;
+  border-bottom: 1px solid #3e3e42;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+.menubar-items {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.menubar-item {
+  position: relative;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.menubar-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.menubar-label {
+  font-size: 13px;
+  color: #cccccc;
+}
+
+.menubar-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 180px;
+  background-color: #2d2d30;
+  border: 1px solid #3e3e42;
+  border-radius: 6px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  margin-top: 2px;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dropdown-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.dropdown-icon {
+  font-size: 16px;
+}
+
+.dropdown-text {
+  font-size: 13px;
+  color: #cccccc;
+}
+
 /* 顶部标题栏 */
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 40px;
+  height: 36px;
   padding: 0 16px;
-  background-color: #323233;
+  background-color: #2d2d30;
   border-bottom: 1px solid #3e3e42;
   flex-shrink: 0;
   -webkit-app-region: drag;

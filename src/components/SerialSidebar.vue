@@ -1,7 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useSerialStore } from '../stores/serial'
-import DataConverter from './DataConverter.vue'
 
 const serialStore = useSerialStore()
 const showConverter = ref(false)
@@ -49,13 +48,6 @@ const toggleCommand = (id) => {
   serialStore.toggleCommandEnabled(id)
 }
 
-// 打开弹出窗口
-const openConverterPopup = () => {
-  if (window.electronAPI?.openConverterWindow) {
-    window.electronAPI.openConverterWindow()
-  }
-}
-
 // 获取已打开的串口列表
 const openedPorts = computed(() => {
   return Array.from(serialStore.openPorts.entries())
@@ -97,21 +89,10 @@ const handleRefresh = async () => {
       <span class="title-icon">🔌</span>
       <span class="title-text">串口设备</span>
       <div class="title-actions">
-        <button @click="openConverterPopup" class="tool-btn" title="进制转换工具 (弹出窗口)">
-          <span>🔢</span>
-        </button>
         <button @click="showCommands = !showCommands" class="tool-btn" :class="{ active: showCommands }" title="常用命令配置">
           <span>⚡</span>
         </button>
-        <button @click="showConverter = !showConverter" class="tool-btn" :class="{ active: showConverter }" title="进制转换 (侧边栏)">
-          <span>📋</span>
-        </button>
       </div>
-    </div>
-
-    <!-- 进制转换工具 -->
-    <div v-if="showConverter" class="converter-panel">
-      <DataConverter />
     </div>
 
     <!-- 常用命令配置面板 -->
@@ -295,14 +276,6 @@ const handleRefresh = async () => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-}
-
-/* 进制转换面板 */
-.converter-panel {
-  flex: 1;
-  overflow: hidden;
-  border-bottom: 1px solid #3e3e42;
-  min-height: 0;
 }
 
 /* 常用命令配置面板 */
