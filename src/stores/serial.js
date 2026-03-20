@@ -345,12 +345,13 @@ export const useSerialStore = defineStore('serial', () => {
     try {
       const result = await window.electronAPI.writeData(targetPort, actualData)
       if (result.success) {
-        // 传递原始字节用于 Hex/ASCII 显示
+        // 传递原始字节用于 Hex/ASCII 显示，message 只保留纯数据不含 TX/RX 前缀
         const logData_raw = rawBytes ? {
           hexData: bytesToHex(rawBytes),
-          rawBytes
+          rawBytes,
+          message: logData // 保存纯数据用于 Hex 模式显示
         } : null
-        addPortLog(targetPort, `TX: ${logData}`, 'tx', logData_raw)
+        addPortLog(targetPort, logData, 'tx', logData_raw)
         return { success: true }
       } else {
         addPortLog(targetPort, `发送失败：${result.error}`, 'error')
@@ -417,13 +418,27 @@ export const useSerialStore = defineStore('serial', () => {
 
     const portLog = portLogs.value.get(portPath)
     const timestamp = new Date().toLocaleTimeString()
+
+    // 构建显示消息：TX/RX 前缀 + 纯数据
+    let displayMessage = message
+    if (type === 'tx' && rawData?.message !== undefined) {
+      displayMessage = `TX: ${rawData.message}`
+    } else if (type === 'rx' && rawData?.message !== undefined) {
+      displayMessage = `RX: ${rawData.message}`
+    } else if (type === 'tx') {
+      displayMessage = `TX: ${message}`
+    } else if (type === 'rx') {
+      displayMessage = `RX: ${message}`
+    }
+
     portLog.push({
       id: Date.now() + Math.random(),
       timestamp,
-      message,
+      message: displayMessage,
       type,
       hexData: rawData?.hexData || null,
-      rawBytes: rawData?.rawBytes || null
+      rawBytes: rawData?.rawBytes || null,
+      pureData: rawData?.message ?? message // 保存纯数据用于 Hex 模式
     })
 
     // Limit log history per port
@@ -488,8 +503,8 @@ export const useSerialStore = defineStore('serial', () => {
       if (shouldFilterLog(port, 'rx', data)) {
         return
       }
-      // 存储原始数据用于 Hex 显示
-      addPortLog(port, `RX: ${data}`, 'rx', { hexData, rawBytes })
+      // 存储原始数据用于 Hex 显示，message 保存纯数据不含 RX 前缀
+      addPortLog(port, data, 'rx', { hexData, rawBytes, message: data })
     })
 
     window.electronAPI.onSerialError(({ port, error }) => {

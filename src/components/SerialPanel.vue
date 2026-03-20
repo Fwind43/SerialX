@@ -56,6 +56,14 @@ const bytesToString = (bytes) => {
 // 字节转 ASCII（兼容旧名，内部调用 bytesToString）
 const bytesToAscii = bytesToString
 
+// 将字符串转换为 Hex 格式显示
+const formatAsHex = (str) => {
+  if (!str) return ''
+  return Array.from(str)
+    .map(c => c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
+    .join(' ')
+}
+
 // 快速命令选择
 const selectedCommandId = ref('')
 const sendSelectedCommand = () => {
@@ -543,19 +551,16 @@ const getPatternPlaceholder = () => {
         <span class="log-message">
           <!-- Hex 模式显示 -->
           <template v-if="portDisplaySettings.hexMode">
-            <!-- RX 数据 -->
-            <template v-if="log.type === 'rx' && log.hexData">
+            <!-- RX/TX 数据有 hexData 时 -->
+            <template v-if="log.hexData">
               <span class="hex-data">{{ log.hexData }}</span>
               <span v-if="portDisplaySettings.showAscii" class="ascii-data">
                 [{{ bytesToString(log.rawBytes) }}]
               </span>
             </template>
-            <!-- TX 数据 -->
-            <template v-else-if="log.type === 'tx' && log.hexData">
-              <span class="hex-data">{{ log.hexData }}</span>
-              <span v-if="portDisplaySettings.showAscii" class="ascii-data">
-                [{{ bytesToString(log.rawBytes) }}]
-              </span>
+            <!-- 没有 hexData 时使用纯数据（向后兼容） -->
+            <template v-else-if="log.pureData && log.type === 'tx'">
+              <span class="hex-data">{{ formatAsHex(log.pureData) }}</span>
             </template>
           </template>
           <!-- 普通模式显示 -->
