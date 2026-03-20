@@ -23,20 +23,85 @@ export const useSerialStore = defineStore('serial', () => {
 
   // 全局配置
   const logs = ref([])
-  const isHexMode = ref(false) // 发送 Hex 模式
-  const isAutoScroll = ref(true)
-  const isLoopSend = ref(false)
-  const loopInterval = ref(1000)
   let loopTimer = null
+  const portLoopSendCounts = ref(new Map()) // path -> 已发送次数
 
   // 每个串口的显示设置（独立配置）
-  const portDisplaySettings = ref(new Map()) // path -> { hexMode: boolean, showAscii: boolean }
+  const portDisplaySettings = ref(new Map()) // path -> { hexReceive: boolean, showAscii: boolean }
+
+  // 每个串口的控制设置（独立配置）
+  const portControlSettings = ref(new Map()) // path -> { isAutoScroll: boolean, isLoopSend: boolean, loopInterval: number, loopMaxCount: number, hexSend: boolean }
+
+  // 获取串口控制设置
+  const getPortControlSettings = (portPath) => {
+    if (!portControlSettings.value.has(portPath)) {
+      portControlSettings.value.set(portPath, {
+        isAutoScroll: true,
+        isLoopSend: false,
+        loopInterval: 1000,
+        loopMaxCount: 0,
+        hexSend: false
+      })
+    }
+    return portControlSettings.value.get(portPath)
+  }
+
+  // 更新串口控制设置
+  const updatePortControlSettings = (portPath, updates) => {
+    const current = getPortControlSettings(portPath)
+    portControlSettings.value.set(portPath, { ...current, ...updates })
+    // 配置变更时自动保存
+    saveSessionState()
+  }
+
+  // 每个串口的统计数据
+  const portStats = ref(new Map()) // path -> { txBytes: number, txCount: number, rxBytes: number, rxCount: number, startTime: string, lastCommTime: string }
+
+  // 获取串口统计数据
+  const getPortStats = (portPath) => {
+    if (!portStats.value.has(portPath)) {
+      portStats.value.set(portPath, {
+        txBytes: 0,
+        txCount: 0,
+        rxBytes: 0,
+        rxCount: 0,
+        startTime: new Date().toLocaleString(),
+        lastCommTime: null
+      })
+    }
+    return portStats.value.get(portPath)
+  }
+
+  // 更新串口统计数据
+  const updatePortStats = (portPath, type, byteCount) => {
+    const stats = getPortStats(portPath)
+    stats.lastCommTime = new Date().toLocaleString()
+    if (type === 'tx') {
+      stats.txBytes += byteCount
+      stats.txCount += 1
+    } else if (type === 'rx') {
+      stats.rxBytes += byteCount
+      stats.rxCount += 1
+    }
+  }
+
+  // 重置串口统计数据
+  const resetPortStats = (portPath) => {
+    portStats.value.set(portPath, {
+      txBytes: 0,
+      txCount: 0,
+      rxBytes: 0,
+      rxCount: 0,
+      startTime: new Date().toLocaleString(),
+      lastCommTime: null
+    })
+  }
 
   // 获取串口显示设置
   const getPortDisplaySettings = (portPath) => {
     if (!portDisplaySettings.value.has(portPath)) {
       portDisplaySettings.value.set(portPath, {
-        hexMode: false,
+        hexReceive: false,
         showAscii: true
       })
     }
@@ -47,6 +112,47 @@ export const useSerialStore = defineStore('serial', () => {
   const updatePortDisplaySettings = (portPath, updates) => {
     const current = getPortDisplaySettings(portPath)
     portDisplaySettings.value.set(portPath, { ...current, ...updates })
+    // 配置变更时自动保存
+    saveSessionState()
+  }
+
+  // 保存会话状态到本地存储
+  const saveSessionState = async () => {
+    try {
+      const state = {
+        defaultSettings: defaultSettings.value,
+        portDisplaySettings: Object.fromEntries(portDisplaySettings.value),
+        portControlSettings: Object.fromEntries(portControlSettings.value),
+        commonCommands: commonCommands.value
+      }
+      localStorage.setItem('serialx-session-state', JSON.stringify(state))
+    } catch (error) {
+      console.error('[Store] Error saving session state:', error)
+    }
+  }
+
+  // 恢复会话状态
+  const restoreSessionState = async () => {
+    try {
+      const saved = localStorage.getItem('serialx-session-state')
+      if (saved) {
+        const state = JSON.parse(saved)
+        if (state.defaultSettings) {
+          Object.assign(defaultSettings.value, state.defaultSettings)
+        }
+        if (state.portDisplaySettings) {
+          portDisplaySettings.value = new Map(Object.entries(state.portDisplaySettings))
+        }
+        if (state.portControlSettings) {
+          portControlSettings.value = new Map(Object.entries(state.portControlSettings))
+        }
+        if (state.commonCommands) {
+          commonCommands.value = state.commonCommands
+        }
+      }
+    } catch (error) {
+      console.error('[Store] Error restoring session state:', error)
+    }
   }
 
   // 常用命令配置（全局统一配置）- 初始为空，从配置文件加载
@@ -125,7 +231,8 @@ export const useSerialStore = defineStore('serial', () => {
       enabled: false,
       mode: 'discard', // 'discard' | 'hide'
       matchMode: 'regex', // 'keyword' | 'regex'
-      pattern: ''
+      pattern: '',
+      filterTarget: 'both' // 'hexData' | 'asciiData' | 'both'
     }
   }
 
@@ -135,26 +242,61 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   // 检查日志是否应该被过滤（返回 true 表示过滤掉）
-  const shouldFilterLog = (portPath, logType, message) => {
+  const shouldFilterLog = (portPath, logType, message, rawHexData = null, asciiData = null) => {
     const filters = getPortFilters(portPath)
     if (!filters.enabled) return false
 
     // 只过滤 RX 数据
     if (logType !== 'rx') return false
 
-    // 没有pattern 不过滤
+    // 没有 pattern 不过滤
     if (!filters.pattern) return false
+
+    // 确定要检查的数据内容
+    const hexReceive = portDisplaySettings.value.get(portPath)?.hexReceive ?? false
+    const filterTarget = filters.filterTarget || 'both'
+
+    let dataToCheck = []
+
+    if (hexReceive) {
+      // HEX 模式下根据 filterTarget 决定检查哪些数据
+      if (filterTarget === 'hexData' && rawHexData) {
+        dataToCheck.push(rawHexData)
+      } else if (filterTarget === 'asciiData' && rawHexData) {
+        // 从 hexData 反向计算 ASCII
+        const ascii = rawHexData.split(' ').map(h => {
+          const code = parseInt(h, 16)
+          return (code >= 32 && code <= 126) ? String.fromCharCode(code) : '.'
+        }).join('')
+        dataToCheck.push(ascii)
+      } else if (filterTarget === 'both') {
+        if (rawHexData) dataToCheck.push(rawHexData)
+        if (rawHexData) {
+          const ascii = rawHexData.split(' ').map(h => {
+            const code = parseInt(h, 16)
+            return (code >= 32 && code <= 126) ? String.fromCharCode(code) : '.'
+          }).join('')
+          dataToCheck.push(ascii)
+        }
+      }
+    } else {
+      // 文本模式只检查 message
+      dataToCheck.push(message)
+    }
+
+    // 如果没有数据可检查，不过滤
+    if (dataToCheck.length === 0) return false
 
     // 关键字匹配
     if (filters.matchMode === 'keyword') {
-      return message.includes(filters.pattern)
+      return dataToCheck.some(data => data.includes(filters.pattern))
     }
 
     // 正则表达式匹配
     if (filters.matchMode === 'regex') {
       try {
         const regex = new RegExp(filters.pattern)
-        return regex.test(message)
+        return dataToCheck.some(data => regex.test(data))
       } catch {
         return false
       }
@@ -169,15 +311,13 @@ export const useSerialStore = defineStore('serial', () => {
     if (!filters.enabled || !filters.pattern) return 0
 
     const logs = portLogs.value.get(portPath) || []
-    return logs.filter(log => shouldFilterLog(portPath, log.type, log.message)).length
+    return logs.filter(log => shouldFilterLog(portPath, log.type, log.message, log.hexData, null)).length
   }
 
   // Actions
   async function refreshPorts() {
     try {
-      console.log('Refreshing serial ports...')
       const portList = await window.electronAPI.listPorts()
-      console.log('Available ports:', portList)
       ports.value = portList
       return portList
     } catch (error) {
@@ -200,9 +340,7 @@ export const useSerialStore = defineStore('serial', () => {
     }
 
     try {
-      console.log('Opening port:', targetPort, connectionSettings)
       const result = await window.electronAPI.openPort(connectionSettings)
-      console.log('Open port result:', result)
 
       if (result.success) {
         openPorts.value.set(targetPort, {
@@ -213,13 +351,19 @@ export const useSerialStore = defineStore('serial', () => {
           parity: connectionSettings.parity
         })
         portSettings.value.set(targetPort, connectionSettings)
-        portLogs.value.set(targetPort, [])
-        portFilters.value.set(targetPort, {
-          enabled: false,
-          mode: 'discard',
-          matchMode: 'regex',
-          pattern: ''
-        })
+        // 如果是首次连接，初始化日志数组；否则保留之前的日志
+        if (!portLogs.value.has(targetPort)) {
+          portLogs.value.set(targetPort, [])
+        }
+        // 如果是首次连接，初始化过滤器
+        if (!portFilters.value.has(targetPort)) {
+          portFilters.value.set(targetPort, {
+            enabled: false,
+            mode: 'discard',
+            matchMode: 'regex',
+            pattern: ''
+          })
+        }
         addPortLog(targetPort, `已连接，波特率：${connectionSettings.baudRate}`, 'success')
         return true
       } else {
@@ -244,7 +388,7 @@ export const useSerialStore = defineStore('serial', () => {
       const result = await window.electronAPI.closePort(targetPort)
       if (result.success) {
         openPorts.value.delete(targetPort)
-        portLogs.value.delete(targetPort)
+        // 保留日志数据、过滤设置、统计数据，只删除连接状态
         stopLoopSendForPort(targetPort)
         addPortLog(targetPort, `已断开`, 'info')
         return true
@@ -259,7 +403,7 @@ export const useSerialStore = defineStore('serial', () => {
     try {
       const result = await window.electronAPI.closePort()
       openPorts.value.clear()
-      portLogs.value.clear()
+      // 保留日志数据、过滤设置、统计数据，只删除连接状态
       stopLoopSend()
       return result.success
     } catch (error) {
@@ -295,6 +439,21 @@ export const useSerialStore = defineStore('serial', () => {
     if (!hexString) return false
     const cleanHex = hexString.replace(/[\s,-]/g, '').toUpperCase()
     return cleanHex.length > 0 && /^[0-9A-F]+$/.test(cleanHex)
+  }
+
+  // 字节转字符串（支持 ASCII 和 UTF-8 中文）
+  const bytesToString = (bytes) => {
+    if (!bytes || !Array.isArray(bytes) || bytes.length === 0) return ''
+    try {
+      const uint8Array = new Uint8Array(bytes)
+      const decoder = new TextDecoder('utf-8', { fatal: false })
+      return decoder.decode(uint8Array)
+    } catch {
+      return bytes.map(b => {
+        const char = String.fromCharCode(b)
+        return (b >= 32 && b <= 126) ? char : '.'
+      }).join('')
+    }
   }
 
   async function sendData(portPath = null, data = null, isHex = false) {
@@ -345,6 +504,10 @@ export const useSerialStore = defineStore('serial', () => {
     try {
       const result = await window.electronAPI.writeData(targetPort, actualData)
       if (result.success) {
+        // 更新统计数据
+        const byteCount = actualData instanceof Uint8Array ? actualData.length : new TextEncoder().encode(actualData).length
+        updatePortStats(targetPort, 'tx', byteCount)
+
         // 传递原始字节用于 Hex/ASCII 显示，message 只保留纯数据不含 TX/RX 前缀
         const logData_raw = rawBytes ? {
           hexData: bytesToHex(rawBytes),
@@ -366,18 +529,35 @@ export const useSerialStore = defineStore('serial', () => {
     const targetPort = portPath || selectedPort.value
     if (!targetPort || !getPortSendingData(targetPort)) return
 
+    // 获取该串口的循环发送设置
+    const portControl = getPortControlSettings(targetPort)
+
+    // 初始化该串口的发送计数
+    portLoopSendCounts.value.set(targetPort, 0)
+
     const loopData = { port: targetPort, timer: null }
 
-    loopData.timer = setInterval(() => {
+    loopData.timer = setInterval(async () => {
       const portStatus = openPorts.value.get(targetPort)
       const dataToSend = getPortSendingData(targetPort)
       if (portStatus?.isConnected && dataToSend) {
-        sendData(targetPort, dataToSend, isHexMode.value)
+        // 检查是否达到最大发送次数
+        const currentCount = portLoopSendCounts.value.get(targetPort) || 0
+        if (portControl.loopMaxCount > 0 && currentCount >= portControl.loopMaxCount) {
+          stopLoopSendForPort(targetPort)
+          updatePortControlSettings(targetPort, { isLoopSend: false })
+          addPortLog(targetPort, `循环发送已达到上限 (${portControl.loopMaxCount} 次)`, 'info')
+          return
+        }
+        await sendData(targetPort, dataToSend, portControl.hexMode)
+        // 更新发送计数
+        portLoopSendCounts.value.set(targetPort, currentCount + 1)
       }
-    }, loopInterval.value)
+    }, portControl.loopInterval)
 
     loopTimer = loopData.timer
-    addPortLog(targetPort, `循环发送已启动 (间隔：${loopInterval.value}ms)`, 'info')
+    updatePortControlSettings(targetPort, { isLoopSend: true })
+    addPortLog(targetPort, `循环发送已启动 (间隔：${portControl.loopInterval}ms${portControl.loopMaxCount > 0 ? `, 上限：${portControl.loopMaxCount} 次` : ''})`, 'info')
   }
 
   function stopLoopSendForPort(portPath) {
@@ -411,27 +591,66 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  // 批量添加日志 - 减少响应式触发
+  let logBatchBuffer = new Map() // portPath -> log batch array
+  let logFlushTimer = null
+  const LOG_BATCH_SIZE = 5 // 每批最多 5 条日志
+  const LOG_BATCH_INTERVAL = 100 // 100ms 刷新一次
+
+  function flushLogBatch() {
+    for (const [portPath, batch] of logBatchBuffer.entries()) {
+      const portLog = portLogs.value.get(portPath)
+      if (!portLog) continue
+
+      // 批量添加日志
+      for (const logEntry of batch) {
+        portLog.push(logEntry)
+      }
+
+      // 清理旧日志 - 使用更激进的清理策略
+      if (portLog.length > 800) {
+        portLog.splice(0, portLog.length - 800)
+      }
+    }
+    logBatchBuffer.clear()
+  }
+
   function addPortLog(portPath, message, type = 'info', rawData = null) {
     if (!portLogs.value.has(portPath)) {
       portLogs.value.set(portPath, [])
     }
 
-    const portLog = portLogs.value.get(portPath)
     const timestamp = new Date().toLocaleTimeString()
-
-    portLog.push({
+    const logEntry = {
       id: Date.now() + Math.random(),
       timestamp,
-      message, // 只保存纯数据，前缀由模板中的 getLogPrefix 显示
+      message,
       type,
       hexData: rawData?.hexData || null,
-      rawBytes: rawData?.rawBytes || null,
+      // 不存储 rawBytes，节省内存，需要时从 hexData 反向计算
       pureData: rawData?.message ?? message
-    })
+    }
 
-    // Limit log history per port
-    if (portLog.length > 1000) {
-      portLog.shift()
+    // 加入批处理缓冲
+    if (!logBatchBuffer.has(portPath)) {
+      logBatchBuffer.set(portPath, [])
+    }
+    const batch = logBatchBuffer.get(portPath)
+    batch.push(logEntry)
+
+    // 达到批量大小立即刷新
+    if (batch.length >= LOG_BATCH_SIZE) {
+      flushLogBatch()
+      if (logFlushTimer) {
+        clearTimeout(logFlushTimer)
+        logFlushTimer = null
+      }
+    } else if (!logFlushTimer) {
+      // 启动定时器
+      logFlushTimer = setTimeout(() => {
+        logFlushTimer = null
+        flushLogBatch()
+      }, LOG_BATCH_INTERVAL)
     }
   }
 
@@ -488,11 +707,14 @@ export const useSerialStore = defineStore('serial', () => {
   function setupEventListeners() {
     window.electronAPI.onSerialData(({ port, data, hexData, rawBytes }) => {
       // 过滤检查：如果数据被过滤，直接丢弃不显示
-      if (shouldFilterLog(port, 'rx', data)) {
+      if (shouldFilterLog(port, 'rx', data, hexData, null)) {
         return
       }
+      // 更新统计数据
+      const byteCount = rawBytes ? rawBytes.length : new TextEncoder().encode(data).length
+      updatePortStats(port, 'rx', byteCount)
       // 存储原始数据用于 Hex 显示，message 只保存纯数据
-      addPortLog(port, data, 'rx', { hexData, rawBytes, message: data })
+      addPortLog(port, data, 'rx', { hexData, message: data })
     })
 
     window.electronAPI.onSerialError(({ port, error }) => {
@@ -518,11 +740,8 @@ export const useSerialStore = defineStore('serial', () => {
     portFilters,
     defaultSettings,
     logs,
-    isHexMode,
-    isAutoScroll,
-    isLoopSend,
-    loopInterval,
     commonCommands,
+    portLoopSendCounts,
     // Getters
     availableBaudRates,
     getEnabledCommands,
@@ -536,6 +755,10 @@ export const useSerialStore = defineStore('serial', () => {
     getFilteredCount,
     getPortDisplaySettings,
     updatePortDisplaySettings,
+    getPortStats,
+    resetPortStats,
+    getPortControlSettings,
+    updatePortControlSettings,
     // Hex 工具函数
     hexToBytes,
     bytesToHex,
@@ -561,6 +784,8 @@ export const useSerialStore = defineStore('serial', () => {
     updateCommonCommand,
     toggleCommandEnabled,
     loadCommonCommands,
-    saveCommonCommands
+    saveCommonCommands,
+    saveSessionState,
+    restoreSessionState
   }
 })

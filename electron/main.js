@@ -84,6 +84,8 @@ function getPortsFromRegistry() {
 class SerialManager {
   constructor() {
     this.ports = new Map() // 存储多个串口实例：path -> { port, parser, isOpen }
+    this.dataBuffers = new Map() // 每个串口的数据缓冲区
+    this.flushTimers = new Map() // 每个串口的刷新定时器
   }
 
   async listPorts() {
@@ -158,21 +160,56 @@ class SerialManager {
 
       console.log('[SerialManager] Port opened successfully:', portPath)
 
-      // 监听原始数据（每个字节都触发）
-      serialPort.on('data', (data) => {
-        const text = data.toString('utf8')
-        // 同时发送文本和原始字节（用于 Hex 显示）
-        const hexData = data.toString('hex').toUpperCase()
-        // 每两个字符添加空格
+      // 初始化该串口的缓冲区
+      this.dataBuffers.set(portPath, [])
+      const FLUSH_INTERVAL = 100 // 100ms 刷新一次
+      const MAX_BUFFER_SIZE = 2048 // 2KB 触发刷新
+      const MAX_CHUNK_COUNT = 20 // 20 个数据块触发刷新
+
+      const flushBuffer = (force = false) => {
+        const buffer = this.dataBuffers.get(portPath)
+        if (!buffer || buffer.length === 0 || !mainWindow) return
+
+        // 合并缓冲区数据
+        const mergedData = Buffer.concat(buffer)
+        buffer.length = 0 // 清空数组
+
+        const text = mergedData.toString('utf8')
+        const hexData = mergedData.toString('hex').toUpperCase()
         const hexFormatted = hexData.match(/.{1,2}/g)?.join(' ') || ''
-        console.log('[SerialManager] Raw data from', portPath, ':', JSON.stringify(text))
-        if (mainWindow) {
-          mainWindow.webContents.send('serial:data', {
-            port: portPath,
-            data: text,
-            hexData: hexFormatted,
-            rawBytes: Array.from(data) // 原始字节数组，用于转换 ASCII
-          })
+
+        mainWindow.webContents.send('serial:data', {
+          port: portPath,
+          data: text,
+          hexData: hexFormatted,
+          rawBytes: Array.from(mergedData)
+        })
+      }
+
+      // 使用固定大小的 Buffer 池减少内存分配
+      let bufferPool = Buffer.allocUnsafe(4096)
+      let poolOffset = 0
+
+      serialPort.on('data', (data) => {
+        const buffer = this.dataBuffers.get(portPath)
+        if (!buffer) return
+
+        // 直接保存数据块，不做额外处理
+        buffer.push(data)
+
+        // 更激进的批量刷新策略
+        const totalSize = buffer.reduce((acc, buf) => acc + buf.length, 0)
+        if (totalSize >= MAX_BUFFER_SIZE || buffer.length >= MAX_CHUNK_COUNT) {
+          flushBuffer()
+        } else {
+          // 启动定时器
+          if (!this.flushTimers.get(portPath)) {
+            const timer = setTimeout(() => {
+              this.flushTimers.delete(portPath)
+              flushBuffer()
+            }, FLUSH_INTERVAL)
+            this.flushTimers.set(portPath, timer)
+          }
         }
       })
 
@@ -214,6 +251,14 @@ class SerialManager {
     }
 
     try {
+      // 清理定时器和缓冲区
+      const timer = this.flushTimers.get(portPath)
+      if (timer) {
+        clearTimeout(timer)
+        this.flushTimers.delete(portPath)
+      }
+      this.dataBuffers.delete(portPath)
+
       await portData.port.close()
       portData.isOpen = false
       this.ports.delete(portPath)

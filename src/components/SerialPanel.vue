@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, shallowRef, markRaw } from 'vue'
 import { useSerialStore } from '../stores/serial'
 
 const props = defineProps({
@@ -17,15 +17,42 @@ const searchQuery = ref('')
 const currentMatchIndex = ref(0)
 const matchedLogIndices = ref([])
 
+// 虚拟滚动配置
+const LOG_ITEM_HEIGHT = 24 // 每行日志高度（像素）- 减小高度以显示更多内容
+const VISIBLE_OVERSCAN = 3 // 上下额外渲染的行数（减少以优化性能）
+const MAX_LOG_DISPLAY_COUNT = 300 // 最大显示日志数量（减少内存占用）
+
+// 虚拟滚动状态
+const scrollTop = ref(0)
+const containerHeight = ref(0)
+
+// 处理容器滚动
+const handleScroll = (e) => {
+  scrollTop.value = e.target.scrollTop
+  containerHeight.value = e.target.clientHeight
+}
+
 // 获取当前串口的显示设置
 const portDisplaySettings = computed(() => {
   return serialStore.getPortDisplaySettings(props.portPath)
 })
 
-// Hex 模式切换
-const toggleHexMode = () => {
+// 获取当前串口的控制设置
+const portControlSettings = computed(() => {
+  return serialStore.getPortControlSettings(props.portPath)
+})
+
+// Hex 接收模式切换
+const toggleHexReceive = () => {
   serialStore.updatePortDisplaySettings(props.portPath, {
-    hexMode: !portDisplaySettings.value.hexMode
+    hexReceive: !portDisplaySettings.value.hexReceive
+  })
+}
+
+// Hex 发送模式切换
+const toggleHexSend = () => {
+  serialStore.updatePortControlSettings(props.portPath, {
+    hexSend: !portControlSettings.value.hexSend
   })
 }
 
@@ -34,6 +61,34 @@ const toggleShowAscii = () => {
   serialStore.updatePortDisplaySettings(props.portPath, {
     showAscii: !portDisplaySettings.value.showAscii
   })
+}
+
+// 自动滚动切换
+const toggleAutoScroll = () => {
+  serialStore.updatePortControlSettings(props.portPath, {
+    isAutoScroll: !portControlSettings.value.isAutoScroll
+  })
+}
+
+// 循环发送切换
+const toggleLoopSend = () => {
+  if (portControlSettings.value.isLoopSend) {
+    serialStore.stopLoopSendForPort(props.portPath)
+    serialStore.updatePortControlSettings(props.portPath, { isLoopSend: false })
+  } else {
+    serialStore.updatePortControlSettings(props.portPath, { isLoopSend: true })
+    serialStore.startLoopSend(props.portPath)
+  }
+}
+
+// 更新循环间隔
+const updateLoopInterval = (value) => {
+  serialStore.updatePortControlSettings(props.portPath, { loopInterval: Number(value) })
+}
+
+// 更新循环次数
+const updateLoopMaxCount = (value) => {
+  serialStore.updatePortControlSettings(props.portPath, { loopMaxCount: Number(value) })
 }
 
 // 字节转字符串（支持 ASCII 和 UTF-8 中文）
@@ -62,16 +117,6 @@ const formatAsHex = (str) => {
   return Array.from(str)
     .map(c => c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
     .join(' ')
-}
-
-// 快速命令选择
-const selectedCommandId = ref('')
-const sendSelectedCommand = () => {
-  const cmd = serialStore.commonCommands.find(c => c.id === parseInt(selectedCommandId.value))
-  if (cmd) {
-    executeCommand(cmd.command)
-  }
-  selectedCommandId.value = '' // 重置选择
 }
 
 // 执行常用命令
@@ -197,6 +242,16 @@ const isConnected = computed(() => {
   return serialStore.getPortStatus(props.portPath)
 })
 
+// 获取当前串口的统计数据
+const portStats = computed(() => {
+  return serialStore.getPortStats(props.portPath)
+})
+
+// 获取当前串口的循环发送次数
+const loopSendCount = computed(() => {
+  return serialStore.portLoopSendCounts.get(props.portPath) || 0
+})
+
 // 获取当前串口的过滤器
 const portFilters = computed(() => {
   return serialStore.getPortFilters(props.portPath)
@@ -216,16 +271,48 @@ const displayLogs = computed(() => {
     if (log.type !== 'rx') return true
     if (!portFilters.value.pattern) return true
 
+    const hexReceive = portDisplaySettings.value.hexReceive ?? false
+    const filterTarget = portFilters.value.filterTarget || 'both'
+
+    let dataToCheck = []
+
+    if (hexReceive) {
+      // 只在需要时才转换 ASCII
+      if (filterTarget === 'hexData' && log.hexData) {
+        dataToCheck.push(log.hexData)
+      } else if (filterTarget === 'asciiData' && log.hexData) {
+        // 从 hexData 反向计算 ASCII，避免存储大量 rawBytes
+        const ascii = log.hexData.split(' ').map(h => {
+          const code = parseInt(h, 16)
+          return (code >= 32 && code <= 126) ? String.fromCharCode(code) : '.'
+        }).join('')
+        dataToCheck.push(ascii)
+      } else if (filterTarget === 'both') {
+        if (log.hexData) dataToCheck.push(log.hexData)
+        if (log.hexData) {
+          const ascii = log.hexData.split(' ').map(h => {
+            const code = parseInt(h, 16)
+            return (code >= 32 && code <= 126) ? String.fromCharCode(code) : '.'
+          }).join('')
+          dataToCheck.push(ascii)
+        }
+      }
+    } else {
+      dataToCheck.push(log.message)
+    }
+
+    if (dataToCheck.length === 0) return true
+
     // 关键字匹配
     if (portFilters.value.matchMode === 'keyword') {
-      return !log.message.includes(portFilters.value.pattern)
+      return !dataToCheck.some(data => data.includes(portFilters.value.pattern))
     }
 
     // 正则匹配
     if (portFilters.value.matchMode === 'regex') {
       try {
         const regex = new RegExp(portFilters.value.pattern)
-        return !regex.test(log.message)
+        return !dataToCheck.some(data => regex.test(data))
       } catch {
         return true
       }
@@ -233,6 +320,44 @@ const displayLogs = computed(() => {
 
     return true
   })
+})
+
+// 虚拟滚动：计算可见区域的日志
+const visibleLogs = computed(() => {
+  const logs = displayLogs.value
+  const totalLogs = logs.length
+
+  // 限制最大显示数量
+  const startIndex = Math.max(0, totalLogs - MAX_LOG_DISPLAY_COUNT)
+  const trimmedLogs = logs.slice(startIndex)
+
+  if (!containerHeight.value || containerHeight.value <= 0) {
+    return trimmedLogs
+  }
+
+  // 计算可见范围内的日志
+  const visibleStartIndex = Math.floor(scrollTop.value / LOG_ITEM_HEIGHT) - VISIBLE_OVERSCAN
+  const visibleCount = Math.ceil(containerHeight.value / LOG_ITEM_HEIGHT)
+  const visibleEndIndex = visibleStartIndex + visibleCount + VISIBLE_OVERSCAN * 2
+
+  const safeStartIndex = Math.max(0, visibleStartIndex)
+  const safeEndIndex = Math.min(trimmedLogs.length, visibleEndIndex)
+
+  return trimmedLogs.slice(safeStartIndex, safeEndIndex)
+})
+
+// 虚拟滚动：计算总高度
+const totalHeight = computed(() => {
+  const logs = displayLogs.value
+  const displayCount = Math.min(logs.length, MAX_LOG_DISPLAY_COUNT)
+  return displayCount * LOG_ITEM_HEIGHT
+})
+
+// 虚拟滚动：计算偏移量
+const offsetY = computed(() => {
+  const logs = displayLogs.value
+  const startIndex = Math.max(0, logs.length - MAX_LOG_DISPLAY_COUNT)
+  return startIndex * LOG_ITEM_HEIGHT
 })
 
 const getLogClass = (type) => {
@@ -259,10 +384,9 @@ const getLogPrefix = (type) => {
   return prefixes[type] || ''
 }
 
-// 高亮匹配文本
+// 高亮匹配文本 - 只在搜索激活时计算
 const highlightMatch = (message) => {
   if (!searchQuery.value) return message
-
   try {
     const regex = new RegExp(`(${searchQuery.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
     return message.replace(regex, '<mark class="search-match">$1</mark>')
@@ -271,14 +395,21 @@ const highlightMatch = (message) => {
   }
 }
 
-// Auto-scroll when logs change
+// Auto-scroll when logs change - 使用防抖减少频繁触发
+let scrollTimeout = null
 watch(() => displayLogs.value.length, () => {
-  if (serialStore.isAutoScroll) {
-    nextTick(() => {
+  if (portControlSettings.value.isAutoScroll) {
+    // 清除之前的定时器
+    if (scrollTimeout) {
+      clearTimeout(scrollTimeout)
+    }
+    // 使用防抖，只在数据稳定后滚动
+    scrollTimeout = setTimeout(() => {
       if (terminalRef.value) {
         terminalRef.value.scrollTop = terminalRef.value.scrollHeight
       }
-    })
+      scrollTimeout = null
+    }, 100) // 增加到 100ms
   }
 })
 
@@ -289,16 +420,16 @@ const handleClearLogs = () => {
 const handleSend = async () => {
   const data = serialStore.getPortSendingData(props.portPath)
   if (!data) return
-  const result = await serialStore.sendData(props.portPath, null, serialStore.isHexMode)
+  const result = await serialStore.sendData(props.portPath, null, portControlSettings.value.hexSend)
   if (!result.success) {
     console.error('发送失败:', result.error)
   }
 }
 
-// Hex 模式下验证输入是否有效
+// Hex 发送模式下验证输入是否有效
 const isHexInputValid = computed(() => {
   const data = serialStore.getPortSendingData(props.portPath)
-  if (!serialStore.isHexMode || !data) return true
+  if (!portControlSettings.value.hexSend || !data) return true
   return serialStore.isValidHex(data)
 })
 
@@ -306,22 +437,13 @@ const isHexInputValid = computed(() => {
 const isSendDisabled = computed(() => {
   const data = serialStore.getPortSendingData(props.portPath)
   if (!data) return true
-  if (serialStore.isHexMode) return !isHexInputValid.value
+  if (portControlSettings.value.hexSend) return !isHexInputValid.value
   return false
 })
 
 // Hex 模式下的输入框占位符
 const hexPlaceholder = '输入十六进制数据，如：48 65 6C 6C 6F 或 48656C6C6F'
 const textPlaceholder = '输入要发送的数据，按 Enter 发送...'
-
-const toggleLoopSend = () => {
-  if (serialStore.isLoopSend) {
-    serialStore.stopLoopSend()
-  } else {
-    serialStore.isLoopSend = true
-    serialStore.startLoopSend(props.portPath)
-  }
-}
 
 const handleDisconnect = async () => {
   await serialStore.disconnect(props.portPath)
@@ -343,6 +465,10 @@ const setFilterPattern = (pattern) => {
   serialStore.setPortFilters(props.portPath, { pattern })
 }
 
+const setFilterTarget = (filterTarget) => {
+  serialStore.setPortFilters(props.portPath, { filterTarget })
+}
+
 const getPatternPlaceholder = () => {
   if (!portFilters.value.enabled) return '启用后输入过滤条件...'
   if (portFilters.value.matchMode === 'keyword') {
@@ -350,6 +476,24 @@ const getPatternPlaceholder = () => {
   }
   return '输入正则表达式，匹配的数据将被过滤...'
 }
+
+// 重置统计数据
+const resetStats = () => {
+  serialStore.resetPortStats(props.portPath)
+}
+
+// 格式化字节数显示
+const formatBytes = (bytes) => {
+  if (bytes === 0) return '0 B'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// 获取已启用的命令
+const enabledCommands = computed(() => {
+  return serialStore.getEnabledCommands
+})
 </script>
 
 <template>
@@ -363,47 +507,17 @@ const getPatternPlaceholder = () => {
         <span :class="['connection-status', isConnected ? 'connected' : 'disconnected']">
           {{ isConnected ? '● 已连接' : '● 未连接' }}
         </span>
+        <!-- 循环发送状态指示 -->
+        <span v-if="portControlSettings.isLoopSend" class="loop-send-status">
+          <span class="loop-indicator">🔁</span>
+          <span class="loop-count">{{ loopSendCount }}{{ portControlSettings.loopMaxCount > 0 ? '/' + portControlSettings.loopMaxCount : '' }}</span>
+        </span>
       </div>
       <div class="panel-actions">
-        <label class="checkbox-label">
-          <input type="checkbox" v-model="serialStore.isAutoScroll" />
-          自动滚动
-        </label>
-        <!-- Hex 显示模式 -->
-        <label class="checkbox-label">
-          <input
-            type="checkbox"
-            :checked="portDisplaySettings.hexMode"
-            @change="toggleHexMode"
-          />
-          <span class="option-text">Hex</span>
-        </label>
-        <!-- ASCII 转换显示 -->
-        <label class="checkbox-label" v-if="portDisplaySettings.hexMode">
-          <input
-            type="checkbox"
-            :checked="portDisplaySettings.showAscii"
-            @change="toggleShowAscii"
-          />
-          <span class="option-text">ASCII</span>
-        </label>
-        <!-- 常用命令快速发送 -->
-        <div class="command-dropdown">
-          <select
-            v-model="selectedCommandId"
-            @change="sendSelectedCommand"
-            class="command-select"
-            :disabled="!isConnected"
-          >
-            <option value="">⚡ 快速命令</option>
-            <option
-              v-for="cmd in serialStore.getEnabledCommands"
-              :key="cmd.id"
-              :value="cmd.id"
-            >
-              {{ cmd.name }} ({{ cmd.command }})
-            </option>
-          </select>
+        <!-- 统计数据 -->
+        <div class="stats-display" @click="resetStats" title="点击重置统计">
+          <span class="stats-tx" title="发送">TX: {{ portStats.txCount }}/{{ formatBytes(portStats.txBytes) }}</span>
+          <span class="stats-rx" title="接收">RX: {{ portStats.rxCount }}/{{ formatBytes(portStats.rxBytes) }}</span>
         </div>
         <button @click="showFilters = !showFilters" class="action-btn filter" :class="{ active: showFilters }" title="数据过滤">
           <span>🔍</span>
@@ -477,6 +591,44 @@ const getPatternPlaceholder = () => {
           </label>
         </div>
 
+        <!-- HEX 模式下的过滤目标 -->
+        <div class="filter-target-group" v-if="portDisplaySettings.hexReceive" :class="{ disabled: !portFilters.enabled }">
+          <span class="target-label">过滤目标:</span>
+          <label class="mode-radio">
+            <input
+              type="radio"
+              name="filter-target"
+              value="hexData"
+              :checked="portFilters.filterTarget === 'hexData'"
+              @change="setFilterTarget('hexData')"
+              :disabled="!portFilters.enabled"
+            />
+            <span class="mode-text">Hex 数据</span>
+          </label>
+          <label class="mode-radio">
+            <input
+              type="radio"
+              name="filter-target"
+              value="asciiData"
+              :checked="portFilters.filterTarget === 'asciiData'"
+              @change="setFilterTarget('asciiData')"
+              :disabled="!portFilters.enabled"
+            />
+            <span class="mode-text">ASCII</span>
+          </label>
+          <label class="mode-radio">
+            <input
+              type="radio"
+              name="filter-target"
+              value="both"
+              :checked="portFilters.filterTarget === 'both' || !portFilters.filterTarget"
+              @change="setFilterTarget('both')"
+              :disabled="!portFilters.enabled"
+            />
+            <span class="mode-text">两者</span>
+          </label>
+        </div>
+
         <input
           type="text"
           class="pattern-input"
@@ -500,7 +652,7 @@ const getPatternPlaceholder = () => {
     </div>
 
     <!-- 终端显示区 -->
-    <div class="terminal-content" ref="terminalRef" @keydown="handleKeyDown" tabindex="0">
+    <div class="terminal-content" ref="terminalRef" @keydown="handleKeyDown" tabindex="0" @scroll="handleScroll">
       <!-- 搜索浮窗 -->
       <div v-if="showSearch" class="search-widget">
         <div class="search-input-wrapper">
@@ -541,52 +693,39 @@ const getPatternPlaceholder = () => {
         </p>
       </div>
 
-      <div
-        v-for="(log, index) in displayLogs"
-        :key="log.id"
-        :class="['log-entry', getLogClass(log.type), { 'match-highlight': matchedLogIndices.includes(index) && index === matchedLogIndices[currentMatchIndex] }]"
-      >
-        <span class="log-timestamp">{{ log.timestamp }}</span>
-        <span class="log-prefix">{{ getLogPrefix(log.type) }}</span>
-        <span class="log-message">
-          <!-- Hex 模式显示 -->
-          <template v-if="portDisplaySettings.hexMode && log.hexData">
-            <span class="hex-data">{{ log.hexData }}</span>
-            <span v-if="portDisplaySettings.showAscii" class="ascii-data">
-              [{{ bytesToString(log.rawBytes) }}]
-            </span>
-          </template>
-          <!-- 普通模式显示 -->
-          <template v-else>
-            <span v-html="highlightMatch(log.message)"></span>
-          </template>
-        </span>
+      <!-- 虚拟滚动容器 -->
+      <div v-else class="virtual-scroll-container" :style="{ height: totalHeight + 'px' }">
+        <div class="virtual-scroll-spacer" :style="{ height: offsetY + 'px' }"></div>
+        <div
+          v-for="(log, index) in visibleLogs"
+          :key="log.id"
+          :class="['log-entry', getLogClass(log.type)]"
+          :style="{ height: LOG_ITEM_HEIGHT + 'px' }"
+        >
+          <span class="log-timestamp">{{ log.timestamp }}</span>
+          <span class="log-prefix">{{ getLogPrefix(log.type) }}</span>
+          <span class="log-message">
+            <!-- Hex 模式显示 -->
+            <template v-if="portDisplaySettings.hexReceive && log.hexData">
+              <span class="hex-data">{{ log.hexData }}</span>
+              <span v-if="portDisplaySettings.showAscii" class="ascii-data">
+                [{{ log.hexData.split(' ').map(h => {
+                  const code = parseInt(h, 16)
+                  return (code >= 32 && code <= 126) ? String.fromCharCode(code) : '.'
+                }).join('') }}]
+              </span>
+            </template>
+            <!-- 普通模式显示 -->
+            <template v-else>
+              <span v-html="highlightMatch(log.message)"></span>
+            </template>
+          </span>
+        </div>
       </div>
     </div>
 
     <!-- 发送控制台 -->
     <div class="send-console">
-      <div class="send-options">
-        <label class="option-checkbox">
-          <input type="checkbox" v-model="serialStore.isHexMode" />
-          <span class="option-text">Hex</span>
-        </label>
-        <label class="option-checkbox">
-          <input type="checkbox" v-model="serialStore.isLoopSend" @change="toggleLoopSend" />
-          <span class="option-text">循环发送</span>
-        </label>
-        <label v-if="serialStore.isLoopSend" class="interval-group">
-          <span class="interval-label">间隔:</span>
-          <input
-            type="number"
-            v-model="serialStore.loopInterval"
-            :min="100"
-            :step="100"
-            class="interval-input"
-          />
-          <span class="interval-unit">ms</span>
-        </label>
-      </div>
       <div class="send-row">
         <span class="send-prefix">TX:</span>
         <input
@@ -594,13 +733,93 @@ const getPatternPlaceholder = () => {
           @input="serialStore.setPortSendingData(props.portPath, $event.target.value)"
           type="text"
           class="send-input"
-          :class="{ 'hex-invalid': serialStore.isHexMode && !isHexInputValid }"
-          :placeholder="serialStore.isHexMode ? hexPlaceholder : textPlaceholder"
+          :class="{ 'hex-invalid': portControlSettings.hexSend && !isHexInputValid }"
+          :placeholder="portControlSettings.hexSend ? hexPlaceholder : textPlaceholder"
           @keyup.enter="handleSend"
         />
         <button @click="handleSend" class="send-button" :disabled="isSendDisabled">
           发送
         </button>
+      </div>
+
+      <div class="send-options">
+        <!-- 常用命令下拉列表 -->
+        <select
+          v-if="enabledCommands.length > 0"
+          @change="executeCommand($event.target.value); $event.target.value = ''"
+          class="command-select"
+          :disabled="!isConnected"
+        >
+          <option value="" disabled>⚡ 常用命令</option>
+          <option
+            v-for="cmd in enabledCommands"
+            :key="cmd.id"
+            :value="cmd.command"
+          >
+            {{ cmd.name }} ({{ cmd.command }})
+          </option>
+        </select>
+        <div class="options-divider"></div>
+        <label class="checkbox-label">
+          <input type="checkbox" :checked="portControlSettings.isAutoScroll" @change="toggleAutoScroll" />
+          <span class="option-text">自动滚动</span>
+        </label>
+        <!-- HEX 发送 -->
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            :checked="portControlSettings.hexSend"
+            @change="toggleHexSend"
+          />
+          <span class="option-text" title="发送数据时使用 Hex 格式">HEX 发送</span>
+        </label>
+        <!-- HEX 接收 -->
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            :checked="portDisplaySettings.hexReceive"
+            @change="toggleHexReceive"
+          />
+          <span class="option-text" title="接收数据时使用 Hex 格式显示">HEX 接收</span>
+        </label>
+        <!-- ASCII 转换显示 -->
+        <label class="checkbox-label" v-if="portDisplaySettings.hexReceive">
+          <input
+            type="checkbox"
+            :checked="portDisplaySettings.showAscii"
+            @change="toggleShowAscii"
+          />
+          <span class="option-text">ASCII</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" :checked="portControlSettings.isLoopSend" @change="toggleLoopSend" />
+          <span class="option-text">循环发送</span>
+        </label>
+        <label v-if="portControlSettings.isLoopSend" class="interval-group">
+          <span class="interval-label">间隔:</span>
+          <input
+            type="number"
+            :value="portControlSettings.loopInterval"
+            @input="updateLoopInterval($event.target.value)"
+            :min="100"
+            :step="100"
+            class="interval-input"
+          />
+          <span class="interval-unit">ms</span>
+        </label>
+        <label v-if="portControlSettings.isLoopSend" class="interval-group">
+          <span class="interval-label">次数:</span>
+          <input
+            type="number"
+            :value="portControlSettings.loopMaxCount"
+            @input="updateLoopMaxCount($event.target.value)"
+            :min="0"
+            :step="1"
+            class="interval-input"
+            title="设置发送次数上限，0=无限"
+          />
+          <span class="interval-unit">{{ portControlSettings.loopMaxCount > 0 ? '次' : '∞' }}</span>
+        </label>
       </div>
     </div>
   </div>
@@ -666,54 +885,67 @@ const getPatternPlaceholder = () => {
   gap: 12px;
 }
 
-/* 命令下拉选择 */
-.command-dropdown {
-  position: relative;
-}
-
-.command-select {
-  padding: 6px 12px;
-  padding-right: 36px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  color: #ffffff;
-  font-size: 12px;
+/* 统计数据显示 */
+.stats-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
   cursor: pointer;
-  transition: all 0.2s;
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
+  transition: all 0.15s;
+  user-select: none;
 }
 
-.command-select::-ms-expand {
-  display: none;
+.stats-display:hover {
+  background-color: rgba(0, 0, 0, 0.3);
 }
 
-.command-select:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.4);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+.stats-tx {
+  font-size: 11px;
+  color: #4ec9b0;
+  font-weight: 600;
 }
 
-.command-select:focus {
-  outline: none;
-  border-color: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+.stats-rx {
+  font-size: 11px;
+  color: #dcdcaa;
+  font-weight: 600;
 }
 
-.command-select:disabled {
-  background: #3e3e42;
-  border-color: #555;
-  color: #666;
-  cursor: not-allowed;
+/* 循环发送状态指示 */
+.loop-send-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+  border: 1px solid rgba(102, 126, 234, 0.4);
+  border-radius: 4px;
+  animation: pulse 2s infinite;
 }
 
-.command-select option {
-  background: #2d2d30;
-  color: #ffffff;
+.loop-indicator {
+  font-size: 14px;
+  animation: spin 1s linear infinite;
+}
+
+.loop-count {
+  font-size: 11px;
+  color: #667eea;
+  font-weight: 600;
+  font-family: 'Consolas', monospace;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 .checkbox-label {
@@ -853,6 +1085,23 @@ const getPatternPlaceholder = () => {
 
 .match-mode-group.disabled {
   opacity: 0.5;
+}
+
+/* HEX 模式下的过滤目标选择 */
+.filter-target-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.filter-target-group.disabled {
+  opacity: 0.5;
+}
+
+.target-label {
+  font-size: 12px;
+  color: #858585;
+  white-space: nowrap;
 }
 
 .filter-hint {
@@ -1246,6 +1495,16 @@ const getPatternPlaceholder = () => {
   outline: none;
 }
 
+/* 虚拟滚动容器 */
+.virtual-scroll-container {
+  position: relative;
+  width: 100%;
+}
+
+.virtual-scroll-spacer {
+  width: 100%;
+}
+
 /* 搜索浮窗 */
 .search-widget {
   position: absolute;
@@ -1380,12 +1639,13 @@ const getPatternPlaceholder = () => {
 
 .log-entry {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
-  padding: 3px 0;
+  padding: 0;
   white-space: normal;
   word-break: break-all;
   overflow-wrap: anywhere;
+  height: 100%;
 }
 
 .log-timestamp {
@@ -1472,11 +1732,24 @@ const getPatternPlaceholder = () => {
   font-family: 'Consolas', 'Monaco', monospace;
   color: #ce9178;
   letter-spacing: 0.5px;
+  font-weight: 600;
+  font-size: 13px;
 }
 
 .ascii-data {
   color: #6a9955;
   font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+}
+
+.ascii-data::before {
+  content: '[';
+  color: #555;
+}
+
+.ascii-data::after {
+  content: ']';
+  color: #555;
 }
 
 /* 发送控制台 */
@@ -1489,20 +1762,80 @@ const getPatternPlaceholder = () => {
 
 .send-options {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 8px;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #3e3e42;
 }
 
-.option-checkbox {
+.options-divider {
+  width: 1px;
+  height: 20px;
+  background-color: #3e3e42;
+  margin: 0 4px;
+}
+
+/* 常用命令下拉列表 */
+.command-select {
+  padding: 6px 28px 6px 10px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  font-family: inherit;
+  min-width: 180px;
+}
+
+.command-select:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.command-select:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.command-select:disabled {
+  background: #3e3e42;
+  border-color: #555;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.command-select option {
+  background: #2d2d30;
+  color: #ffffff;
+}
+
+.send-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.checkbox-label {
   display: flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
 }
 
-.option-checkbox input[type="checkbox"] {
+.checkbox-label input[type="checkbox"] {
   accent-color: #007acc;
   width: 14px;
   height: 14px;
@@ -1510,7 +1843,7 @@ const getPatternPlaceholder = () => {
 }
 
 .option-text {
-  font-size: 13px;
+  font-size: 12px;
   color: #cccccc;
 }
 
