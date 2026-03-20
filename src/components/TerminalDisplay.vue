@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
+import { SearchAddon } from '@xterm/addon-search'
 import { useSerialStore } from '../stores/serial'
 import 'xterm/css/xterm.css'
 
@@ -18,6 +19,7 @@ const terminalContainer = ref(null)
 // xterm 实例
 let terminal = null
 let fitAddon = null
+let searchAddon = null
 
 // 日志数据跟踪
 let logEntries = [] // 存储所有日志条目 { id, line }
@@ -26,12 +28,15 @@ const MAX_LOG_COUNT = 1000 // xterm 最大行数
 // 搜索功能
 const showSearch = ref(false)
 const searchQuery = ref('')
+const searchMatchCount = ref(0)
 const currentMatchIndex = ref(0)
-const matchedLogIndices = ref([])
 
 // 打开搜索框
 const openSearch = () => {
   showSearch.value = true
+  // 重置搜索状态
+  searchMatchCount.value = 0
+  currentMatchIndex.value = 0
   nextTick(() => {
     const input = document.querySelector('.search-input')
     if (input) {
@@ -39,6 +44,19 @@ const openSearch = () => {
       input.select()
     }
   })
+}
+
+// 搜索防抖定时器
+let searchDebounceTimer = null
+
+// 带防抖的搜索
+const debouncedSearch = () => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+  }
+  searchDebounceTimer = setTimeout(() => {
+    performSearch()
+  }, 150) // 150ms 防抖
 }
 
 // 获取当前串口的显示设置
@@ -178,7 +196,12 @@ const initTerminal = () => {
   })
 
   fitAddon = new FitAddon()
+  searchAddon = new SearchAddon({
+    highlightLimit: 1000
+  })
+
   terminal.loadAddon(fitAddon)
+  terminal.loadAddon(searchAddon)
   terminal.open(terminalContainer.value)
   fitAddon.fit()
 
@@ -256,59 +279,82 @@ const refreshDisplay = () => {
 
 // 搜索功能
 const performSearch = () => {
-  if (!searchQuery.value || !terminal) {
-    matchedLogIndices.value = []
+  if (!searchQuery.value || !terminal || !searchAddon) {
+    searchMatchCount.value = 0
     currentMatchIndex.value = 0
     return
   }
 
-  const query = searchQuery.value.toLowerCase()
-  matchedLogIndices.value = []
+  // 计算总匹配数 - 遍历所有日志
+  let matchCount = 0
+  const searchStr = searchQuery.value.toLowerCase()
 
-  // 遍历所有行查找匹配
-  const buffer = terminal.buffer.active
-  for (let i = 0; i < buffer.length; i++) {
-    const line = buffer.getLine(i)
-    if (line) {
-      const text = line.translateToString().toLowerCase()
-      if (text.includes(query)) {
-        matchedLogIndices.value.push(i)
+  for (let i = 0; i < logEntries.length; i++) {
+    const log = portLogs.value?.find(l => l.id === logEntries[i].id)
+    if (log) {
+      const lineText = formatLogLine(log).toLowerCase()
+      let pos = 0
+      while ((pos = lineText.indexOf(searchStr, pos)) !== -1) {
+        matchCount++
+        pos += searchStr.length
       }
     }
   }
 
-  currentMatchIndex.value = 0
-  if (matchedLogIndices.value.length > 0) {
-    scrollToCurrentMatch()
-  }
-}
+  // 使用 xterm SearchAddon 查找第一个匹配项
+  const found = searchAddon.findNext(searchQuery.value, {
+    caseSensitive: false,
+    wholeWord: false,
+    regex: false
+  })
 
-// 滚动到当前匹配项
-const scrollToCurrentMatch = () => {
-  if (matchedLogIndices.value.length === 0 || !terminal) return
-  terminal.scrollToLine(matchedLogIndices.value[currentMatchIndex.value])
+  if (found) {
+    searchMatchCount.value = matchCount > 0 ? matchCount : 1
+    currentMatchIndex.value = 1
+  } else {
+    searchMatchCount.value = 0
+    currentMatchIndex.value = 0
+  }
 }
 
 // 导航到下一个匹配项
 const goToNextMatch = () => {
-  if (matchedLogIndices.value.length === 0) return
-  currentMatchIndex.value = (currentMatchIndex.value + 1) % matchedLogIndices.value.length
-  scrollToCurrentMatch()
+  if (!searchQuery.value || !terminal || !searchAddon) return
+  const found = searchAddon.findNext(searchQuery.value, {
+    caseSensitive: false,
+    wholeWord: false,
+    regex: false
+  })
+  if (found && searchMatchCount.value > 0) {
+    currentMatchIndex.value = (currentMatchIndex.value % searchMatchCount.value) + 1
+  }
 }
 
 // 导航到上一个匹配项
 const goToPreviousMatch = () => {
-  if (matchedLogIndices.value.length === 0) return
-  currentMatchIndex.value = (currentMatchIndex.value - 1 + matchedLogIndices.value.length) % matchedLogIndices.value.length
-  scrollToCurrentMatch()
+  if (!searchQuery.value || !terminal || !searchAddon) return
+  const found = searchAddon.findPrevious(searchQuery.value, {
+    caseSensitive: false,
+    wholeWord: false,
+    regex: false
+  })
+  if (found && searchMatchCount.value > 0) {
+    currentMatchIndex.value = currentMatchIndex.value <= 1 ? searchMatchCount.value : currentMatchIndex.value - 1
+  }
+}
+
+// 处理 Enter 键导航
+const handleEnterKey = () => {
+  goToNextMatch()
 }
 
 // 清除搜索
 const clearSearch = () => {
   showSearch.value = false
   searchQuery.value = ''
-  matchedLogIndices.value = []
+  searchMatchCount.value = 0
   currentMatchIndex.value = 0
+  clearSearchDebounce()
   if (terminal) {
     terminal.clearSelection()
   }
@@ -316,8 +362,16 @@ const clearSearch = () => {
 
 // 监听搜索输入
 watch(searchQuery, () => {
-  performSearch()
+  debouncedSearch()
 })
+
+// 清除搜索防抖定时器
+const clearSearchDebounce = () => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+}
 
 // 处理键盘快捷键 - F3 和 Escape
 const handleGlobalKeyDown = (e) => {
@@ -332,7 +386,7 @@ const handleGlobalKeyDown = (e) => {
   }
 
   // F3 和 Shift+F3 导航（只有搜索打开时才响应）
-  if (showSearch.value && matchedLogIndices.value.length > 0 && e.key === 'F3') {
+  if (showSearch.value && searchQuery.value && e.key === 'F3') {
     e.preventDefault()
     e.stopPropagation()
     if (e.shiftKey) {
@@ -345,7 +399,20 @@ const handleGlobalKeyDown = (e) => {
 
 // 监听全局搜索打开事件
 const handleOpenSearch = () => {
+  console.log('[TerminalDisplay] Received serialx-open-search')
   openSearch()
+}
+
+// 直接在组件内监听键盘事件（捕获阶段）
+const handleKeyDown = (e) => {
+  console.log('[TerminalDisplay] Keydown:', e.key, 'Ctrl:', e.ctrlKey)
+
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+    e.preventDefault()
+    e.stopPropagation()
+    console.log('[TerminalDisplay] Opening search')
+    openSearch()
+  }
 }
 
 // 监听日志变化
@@ -384,11 +451,15 @@ onMounted(() => {
   document.addEventListener('keydown', handleGlobalKeyDown, true)
   // 监听全局搜索打开事件
   window.addEventListener('serialx-open-search', handleOpenSearch)
+  // 直接监听键盘事件（捕获阶段，优先处理 Ctrl+F）
+  document.addEventListener('keydown', handleKeyDown, true)
 })
 
 // 组件卸载
 onUnmounted(() => {
+  clearSearchDebounce()
   document.removeEventListener('keydown', handleGlobalKeyDown, true)
+  document.removeEventListener('keydown', handleKeyDown, true)
   window.removeEventListener('serialx-open-search', handleOpenSearch)
   if (terminal) {
     terminal.dispose()
@@ -412,10 +483,12 @@ defineExpose({
           type="text"
           class="search-input"
           placeholder="搜索日志内容..."
+          @keydown.enter.prevent="handleEnterKey"
+          @keydown.shift.enter.prevent="goToPreviousMatch"
         />
         <div class="search-controls">
-          <span class="search-count" v-if="searchQuery">
-            {{ matchedLogIndices.length > 0 ? currentMatchIndex + 1 : 0 }} / {{ matchedLogIndices.length }}
+          <span class="search-count">
+            {{ !searchQuery ? '' : (searchMatchCount > 0 ? `${currentMatchIndex} / ${searchMatchCount}` : '无匹配项') }}
           </span>
           <button @click="goToPreviousMatch" class="search-btn" title="上一个匹配项 (Shift+F3)">
             <span>↑</span>
