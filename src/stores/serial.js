@@ -25,6 +25,7 @@ export const useSerialStore = defineStore('serial', () => {
   const logs = ref([])
   let loopTimer = null
   const portLoopSendCounts = ref(new Map()) // path -> 已发送次数
+  const portLoopSendPaused = ref(new Map()) // path -> 是否暂停
 
   // 每个串口的显示设置（独立配置）
   const portDisplaySettings = ref(new Map()) // path -> { hexReceive: boolean, showAscii: boolean }
@@ -537,6 +538,7 @@ export const useSerialStore = defineStore('serial', () => {
 
     // 初始化该串口的发送计数
     portLoopSendCounts.value.set(targetPort, 0)
+    portLoopSendPaused.value.set(targetPort, false)
 
     const loopData = { port: targetPort, timer: null }
 
@@ -549,6 +551,10 @@ export const useSerialStore = defineStore('serial', () => {
     loopData.timer = setInterval(async () => {
       const portStatus = openPorts.value.get(targetPort)
       const dataToSend = getPortSendingData(targetPort)
+      // 检查是否暂停
+      const isPaused = portLoopSendPaused.value.get(targetPort)
+      if (isPaused) return
+
       if (portStatus?.isConnected && dataToSend) {
         // 检查是否达到最大发送次数
         const currentCount = portLoopSendCounts.value.get(targetPort) || 0
@@ -567,6 +573,30 @@ export const useSerialStore = defineStore('serial', () => {
     loopTimer = loopData.timer
     updatePortControlSettings(targetPort, { isLoopSend: true })
     addPortLog(targetPort, `循环发送已启动 (间隔：${portControl.loopInterval}ms${portControl.loopMaxCount > 0 ? `, 上限：${portControl.loopMaxCount} 次` : ''})`, 'info')
+  }
+
+  function pauseLoopSendForPort(portPath) {
+    portLoopSendPaused.value.set(portPath, true)
+    addPortLog(portPath, '循环发送已暂停', 'info')
+  }
+
+  function resumeLoopSendForPort(portPath) {
+    portLoopSendPaused.value.set(portPath, false)
+    addPortLog(portPath, '循环发送已恢复', 'info')
+  }
+
+  function togglePauseLoopSendForPort(portPath) {
+    const isPaused = portLoopSendPaused.value.get(portPath) || false
+    if (isPaused) {
+      resumeLoopSendForPort(portPath)
+    } else {
+      pauseLoopSendForPort(portPath)
+    }
+    return !isPaused
+  }
+
+  function isLoopSendPaused(portPath) {
+    return portLoopSendPaused.value.get(portPath) || false
   }
 
   function stopLoopSendForPort(portPath) {
@@ -751,6 +781,7 @@ export const useSerialStore = defineStore('serial', () => {
     logs,
     commonCommands,
     portLoopSendCounts,
+    portLoopSendPaused,
     // Getters
     availableBaudRates,
     getEnabledCommands,
@@ -781,6 +812,10 @@ export const useSerialStore = defineStore('serial', () => {
     startLoopSend,
     stopLoopSendForPort,
     stopLoopSend,
+    pauseLoopSendForPort,
+    resumeLoopSendForPort,
+    togglePauseLoopSendForPort,
+    isLoopSendPaused,
     addLog,
     addPortLog,
     getPortLogs,
