@@ -307,29 +307,41 @@ watch(searchQuery, () => {
   performSearch()
 })
 
-// 处理键盘快捷键
-const handleKeyDown = (e) => {
-  // Ctrl+F 打开搜索
-  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-    e.preventDefault()
-    showSearch.value = true
-    nextTick(() => {
-      const input = document.querySelector('.search-input')
-      if (input) input.focus()
-    })
+// 处理键盘快捷键 - 全局捕获
+const handleGlobalKeyDown = (e) => {
+  // 如果搜索框已打开，只响应 Escape
+  if (showSearch.value) {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      clearSearch()
+    }
     return
   }
 
-  // Escape 关闭搜索
-  if (e.key === 'Escape' && showSearch.value) {
-    e.preventDefault()
-    clearSearch()
-    return
+  // Ctrl+F 打开搜索 - 检查是否有输入框获得焦点
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+    const activeElement = document.activeElement
+    const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
+    if (!isInputFocused) {
+      e.preventDefault()
+      e.stopPropagation()
+      showSearch.value = true
+      nextTick(() => {
+        const input = document.querySelector('.search-input')
+        if (input) {
+          input.focus()
+          input.select()
+        }
+      })
+      return
+    }
   }
 
-  // F3 和 Shift+F3 导航
+  // F3 和 Shift+F3 导航（只有搜索打开时才响应）
   if (showSearch.value && matchedLogIndices.value.length > 0 && e.key === 'F3') {
     e.preventDefault()
+    e.stopPropagation()
     if (e.shiftKey) {
       goToPreviousMatch()
     } else {
@@ -370,13 +382,13 @@ onMounted(() => {
   nextTick(() => {
     initTerminal()
   })
-  // 添加全局键盘监听
-  document.addEventListener('keydown', handleKeyDown)
+  // 添加全局键盘监听 - 捕获阶段
+  document.addEventListener('keydown', handleGlobalKeyDown, true)
 })
 
 // 组件卸载
 onUnmounted(() => {
-  document.removeEventListener('keydown', handleKeyDown)
+  document.removeEventListener('keydown', handleGlobalKeyDown, true)
   if (terminal) {
     terminal.dispose()
     terminal = null
@@ -390,7 +402,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="terminal-wrapper" @keydown="handleKeyDown" tabindex="0">
+  <div class="terminal-wrapper">
     <!-- 搜索浮窗 -->
     <div v-if="showSearch" class="search-widget">
       <div class="search-input-wrapper">
