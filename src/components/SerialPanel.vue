@@ -269,8 +269,12 @@ const handleClearLogs = () => {
 }
 
 const handleSend = async () => {
-  if (!serialStore.getPortSendingData(props.portPath)) return
-  await serialStore.sendData(props.portPath, null, serialStore.isHexMode)
+  const data = serialStore.getPortSendingData(props.portPath)
+  if (!data) return
+  const result = await serialStore.sendData(props.portPath, null, serialStore.isHexMode)
+  if (!result.success) {
+    console.error('发送失败:', result.error)
+  }
 }
 
 const toggleLoopSend = () => {
