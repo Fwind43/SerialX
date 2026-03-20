@@ -123,10 +123,10 @@ const shouldHideLog = (log) => {
   return false
 }
 
-// 格式化日志行
+// 格式化日志行 - 使用 ANSI 转义码添加颜色
 const formatLogLine = (log) => {
   const timestamp = log.timestamp.padEnd(8)
-  const prefix = getLogPrefix(log.type).padEnd(4)
+  const prefix = getLogPrefix(log.type)
 
   let content = ''
   if (portDisplaySettings.value.hexReceive && log.hexData) {
@@ -143,20 +143,33 @@ const formatLogLine = (log) => {
     content = log.message
   }
 
-  return `${timestamp} ${prefix} ${content}`
+  // 根据日志类型应用不同颜色（使用 ANSI 转义码）
+  const colorCodes = {
+    tx: '\x1b[38;5;39m',    // 青色 - TX
+    rx: '\x1b[38;5;40m',    // 绿色 - RX
+    info: '\x1b[38;5;252m', // 浅灰色 - INFO
+    success: '\x1b[38;5;71m', // 浅绿色 - OK
+    error: '\x1b[38;5;196m',  // 红色 - ERR
+    warning: '\x1b[38;5;214m' // 橙色 - WARN
+  }
+
+  const reset = '\x1b[0m'
+  const color = colorCodes[log.type] || colorCodes.info
+
+  return `${timestamp} ${color}${prefix}${reset} ${content}`
 }
 
 // 获取日志前缀
 const getLogPrefix = (type) => {
   const prefixes = {
-    tx: 'TX',
-    rx: 'RX',
-    info: 'INFO',
-    success: 'OK',
-    error: 'ERR',
-    warning: 'WARN'
+    tx: '[TX]',
+    rx: '[RX]',
+    info: 'ℹ️',
+    success: '✅',
+    error: '❌',
+    warning: '⚠️'
   }
-  return prefixes[type] || 'INFO'
+  return prefixes[type] || 'ℹ️'
 }
 
 // 初始化 xterm
