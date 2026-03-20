@@ -29,6 +29,18 @@ const searchQuery = ref('')
 const currentMatchIndex = ref(0)
 const matchedLogIndices = ref([])
 
+// 打开搜索框
+const openSearch = () => {
+  showSearch.value = true
+  nextTick(() => {
+    const input = document.querySelector('.search-input')
+    if (input) {
+      input.focus()
+      input.select()
+    }
+  })
+}
+
 // 获取当前串口的显示设置
 const portDisplaySettings = computed(() => {
   return serialStore.getPortDisplaySettings(props.portPath)
@@ -307,7 +319,7 @@ watch(searchQuery, () => {
   performSearch()
 })
 
-// 处理键盘快捷键 - 全局捕获
+// 处理键盘快捷键 - F3 和 Escape
 const handleGlobalKeyDown = (e) => {
   // 如果搜索框已打开，只响应 Escape
   if (showSearch.value) {
@@ -317,25 +329,6 @@ const handleGlobalKeyDown = (e) => {
       clearSearch()
     }
     return
-  }
-
-  // Ctrl+F 打开搜索 - 检查是否有输入框获得焦点
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
-    const activeElement = document.activeElement
-    const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
-    if (!isInputFocused) {
-      e.preventDefault()
-      e.stopPropagation()
-      showSearch.value = true
-      nextTick(() => {
-        const input = document.querySelector('.search-input')
-        if (input) {
-          input.focus()
-          input.select()
-        }
-      })
-      return
-    }
   }
 
   // F3 和 Shift+F3 导航（只有搜索打开时才响应）
@@ -348,6 +341,11 @@ const handleGlobalKeyDown = (e) => {
       goToNextMatch()
     }
   }
+}
+
+// 监听全局搜索打开事件
+const handleOpenSearch = () => {
+  openSearch()
 }
 
 // 监听日志变化
@@ -382,13 +380,16 @@ onMounted(() => {
   nextTick(() => {
     initTerminal()
   })
-  // 添加全局键盘监听 - 捕获阶段
+  // 监听全局键盘事件（F3、Escape）
   document.addEventListener('keydown', handleGlobalKeyDown, true)
+  // 监听全局搜索打开事件
+  window.addEventListener('serialx-open-search', handleOpenSearch)
 })
 
 // 组件卸载
 onUnmounted(() => {
   document.removeEventListener('keydown', handleGlobalKeyDown, true)
+  window.removeEventListener('serialx-open-search', handleOpenSearch)
   if (terminal) {
     terminal.dispose()
     terminal = null

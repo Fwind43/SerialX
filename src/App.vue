@@ -62,6 +62,17 @@ const handleGlobalKeydown = (e) => {
       openCommandPalette()
     }
   }
+
+  // Ctrl+F 打开搜索 - 触发全局事件
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+    const activeElement = document.activeElement
+    const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
+    if (!isInputFocused) {
+      e.preventDefault()
+      // 触发自定义事件，由 TerminalDisplay 组件监听
+      window.dispatchEvent(new CustomEvent('serialx-open-search'))
+    }
+  }
 }
 
 // 窗口控制
