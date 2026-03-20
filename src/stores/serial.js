@@ -24,8 +24,8 @@ export const useSerialStore = defineStore('serial', () => {
   // 全局配置
   const logs = ref([])
   let loopTimer = null
-  const portLoopSendCounts = reactive(new Map()) // path -> 已发送次数
-  const portLoopSendPaused = reactive(new Map()) // path -> 是否暂停
+  const portLoopSendCounts = ref(new Map()) // path -> 已发送次数
+  const portLoopSendPaused = ref(new Map()) // path -> 是否暂停
 
   // 每个串口的显示设置（独立配置）
   const portDisplaySettings = ref(new Map()) // path -> { hexReceive: boolean, showAscii: boolean }
@@ -536,28 +536,35 @@ export const useSerialStore = defineStore('serial', () => {
     // 获取该串口的循环发送设置
     const portControl = getPortControlSettings(targetPort)
 
-    // 初始化该串口的发送计数
-    portLoopSendCounts.set(targetPort, 0)
-    portLoopSendPaused.set(targetPort, false)
+    // 初始化该串口的发送计数和暂停状态
+    const counts = portLoopSendCounts.value
+    const paused = portLoopSendPaused.value
+    counts.set(targetPort, 0)
+    paused.set(targetPort, false)
+    // 触发响应式更新
+    portLoopSendCounts.value = counts
+    portLoopSendPaused.value = paused
 
     const loopData = { port: targetPort, timer: null }
 
     // 立即发送第一帧
     sendData(targetPort, getPortSendingData(targetPort), portControl.hexSend)
       .then(() => {
-        portLoopSendCounts.set(targetPort, 1)
+        const newCounts = portLoopSendCounts.value
+        newCounts.set(targetPort, 1)
+        portLoopSendCounts.value = newCounts
       })
 
     loopData.timer = setInterval(async () => {
       const portStatus = openPorts.value.get(targetPort)
       const dataToSend = getPortSendingData(targetPort)
       // 检查是否暂停
-      const isPaused = portLoopSendPaused.get(targetPort)
+      const isPaused = portLoopSendPaused.value.get(targetPort)
       if (isPaused) return
 
       if (portStatus?.isConnected && dataToSend) {
         // 检查是否达到最大发送次数
-        const currentCount = portLoopSendCounts.get(targetPort) || 0
+        const currentCount = portLoopSendCounts.value.get(targetPort) || 0
         if (portControl.loopMaxCount > 0 && currentCount >= portControl.loopMaxCount) {
           stopLoopSendForPort(targetPort)
           updatePortControlSettings(targetPort, { isLoopSend: false })
@@ -566,7 +573,9 @@ export const useSerialStore = defineStore('serial', () => {
         }
         await sendData(targetPort, dataToSend, portControl.hexSend)
         // 更新发送计数
-        portLoopSendCounts.set(targetPort, currentCount + 1)
+        const counts = portLoopSendCounts.value
+        counts.set(targetPort, currentCount + 1)
+        portLoopSendCounts.value = counts
       }
     }, portControl.loopInterval)
 
@@ -576,17 +585,21 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   function pauseLoopSendForPort(portPath) {
-    portLoopSendPaused.set(portPath, true)
+    const paused = portLoopSendPaused.value
+    paused.set(portPath, true)
+    portLoopSendPaused.value = paused
     addPortLog(portPath, '循环发送已暂停', 'info')
   }
 
   function resumeLoopSendForPort(portPath) {
-    portLoopSendPaused.set(portPath, false)
+    const paused = portLoopSendPaused.value
+    paused.set(portPath, false)
+    portLoopSendPaused.value = paused
     addPortLog(portPath, '循环发送已恢复', 'info')
   }
 
   function togglePauseLoopSendForPort(portPath) {
-    const isPaused = portLoopSendPaused.get(portPath) || false
+    const isPaused = portLoopSendPaused.value.get(portPath) || false
     if (isPaused) {
       resumeLoopSendForPort(portPath)
     } else {
@@ -596,7 +609,7 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   function isLoopSendPaused(portPath) {
-    return portLoopSendPaused.get(portPath) || false
+    return portLoopSendPaused.value.get(portPath) || false
   }
 
   function stopLoopSendForPort(portPath) {
@@ -606,7 +619,9 @@ export const useSerialStore = defineStore('serial', () => {
       loopTimer = null
     }
     // 重置暂停状态
-    portLoopSendPaused.set(portPath, false)
+    const paused = portLoopSendPaused.value
+    paused.set(portPath, false)
+    portLoopSendPaused.value = paused
   }
 
   function stopLoopSend() {
