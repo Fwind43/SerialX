@@ -18,6 +18,31 @@ const showToolsMenu = ref(false)
 const showSettingsMenu = ref(false)
 const showCommandsModal = ref(false)
 
+// 关闭所有菜单
+const closeAllMenus = () => {
+  showToolsMenu.value = false
+  showSettingsMenu.value = false
+}
+
+// 切换菜单显示
+const toggleToolsMenu = () => {
+  if (showToolsMenu.value) {
+    showToolsMenu.value = false
+  } else {
+    closeAllMenus()
+    showToolsMenu.value = true
+  }
+}
+
+const toggleSettingsMenu = () => {
+  if (showSettingsMenu.value) {
+    showSettingsMenu.value = false
+  } else {
+    closeAllMenus()
+    showSettingsMenu.value = true
+  }
+}
+
 // 窗口控制
 const minimizeWindow = () => {
   window.electronAPI?.minimizeWindow()
@@ -53,8 +78,7 @@ onMounted(async () => {
 // 点击外部关闭菜单
 const handleClickOutside = (event) => {
   if (!event.target.closest('.menubar-item')) {
-    showToolsMenu.value = false
-    showSettingsMenu.value = false
+    closeAllMenus()
   }
 }
 
@@ -74,7 +98,7 @@ if (typeof document !== 'undefined') {
           <div class="menubar-item">
             <span class="menubar-label">文件</span>
           </div>
-          <div class="menubar-item" @click.stop="showToolsMenu = !showToolsMenu">
+          <div class="menubar-item" @click.stop="toggleToolsMenu">
             <span class="menubar-label">工具</span>
             <div v-if="showToolsMenu" class="menubar-dropdown">
               <div class="dropdown-item" @click="openConverter">
@@ -83,7 +107,7 @@ if (typeof document !== 'undefined') {
               </div>
             </div>
           </div>
-          <div class="menubar-item" @click.stop="showSettingsMenu = !showSettingsMenu">
+          <div class="menubar-item" @click.stop="toggleSettingsMenu">
             <span class="menubar-label">设置</span>
             <div v-if="showSettingsMenu" class="menubar-dropdown">
               <div class="dropdown-item" @click="openCommandsConfig">
