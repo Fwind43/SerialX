@@ -306,9 +306,9 @@ defineExpose({
   box-sizing: border-box;
 }
 
-/* 自定义滚动条 */
+/* 自定义滚动条 - VS Code 风格 */
 .terminal-container ::v-deep(.xterm-viewport) {
-  width: 10px !important;
+  width: 14px !important;
   background-color: #1e1e1e;
 }
 
@@ -318,6 +318,19 @@ defineExpose({
 
 .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-thumb) {
   background: #424242;
-  border-radius: 5px;
+  border-radius: 7px;
+  border: 2px solid #1e1e1e;
+}
+
+.terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-thumb:hover) {
+  background: #555;
+}
+
+.terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-thumb:active) {
+  background: #666;
+}
+
+.terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-corner) {
+  background: #1e1e1e;
 }
 </style>
