@@ -95,9 +95,6 @@ if (typeof document !== 'undefined') {
       <div class="header-left">
         <!-- 菜单栏 -->
         <div class="menubar-items">
-          <div class="menubar-item">
-            <span class="menubar-label">文件</span>
-          </div>
           <div class="menubar-item" @click.stop="toggleToolsMenu">
             <span class="menubar-label">工具</span>
             <div v-if="showToolsMenu" class="menubar-dropdown">
