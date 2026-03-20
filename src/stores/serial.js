@@ -303,12 +303,12 @@ export const useSerialStore = defineStore('serial', () => {
         }
         // 如果长度是奇数，在前面补 0
         const paddedHex = hexString.length % 2 === 1 ? '0' + hexString : hexString
-        // 转换为字节数组
-        const bytes = []
+        // 转换为字节数组 (使用 Uint8Array 而不是 Buffer，因为这是在浏览器环境)
+        const bytes = new Uint8Array(paddedHex.length / 2)
         for (let i = 0; i < paddedHex.length; i += 2) {
-          bytes.push(parseInt(paddedHex.substr(i, 2), 16))
+          bytes[i / 2] = parseInt(paddedHex.substr(i, 2), 16)
         }
-        actualData = Buffer.from(bytes)
+        actualData = bytes
         logData = dataToSend // 日志仍显示原始输入的 Hex 字符串
       } catch (error) {
         addPortLog(targetPort, `Hex 转换失败：${error.message}`, 'error')
