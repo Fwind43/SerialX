@@ -4,6 +4,7 @@ import { useSerialStore } from './stores/serial'
 import SerialSidebar from './components/SerialSidebar.vue'
 import TerminalView from './components/TerminalView.vue'
 import DataConverter from './components/DataConverter.vue'
+import CommandsModal from './components/CommandsModal.vue'
 
 const serialStore = useSerialStore()
 
@@ -14,6 +15,8 @@ const isConverterMode = computed(() => {
 
 // 菜单控制
 const showToolsMenu = ref(false)
+const showSettingsMenu = ref(false)
+const showCommandsModal = ref(false)
 
 // 窗口控制
 const minimizeWindow = () => {
@@ -30,6 +33,17 @@ const openConverter = () => {
   showToolsMenu.value = false
 }
 
+// 打开常用命令配置
+const openCommandsConfig = () => {
+  showCommandsModal.value = true
+  showSettingsMenu.value = false
+}
+
+// 关闭命令配置
+const closeCommandsModal = () => {
+  showCommandsModal.value = false
+}
+
 onMounted(async () => {
   serialStore.refreshPorts()
   // 加载常用命令配置
@@ -40,6 +54,7 @@ onMounted(async () => {
 const handleClickOutside = (event) => {
   if (!event.target.closest('.menubar-item')) {
     showToolsMenu.value = false
+    showSettingsMenu.value = false
   }
 }
 
@@ -65,6 +80,15 @@ if (typeof document !== 'undefined') {
               <div class="dropdown-item" @click="openConverter">
                 <span class="dropdown-icon">🔢</span>
                 <span class="dropdown-text">进制转换工具</span>
+              </div>
+            </div>
+          </div>
+          <div class="menubar-item" @click.stop="showSettingsMenu = !showSettingsMenu">
+            <span class="menubar-label">设置</span>
+            <div v-if="showSettingsMenu" class="menubar-dropdown">
+              <div class="dropdown-item" @click="openCommandsConfig">
+                <span class="dropdown-icon">⚡</span>
+                <span class="dropdown-text">常用命令配置</span>
               </div>
             </div>
           </div>
@@ -119,6 +143,11 @@ if (typeof document !== 'undefined') {
         <span class="status-value">{{ serialStore.openPorts.size }}</span>
       </span>
     </footer>
+
+    <!-- 常用命令配置弹窗 -->
+    <CommandsModal
+      v-model:show="showCommandsModal"
+    />
   </div>
 
   <!-- 转换器独立模式 -->
