@@ -55,12 +55,29 @@ const toggleAutoScroll = () => {
 // 循环发送切换
 const toggleLoopSend = () => {
   if (portControlSettings.value.isLoopSend) {
+    // 停止循环发送
     serialStore.stopLoopSendForPort(props.portPath)
     serialStore.updatePortControlSettings(props.portPath, { isLoopSend: false })
+    serialStore.addPortLog(props.portPath, '循环发送已停止', 'info')
   } else {
+    // 开启循环发送模式，但不立即开始发送
+    // 用户需要先输入要发送的数据，然后手动启动
     serialStore.updatePortControlSettings(props.portPath, { isLoopSend: true })
-    serialStore.startLoopSend(props.portPath)
+    serialStore.addPortLog(props.portPath, '循环发送模式已开启，请点击"▶ 开始"按钮启动发送', 'info')
   }
+}
+
+// 启动循环发送
+const startLoopSend = () => {
+  if (!serialStore.getPortSendingData(props.portPath)) {
+    serialStore.addPortLog(props.portPath, '请先输入要发送的数据', 'warning')
+    return
+  }
+  if (!isConnected.value) {
+    serialStore.addPortLog(props.portPath, '请先连接串口', 'warning')
+    return
+  }
+  serialStore.startLoopSend(props.portPath)
 }
 
 // 更新循环间隔
@@ -420,6 +437,24 @@ const enabledCommands = computed(() => {
           <input type="checkbox" :checked="portControlSettings.isLoopSend" @change="toggleLoopSend" />
           <span class="option-text">循环发送</span>
         </label>
+        <!-- 循环发送启动/停止按钮 -->
+        <button
+          v-if="portControlSettings.isLoopSend"
+          @click="startLoopSend"
+          class="loop-send-btn"
+          :disabled="!isConnected || !serialStore.getPortSendingData(props.portPath)"
+          title="开始循环发送"
+        >
+          ▶ 开始
+        </button>
+        <button
+          v-if="portControlSettings.isLoopSend && portLoopSendCount > 0"
+          @click="toggleLoopSend"
+          class="loop-stop-btn"
+          title="停止循环发送"
+        >
+          ⏹ 停止
+        </button>
         <label v-if="portControlSettings.isLoopSend" class="interval-group">
           <span class="interval-label">间隔:</span>
           <input
@@ -876,6 +911,43 @@ const enabledCommands = computed(() => {
   width: 14px;
   height: 14px;
   cursor: pointer;
+}
+
+/* 循环发送启动/停止按钮 */
+.loop-send-btn, .loop-stop-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+
+.loop-send-btn {
+  background-color: #0e639c;
+  color: white;
+  border-color: #0b4f7a;
+}
+
+.loop-send-btn:hover:not(:disabled) {
+  background-color: #1177bb;
+}
+
+.loop-send-btn:disabled {
+  background-color: #3e3e42;
+  color: #555;
+  cursor: not-allowed;
+}
+
+.loop-stop-btn {
+  background-color: #c42b1c;
+  color: white;
+  border-color: #a02015;
+}
+
+.loop-stop-btn:hover {
+  background-color: #d63a2a;
 }
 
 .option-text {

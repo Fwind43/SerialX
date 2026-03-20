@@ -527,7 +527,10 @@ export const useSerialStore = defineStore('serial', () => {
 
   function startLoopSend(portPath = null) {
     const targetPort = portPath || selectedPort.value
-    if (!targetPort || !getPortSendingData(targetPort)) return
+    if (!targetPort || !getPortSendingData(targetPort)) {
+      addPortLog(targetPort, '循环发送失败：没有数据', 'error')
+      return
+    }
 
     // 获取该串口的循环发送设置
     const portControl = getPortControlSettings(targetPort)
@@ -536,6 +539,12 @@ export const useSerialStore = defineStore('serial', () => {
     portLoopSendCounts.value.set(targetPort, 0)
 
     const loopData = { port: targetPort, timer: null }
+
+    // 立即发送第一帧
+    sendData(targetPort, getPortSendingData(targetPort), portControl.hexSend)
+      .then(() => {
+        portLoopSendCounts.value.set(targetPort, 1)
+      })
 
     loopData.timer = setInterval(async () => {
       const portStatus = openPorts.value.get(targetPort)
@@ -549,7 +558,7 @@ export const useSerialStore = defineStore('serial', () => {
           addPortLog(targetPort, `循环发送已达到上限 (${portControl.loopMaxCount} 次)`, 'info')
           return
         }
-        await sendData(targetPort, dataToSend, portControl.hexMode)
+        await sendData(targetPort, dataToSend, portControl.hexSend)
         // 更新发送计数
         portLoopSendCounts.value.set(targetPort, currentCount + 1)
       }
