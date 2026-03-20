@@ -24,6 +24,7 @@
     "electron": "^41.0.3",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
+    "sharp": "^0.34.5",
     "vite": "^6.4.1"
   },
   "dependencies": {
@@ -39,7 +40,7 @@
     "copyright": "Copyright © 2026",
     "directories": {
       "output": "release",
-      "buildResources": "build"
+      "buildResources": "logo"
     },
     "files": [
       "out/**/*",
@@ -53,11 +54,13 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "${productName}-${version}-Setup.${ext}",
-      "icon": "build/icon.ico",
+      "icon": "logo/icon.png",
       "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
