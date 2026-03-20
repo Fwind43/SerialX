@@ -7,6 +7,23 @@ import fs from 'fs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// 安全日志函数，避免 EPIPE 错误
+const safeLog = (...args) => {
+  try {
+    console.log(...args)
+  } catch (e) {
+    // Ignore EPIPE errors
+  }
+}
+
+const safeErrorLog = (...args) => {
+  try {
+    console.error(...args)
+  } catch (e) {
+    // Ignore EPIPE errors
+  }
+}
+
 // 配置文件路径（用户数据目录）
 const getConfigPath = () => {
   const configDir = path.join(app.getPath('userData'), 'config')
@@ -25,7 +42,7 @@ function loadConfig() {
       return JSON.parse(data)
     }
   } catch (error) {
-    console.error('[Config] Error loading config:', error)
+    safeErrorLog('[Config] Error loading config:', error)
   }
   return {}
 }
@@ -37,7 +54,7 @@ function saveConfig(config) {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8')
     return { success: true }
   } catch (error) {
-    console.error('[Config] Error saving config:', error)
+    safeErrorLog('[Config] Error saving config:', error)
     return { success: false, error: error.message }
   }
 }
@@ -72,10 +89,10 @@ function getPortsFromRegistry() {
       }
     }
 
-    console.log('[Registry] Found ports:', ports)
+    safeLog('[Registry] Found ports:', ports)
     return ports
   } catch (error) {
-    console.error('[Registry] Error reading ports:', error.message)
+    safeErrorLog('[Registry] Error reading ports:', error.message)
     return []
   }
 }
@@ -90,11 +107,11 @@ class SerialManager {
 
   async listPorts() {
     try {
-      console.log('[SerialManager] Listing ports...')
+      safeLog('[SerialManager] Listing ports...')
 
       // 方法 1: 尝试使用 serialport 库
       const nativePorts = await SerialPort.list()
-      console.log('[SerialManager] Native ports:', nativePorts)
+      safeLog('[SerialManager] Native ports:', nativePorts)
 
       if (nativePorts.length > 0) {
         return nativePorts.map(port => ({
@@ -108,7 +125,7 @@ class SerialManager {
       }
 
       // 方法 2: 如果 serialport 找不到，尝试注册表（兼容 com0com）
-      console.log('[SerialManager] Native list empty, trying registry...')
+      safeLog('[SerialManager] Native list empty, trying registry...')
       const registryPorts = getPortsFromRegistry()
 
       if (registryPorts.length > 0) {
@@ -118,10 +135,10 @@ class SerialManager {
         }))
       }
 
-      console.log('[SerialManager] No ports found')
+      safeLog('[SerialManager] No ports found')
       return []
     } catch (error) {
-      console.error('[SerialManager] Error listing ports:', error)
+      safeErrorLog('[SerialManager] Error listing ports:', error)
       return getPortsFromRegistry()
     }
   }
@@ -139,7 +156,7 @@ class SerialManager {
     }
 
     try {
-      console.log('[SerialManager] Opening port:', portPath, options)
+      safeLog('[SerialManager] Opening port:', portPath, options)
 
       const serialPort = new SerialPort({
         path: portPath,
@@ -158,7 +175,7 @@ class SerialManager {
       }
       this.ports.set(portPath, portData)
 
-      console.log('[SerialManager] Port opened successfully:', portPath)
+      safeLog('[SerialManager] Port opened successfully:', portPath)
 
       // 初始化该串口的缓冲区
       this.dataBuffers.set(portPath, [])
@@ -214,7 +231,7 @@ class SerialManager {
       })
 
       serialPort.on('error', (error) => {
-        console.error('[SerialManager] Port error:', portPath, error)
+        safeErrorLog('[SerialManager] Port error:', portPath, error)
         if (mainWindow) {
           mainWindow.webContents.send('serial:error', { port: portPath, error: error.message })
         }
@@ -232,7 +249,7 @@ class SerialManager {
 
       return { success: true, message: `串口 ${portPath} 打开成功` }
     } catch (error) {
-      console.error('[SerialManager] Error opening port:', error)
+      safeErrorLog('[SerialManager] Error opening port:', error)
       return { success: false, error: error.message }
     }
   }
@@ -262,10 +279,10 @@ class SerialManager {
       await portData.port.close()
       portData.isOpen = false
       this.ports.delete(portPath)
-      console.log('[SerialManager] Port closed:', portPath)
+      safeLog('[SerialManager] Port closed:', portPath)
       return { success: true, message: `串口 ${portPath} 已关闭` }
     } catch (error) {
-      console.error('[SerialManager] Error closing port:', portPath, error)
+      safeErrorLog('[SerialManager] Error closing port:', portPath, error)
       return { success: false, error: error.message }
     }
   }
