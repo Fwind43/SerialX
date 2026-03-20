@@ -318,6 +318,7 @@ export const useSerialStore = defineStore('serial', () => {
     let actualData = dataToSend
     let logData = dataToSend
     let rawBytes = null
+
     if (isHex) {
       try {
         const hexString = dataToSend.replace(/[\s,-]/g, '').toUpperCase()
@@ -330,19 +331,25 @@ export const useSerialStore = defineStore('serial', () => {
           return { success: false, error: '无效的 Hex 格式' }
         }
         actualData = hexToBytes(hexString)
-        rawBytes = Array.from(actualData) // 保存原始字节用于 Hex 显示
+        rawBytes = Array.from(actualData)
         logData = dataToSend
       } catch (error) {
         addPortLog(targetPort, `Hex 转换失败：${error.message}`, 'error')
         return { success: false, error: `Hex 转换失败：${error.message}` }
       }
+    } else {
+      // 非 Hex 模式也保存原始字节，方便切换查看
+      rawBytes = Array.from(new TextEncoder().encode(dataToSend))
     }
 
     try {
       const result = await window.electronAPI.writeData(targetPort, actualData)
       if (result.success) {
-        // Hex 模式下传递原始字节用于显示
-        const logData_raw = isHex && rawBytes ? { hexData: bytesToHex(rawBytes), rawBytes } : null
+        // 传递原始字节用于 Hex/ASCII 显示
+        const logData_raw = rawBytes ? {
+          hexData: bytesToHex(rawBytes),
+          rawBytes
+        } : null
         addPortLog(targetPort, `TX: ${logData}`, 'tx', logData_raw)
         return { success: true }
       } else {
