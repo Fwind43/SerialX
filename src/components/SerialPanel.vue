@@ -36,15 +36,25 @@ const toggleShowAscii = () => {
   })
 }
 
-// 字节转 ASCII（可打印字符显示，不可打印显示为.）
-const bytesToAscii = (bytes) => {
-  if (!bytes || !Array.isArray(bytes)) return ''
-  return bytes.map(b => {
-    const char = String.fromCharCode(b)
-    // 可打印 ASCII 字符范围：32-126
-    return (b >= 32 && b <= 126) ? char : '.'
-  }).join('')
+// 字节转字符串（支持 ASCII 和 UTF-8 中文）
+const bytesToString = (bytes) => {
+  if (!bytes || !Array.isArray(bytes) || bytes.length === 0) return ''
+  try {
+    // 使用 TextDecoder 解码 UTF-8 字节（支持中文）
+    const uint8Array = new Uint8Array(bytes)
+    const decoder = new TextDecoder('utf-8', { fatal: false })
+    return decoder.decode(uint8Array)
+  } catch {
+    // 解码失败时回退到 ASCII 模式
+    return bytes.map(b => {
+      const char = String.fromCharCode(b)
+      return (b >= 32 && b <= 126) ? char : '.'
+    }).join('')
+  }
 }
+
+// 字节转 ASCII（兼容旧名，内部调用 bytesToString）
+const bytesToAscii = bytesToString
 
 // 将 TX 消息转换为 Hex 格式显示
 const formatTxAsHex = (message) => {
