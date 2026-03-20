@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, reactive } from 'vue'
 
 export const useSerialStore = defineStore('serial', () => {
   // State
@@ -24,8 +24,8 @@ export const useSerialStore = defineStore('serial', () => {
   // 全局配置
   const logs = ref([])
   let loopTimer = null
-  const portLoopSendCounts = ref(new Map()) // path -> 已发送次数
-  const portLoopSendPaused = ref(new Map()) // path -> 是否暂停
+  const portLoopSendCounts = reactive(new Map()) // path -> 已发送次数
+  const portLoopSendPaused = reactive(new Map()) // path -> 是否暂停
 
   // 每个串口的显示设置（独立配置）
   const portDisplaySettings = ref(new Map()) // path -> { hexReceive: boolean, showAscii: boolean }
