@@ -82,6 +82,11 @@ const startLoopSend = () => {
 
 // 暂停/恢复循环发送
 const togglePauseLoopSend = () => {
+  // 如果还未启动，先启动
+  if (loopSendCount.value <= 0) {
+    startLoopSend()
+    return
+  }
   serialStore.togglePauseLoopSendForPort(props.portPath)
 }
 
@@ -447,33 +452,14 @@ const enabledCommands = computed(() => {
           <input type="checkbox" :checked="portControlSettings.isLoopSend" @change="toggleLoopSend" />
           <span class="option-text">循环发送</span>
         </label>
-        <!-- 循环发送启动/暂停/停止按钮 -->
+        <!-- 循环发送开始/暂停按钮 -->
         <button
-          v-if="portControlSettings.isLoopSend && loopSendCount <= 0"
-          @click="startLoopSend"
-          class="loop-send-btn"
-          :disabled="!isConnected || !serialStore.getPortSendingData(props.portPath)"
-          title="开始循环发送"
-        >
-          ▶ 开始
-        </button>
-        <!-- 运行中显示暂停按钮 -->
-        <button
-          v-if="portControlSettings.isLoopSend && loopSendCount > 0 && !isPaused"
+          v-if="portControlSettings.isLoopSend"
           @click="togglePauseLoopSend"
-          class="loop-pause-btn"
-          title="暂停循环发送"
+          :class="isPaused ? 'loop-start-btn' : 'loop-pause-btn'"
+          :title="isPaused ? '继续循环发送' : '暂停循环发送'"
         >
-          ⏸ 暂停
-        </button>
-        <!-- 暂停显示恢复按钮 -->
-        <button
-          v-if="portControlSettings.isLoopSend && loopSendCount > 0 && isPaused"
-          @click="togglePauseLoopSend"
-          class="loop-resume-btn"
-          title="恢复循环发送"
-        >
-          ▶ 继续
+          {{ isPaused ? '▶ 继续' : '⏸ 暂停' }}
         </button>
         <!-- 停止按钮 -->
         <button
@@ -947,8 +933,8 @@ const enabledCommands = computed(() => {
   cursor: pointer;
 }
 
-/* 循环发送启动/暂停/停止按钮 */
-.loop-send-btn, .loop-stop-btn, .loop-pause-btn, .loop-resume-btn {
+/* 循环发送开始/暂停/停止按钮 */
+.loop-start-btn, .loop-pause-btn, .loop-stop-btn {
   padding: 4px 12px;
   font-size: 12px;
   border-radius: 3px;
@@ -958,20 +944,14 @@ const enabledCommands = computed(() => {
   font-weight: 500;
 }
 
-.loop-send-btn {
+.loop-start-btn {
   background-color: #0e639c;
   color: white;
   border-color: #0b4f7a;
 }
 
-.loop-send-btn:hover:not(:disabled) {
+.loop-start-btn:hover {
   background-color: #1177bb;
-}
-
-.loop-send-btn:disabled {
-  background-color: #3e3e42;
-  color: #555;
-  cursor: not-allowed;
 }
 
 .loop-pause-btn {
@@ -982,16 +962,6 @@ const enabledCommands = computed(() => {
 
 .loop-pause-btn:hover {
   background-color: #f59e0b;
-}
-
-.loop-resume-btn {
-  background-color: #059669;
-  color: white;
-  border-color: #047857;
-}
-
-.loop-resume-btn:hover {
-  background-color: #10b981;
 }
 
 .loop-stop-btn {
