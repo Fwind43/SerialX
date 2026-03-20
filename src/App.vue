@@ -143,7 +143,7 @@ if (typeof document !== 'undefined') {
         </div>
       </div>
       <div class="header-center">
-        <span class="app-icon">📡</span>
+        <img src="../logo/icon.png" alt="SerialX" class="app-icon" />
         <span class="app-title">SerialX</span>
         <span class="app-subtitle">串口调试工具</span>
       </div>
@@ -313,7 +313,9 @@ if (typeof document !== 'undefined') {
 }
 
 .app-icon {
-  font-size: 20px;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
 }
 
 .app-title {
