@@ -16,15 +16,17 @@ const emit = defineEmits(['update:show'])
 // 编辑命令表单
 const editingCommand = ref({ name: '', command: '', id: null })
 const isEditing = ref(false)
+const showEditModalInner = ref(false)
 
 // 编辑弹窗显示状态
 const showEditModal = computed(() => {
-  return isEditing.value || editingCommand.value.id !== null
+  return showEditModalInner.value
 })
 
 const closeEditModal = () => {
   isEditing.value = false
   editingCommand.value = { name: '', command: '', id: null }
+  showEditModalInner.value = false
 }
 
 // 打开命令管理（添加新模式）
@@ -36,6 +38,7 @@ const openCommandManager = (cmd = null) => {
     editingCommand.value = { name: '', command: '', id: null }
     isEditing.value = false
   }
+  showEditModalInner.value = true
 }
 
 // 保存命令
