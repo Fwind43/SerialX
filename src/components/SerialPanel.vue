@@ -550,18 +550,11 @@ const getPatternPlaceholder = () => {
         <span class="log-prefix">{{ getLogPrefix(log.type) }}</span>
         <span class="log-message">
           <!-- Hex 模式显示 -->
-          <template v-if="portDisplaySettings.hexMode">
-            <!-- RX/TX 数据有 hexData 时 -->
-            <template v-if="log.hexData">
-              <span class="hex-data">{{ log.hexData }}</span>
-              <span v-if="portDisplaySettings.showAscii" class="ascii-data">
-                [{{ bytesToString(log.rawBytes) }}]
-              </span>
-            </template>
-            <!-- 没有 hexData 时使用纯数据（向后兼容） -->
-            <template v-else-if="log.pureData && log.type === 'tx'">
-              <span class="hex-data">{{ formatAsHex(log.pureData) }}</span>
-            </template>
+          <template v-if="portDisplaySettings.hexMode && log.hexData">
+            <span class="hex-data">{{ log.hexData }}</span>
+            <span v-if="portDisplaySettings.showAscii" class="ascii-data">
+              [{{ bytesToString(log.rawBytes) }}]
+            </span>
           </template>
           <!-- 普通模式显示 -->
           <template v-else>

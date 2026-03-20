@@ -349,7 +349,7 @@ export const useSerialStore = defineStore('serial', () => {
         const logData_raw = rawBytes ? {
           hexData: bytesToHex(rawBytes),
           rawBytes,
-          message: logData // 保存纯数据用于 Hex 模式显示
+          message: logData
         } : null
         addPortLog(targetPort, logData, 'tx', logData_raw)
         return { success: true }
@@ -419,26 +419,14 @@ export const useSerialStore = defineStore('serial', () => {
     const portLog = portLogs.value.get(portPath)
     const timestamp = new Date().toLocaleTimeString()
 
-    // 构建显示消息：TX/RX 前缀 + 纯数据
-    let displayMessage = message
-    if (type === 'tx' && rawData?.message !== undefined) {
-      displayMessage = `TX: ${rawData.message}`
-    } else if (type === 'rx' && rawData?.message !== undefined) {
-      displayMessage = `RX: ${rawData.message}`
-    } else if (type === 'tx') {
-      displayMessage = `TX: ${message}`
-    } else if (type === 'rx') {
-      displayMessage = `RX: ${message}`
-    }
-
     portLog.push({
       id: Date.now() + Math.random(),
       timestamp,
-      message: displayMessage,
+      message, // 只保存纯数据，前缀由模板中的 getLogPrefix 显示
       type,
       hexData: rawData?.hexData || null,
       rawBytes: rawData?.rawBytes || null,
-      pureData: rawData?.message ?? message // 保存纯数据用于 Hex 模式
+      pureData: rawData?.message ?? message
     })
 
     // Limit log history per port
@@ -503,7 +491,7 @@ export const useSerialStore = defineStore('serial', () => {
       if (shouldFilterLog(port, 'rx', data)) {
         return
       }
-      // 存储原始数据用于 Hex 显示，message 保存纯数据不含 RX 前缀
+      // 存储原始数据用于 Hex 显示，message 只保存纯数据
       addPortLog(port, data, 'rx', { hexData, rawBytes, message: data })
     })
 
