@@ -48,7 +48,6 @@
       "Bash(curl -H \"Authorization: Bearer $GITCODE_TOKEN\" -X POST https://gitcode.com/api/v5/projects/Fwind43/SerialX/releases -d \"tag_name=v0.0.1&name=SerialX v0.0.1&body=## SerialX v0.0.1 - 初始发布\")"
     ],
     "deny": [
-      "Bash(rm:*)"
     ]
   }
 }

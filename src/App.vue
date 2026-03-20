@@ -1,10 +1,11 @@
 <script setup>
-import { onMounted, computed, ref } from 'vue'
+import { onMounted, computed, ref, onUnmounted } from 'vue'
 import { useSerialStore } from './stores/serial'
 import SerialSidebar from './components/SerialSidebar.vue'
 import TerminalView from './components/TerminalView.vue'
 import DataConverter from './components/DataConverter.vue'
 import CommandsModal from './components/CommandsModal.vue'
+import CommandPalette from './components/CommandPalette.vue'
 
 const serialStore = useSerialStore()
 
@@ -17,6 +18,7 @@ const isConverterMode = computed(() => {
 const showToolsMenu = ref(false)
 const showSettingsMenu = ref(false)
 const showCommandsModal = ref(false)
+const showCommandPalette = ref(false)
 
 // 关闭所有菜单
 const closeAllMenus = () => {
@@ -40,6 +42,25 @@ const toggleSettingsMenu = () => {
   } else {
     closeAllMenus()
     showSettingsMenu.value = true
+  }
+}
+
+// 打开快捷命令面板
+const openCommandPalette = () => {
+  showCommandPalette.value = true
+}
+
+// 全局键盘快捷键处理
+const handleGlobalKeydown = (e) => {
+  // Ctrl+P 打开快捷命令面板
+  if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+    // 检查是否有输入框获得焦点
+    const activeElement = document.activeElement
+    const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
+    if (!isInputFocused) {
+      e.preventDefault()
+      openCommandPalette()
+    }
   }
 }
 
@@ -85,10 +106,29 @@ const closeCommandsModal = () => {
   showCommandsModal.value = false
 }
 
+// 处理发送命令事件
+const handleSendCommand = (e) => {
+  const command = e.detail
+  if (command) {
+    // 找到当前激活的串口面板并发送命令
+    const activePanel = document.querySelector('.serial-panel')
+    if (activePanel) {
+      // 通过 store 发送
+      const portPath = serialStore.selectedPort
+      if (portPath) {
+        serialStore.setPortSendingData(portPath, command)
+        serialStore.sendData(portPath)
+      }
+    }
+  }
+}
+
 onMounted(async () => {
   serialStore.refreshPorts()
   // 加载常用命令配置
   serialStore.loadCommonCommands()
+  // 恢复会话状态
+  await serialStore.restoreSessionState()
 
   // 监听窗口最大化状态
   window.electronAPI?.onWindowMaximized(() => {
@@ -97,6 +137,18 @@ onMounted(async () => {
   window.electronAPI?.onWindowUnmaximized(() => {
     isMaximized.value = false
   })
+
+  // 监听全局键盘快捷键
+  document.addEventListener('keydown', handleGlobalKeydown)
+
+  // 监听命令发送事件
+  window.addEventListener('serialx-send-command', handleSendCommand)
+})
+
+// 组件卸载时清理
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleGlobalKeydown)
+  window.removeEventListener('serialx-send-command', handleSendCommand)
 })
 
 // 点击外部关闭菜单
@@ -201,6 +253,11 @@ if (typeof document !== 'undefined') {
     <!-- 常用命令配置弹窗 -->
     <CommandsModal
       v-model:show="showCommandsModal"
+    />
+
+    <!-- 快捷命令面板 -->
+    <CommandPalette
+      v-model="showCommandPalette"
     />
   </div>
 
