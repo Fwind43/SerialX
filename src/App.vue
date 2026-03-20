@@ -52,6 +52,8 @@ const openCommandPalette = () => {
 
 // 全局键盘快捷键处理
 const handleGlobalKeydown = (e) => {
+  console.log('[App] Keydown:', e.key, 'Ctrl:', e.ctrlKey)
+
   // Ctrl+P 打开快捷命令面板
   if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
     // 检查是否有输入框获得焦点
@@ -69,6 +71,7 @@ const handleGlobalKeydown = (e) => {
     const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
     if (!isInputFocused) {
       e.preventDefault()
+      console.log('[App] Dispatching serialx-open-search')
       // 触发自定义事件，由 TerminalDisplay 组件监听
       window.dispatchEvent(new CustomEvent('serialx-open-search'))
     }
@@ -150,7 +153,8 @@ onMounted(async () => {
   })
 
   // 监听全局键盘快捷键
-  document.addEventListener('keydown', handleGlobalKeydown)
+  window.addEventListener('keydown', handleGlobalKeydown)
+  console.log('[App] Registered keydown listener on window')
 
   // 监听命令发送事件
   window.addEventListener('serialx-send-command', handleSendCommand)
@@ -158,8 +162,9 @@ onMounted(async () => {
 
 // 组件卸载时清理
 onUnmounted(() => {
-  document.removeEventListener('keydown', handleGlobalKeydown)
+  window.removeEventListener('keydown', handleGlobalKeydown)
   window.removeEventListener('serialx-send-command', handleSendCommand)
+  document.removeEventListener('click', handleClickOutside)
 })
 
 // 点击外部关闭菜单
@@ -170,9 +175,7 @@ const handleClickOutside = (event) => {
 }
 
 // 监听全局点击事件
-if (typeof document !== 'undefined') {
-  document.addEventListener('click', handleClickOutside)
-}
+document.addEventListener('click', handleClickOutside)
 </script>
 
 <template>

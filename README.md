@@ -4,7 +4,7 @@
 
 一款基于 Electron + Vue 3 的现代化串口调试工具
 
-![Version](https://img.shields.io/badge/version-v0.0.1-blue)
+![Version](https://img.shields.io/badge/version-v0.0.2-blue)
 ![Electron](https://img.shields.io/badge/Electron-41.0.3-47848F?logo=electron&logoColor=white)
 ![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vue.js&logoColor=white)
 
@@ -140,7 +140,23 @@ SerialX/
 
 ## 版本历史
 
-### v0.0.1 (2026-03) - 当前版本
+### v0.0.2 (2026-03) - 当前版本
+
+**新功能**
+- ✅ 搜索功能（Ctrl+F）- 支持终端历史搜索
+- ✅ 循环发送优化 - 手动启动/停止控制
+
+**优化**
+- ✅ TX/RX 日志彩色显示
+- ✅ 日志前缀图标化
+- ✅ 循环发送交互优化
+
+**修复**
+- ✅ 搜索框"搜索中..."问题
+- ✅ Ctrl+F 快捷键无效问题
+- ✅ 循环发送立即触发问题
+
+### v0.0.1 (2026-03)
 
 **新功能**
 - ✅ 无框窗口设计，自定义标题栏
@@ -158,7 +174,7 @@ SerialX/
 **修复**
 - ✅ 编辑弹窗显示问题
 
-### v0.0.2-dev (开发中)
+### v0.0.3-dev (开发中)
 
 - 🚧 新功能开发中...
 
