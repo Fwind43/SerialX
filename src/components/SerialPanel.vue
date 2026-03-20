@@ -46,6 +46,14 @@ const bytesToAscii = (bytes) => {
   }).join('')
 }
 
+// 将 TX 消息转换为 Hex 格式显示
+const formatTxAsHex = (message) => {
+  if (!message) return ''
+  return Array.from(message)
+    .map(c => c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
+    .join(' ')
+}
+
 // 快速命令选择
 const selectedCommandId = ref('')
 const sendSelectedCommand = () => {
@@ -276,6 +284,25 @@ const handleSend = async () => {
     console.error('发送失败:', result.error)
   }
 }
+
+// Hex 模式下验证输入是否有效
+const isHexInputValid = computed(() => {
+  const data = serialStore.getPortSendingData(props.portPath)
+  if (!serialStore.isHexMode || !data) return true
+  return serialStore.isValidHex(data)
+})
+
+// 发送按钮是否禁用
+const isSendDisabled = computed(() => {
+  const data = serialStore.getPortSendingData(props.portPath)
+  if (!data) return true
+  if (serialStore.isHexMode) return !isHexInputValid.value
+  return false
+})
+
+// Hex 模式下的输入框占位符
+const hexPlaceholder = '输入十六进制数据，如：48 65 6C 6C 6F 或 48656C6C6F'
+const textPlaceholder = '输入要发送的数据，按 Enter 发送...'
 
 const toggleLoopSend = () => {
   if (serialStore.isLoopSend) {
@@ -513,13 +540,19 @@ const getPatternPlaceholder = () => {
         <span class="log-prefix">{{ getLogPrefix(log.type) }}</span>
         <span class="log-message">
           <!-- Hex 模式显示 -->
-          <template v-if="log.type === 'rx' && portDisplaySettings.hexMode && log.hexData">
-            <span class="hex-data">{{ log.hexData }}</span>
-            <span v-if="portDisplaySettings.showAscii" class="ascii-data">
-              [{{ bytesToAscii(log.rawBytes) }}]
-            </span>
+          <template v-if="portDisplaySettings.hexMode">
+            <template v-if="log.type === 'rx' && log.hexData">
+              <span class="hex-data">{{ log.hexData }}</span>
+              <span v-if="portDisplaySettings.showAscii" class="ascii-data">
+                [{{ bytesToAscii(log.rawBytes) }}]
+              </span>
+            </template>
+            <!-- TX 数据在 Hex 模式下也显示为十六进制 -->
+            <template v-else-if="log.type === 'tx'">
+              <span class="hex-data">{{ formatTxAsHex(log.message) }}</span>
+            </template>
           </template>
-          <!-- 普通模式或 TX 数据 -->
+          <!-- 普通模式显示 -->
           <template v-else>
             <span v-html="highlightMatch(log.message)"></span>
           </template>
@@ -557,10 +590,11 @@ const getPatternPlaceholder = () => {
           @input="serialStore.setPortSendingData(props.portPath, $event.target.value)"
           type="text"
           class="send-input"
-          placeholder="输入要发送的数据，按 Enter 发送..."
+          :class="{ 'hex-invalid': serialStore.isHexMode && !isHexInputValid }"
+          :placeholder="serialStore.isHexMode ? hexPlaceholder : textPlaceholder"
           @keyup.enter="handleSend"
         />
-        <button @click="handleSend" class="send-button" :disabled="!serialStore.getPortSendingData(props.portPath)">
+        <button @click="handleSend" class="send-button" :disabled="isSendDisabled">
           发送
         </button>
       </div>
@@ -1525,6 +1559,18 @@ const getPatternPlaceholder = () => {
   border-radius: 3px;
   font-size: 13px;
   font-family: 'Consolas', 'Monaco', monospace;
+  transition: border-color 0.2s;
+}
+
+.send-input.hex-invalid {
+  border-color: #c42b1c;
+  animation: shake 0.3s;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
 }
 
 .send-input::placeholder {

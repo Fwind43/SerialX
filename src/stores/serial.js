@@ -267,6 +267,36 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  // Hex 工具函数：将 Hex 字符串转换为 Uint8Array
+  const hexToBytes = (hexString) => {
+    if (!hexString) return new Uint8Array(0)
+    const cleanHex = hexString.replace(/[\s,-]/g, '').toUpperCase()
+    if (!/^[0-9A-F]+$/.test(cleanHex)) {
+      throw new Error('无效的 Hex 格式')
+    }
+    const paddedHex = cleanHex.length % 2 === 1 ? '0' + cleanHex : cleanHex
+    const bytes = new Uint8Array(paddedHex.length / 2)
+    for (let i = 0; i < paddedHex.length; i += 2) {
+      bytes[i / 2] = parseInt(paddedHex.substr(i, 2), 16)
+    }
+    return bytes
+  }
+
+  // Hex 工具函数：将 Uint8Array 转换为 Hex 字符串（带空格分隔）
+  const bytesToHex = (bytes) => {
+    if (!bytes || bytes.length === 0) return ''
+    return Array.from(bytes)
+      .map(b => b.toString(16).toUpperCase().padStart(2, '0'))
+      .join(' ')
+  }
+
+  // Hex 工具函数：验证 Hex 字符串是否有效
+  const isValidHex = (hexString) => {
+    if (!hexString) return false
+    const cleanHex = hexString.replace(/[\s,-]/g, '').toUpperCase()
+    return cleanHex.length > 0 && /^[0-9A-F]+$/.test(cleanHex)
+  }
+
   async function sendData(portPath = null, data = null, isHex = false) {
     const targetPort = portPath || selectedPort.value
     let dataToSend = data !== null ? data : getPortSendingData(targetPort)
@@ -289,27 +319,17 @@ export const useSerialStore = defineStore('serial', () => {
     let logData = dataToSend
     if (isHex) {
       try {
-        // 移除空格和常见分隔符，只保留十六进制字符
         const hexString = dataToSend.replace(/[\s,-]/g, '').toUpperCase()
-        // 空字符串允许直接发送
         if (hexString.length === 0) {
           addPortLog(targetPort, '发送失败：Hex 模式下请输入有效的十六进制数据', 'error')
           return { success: false, error: 'Hex 数据为空' }
         }
-        // 验证是否为有效的十六进制字符串
         if (!/^[0-9A-F]+$/.test(hexString)) {
           addPortLog(targetPort, `发送失败：无效的 Hex 格式，请输入 0-9 和 A-F 字符`, 'error')
           return { success: false, error: '无效的 Hex 格式' }
         }
-        // 如果长度是奇数，在前面补 0
-        const paddedHex = hexString.length % 2 === 1 ? '0' + hexString : hexString
-        // 转换为字节数组 (使用 Uint8Array 而不是 Buffer，因为这是在浏览器环境)
-        const bytes = new Uint8Array(paddedHex.length / 2)
-        for (let i = 0; i < paddedHex.length; i += 2) {
-          bytes[i / 2] = parseInt(paddedHex.substr(i, 2), 16)
-        }
-        actualData = bytes
-        logData = dataToSend // 日志仍显示原始输入的 Hex 字符串
+        actualData = hexToBytes(hexString)
+        logData = dataToSend
       } catch (error) {
         addPortLog(targetPort, `Hex 转换失败：${error.message}`, 'error')
         return { success: false, error: `Hex 转换失败：${error.message}` }
@@ -502,6 +522,10 @@ export const useSerialStore = defineStore('serial', () => {
     getFilteredCount,
     getPortDisplaySettings,
     updatePortDisplaySettings,
+    // Hex 工具函数
+    hexToBytes,
+    bytesToHex,
+    isValidHex,
     // Actions
     refreshPorts,
     connect,
