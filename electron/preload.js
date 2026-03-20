@@ -18,7 +18,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Window Operations
   openConverterWindow: () => ipcRenderer.send('window:open-converter'),
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
+  maximizeWindow: () => ipcRenderer.send('window:maximize'),
+  unmaximizeWindow: () => ipcRenderer.send('window:unmaximize'),
   closeWindow: () => ipcRenderer.send('window:close'),
+
+  // Window State Events
+  onWindowMaximized: (callback) => {
+    ipcRenderer.on('window:maximized', callback)
+  },
+  onWindowUnmaximized: (callback) => {
+    ipcRenderer.on('window:unmaximized', callback)
+  },
 
   // Serial Data Events (from main to renderer) - 数据包含串口路径
   onSerialData: (callback) => {

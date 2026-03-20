@@ -48,8 +48,24 @@ const minimizeWindow = () => {
   window.electronAPI?.minimizeWindow()
 }
 
+const maximizeWindow = () => {
+  window.electronAPI?.maximizeWindow()
+}
+
 const closeWindow = () => {
   window.electronAPI?.closeWindow()
+}
+
+// 窗口状态
+const isMaximized = ref(false)
+
+const toggleMaximize = () => {
+  if (isMaximized.value) {
+    window.electronAPI?.unmaximizeWindow()
+  } else {
+    window.electronAPI?.maximizeWindow()
+  }
+  isMaximized.value = !isMaximized.value
 }
 
 // 打开进制转换工具
@@ -73,6 +89,14 @@ onMounted(async () => {
   serialStore.refreshPorts()
   // 加载常用命令配置
   serialStore.loadCommonCommands()
+
+  // 监听窗口最大化状态
+  window.electronAPI?.onWindowMaximized(() => {
+    isMaximized.value = true
+  })
+  window.electronAPI?.onWindowUnmaximized(() => {
+    isMaximized.value = false
+  })
 })
 
 // 点击外部关闭菜单
@@ -127,6 +151,15 @@ if (typeof document !== 'undefined') {
         <button class="window-btn minimize-btn" @click="minimizeWindow" title="最小化">
           <svg width="12" height="12" viewBox="0 0 12 12">
             <rect x="1" y="5" width="10" height="1" fill="currentColor"/>
+          </svg>
+        </button>
+        <button class="window-btn maximize-btn" @click="toggleMaximize" :title="isMaximized ? '还原' : '最大化'">
+          <svg v-if="!isMaximized" width="10" height="10" viewBox="0 0 10 10">
+            <rect x="1" y="1" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1"/>
+          </svg>
+          <svg v-else width="10" height="10" viewBox="0 0 10 10">
+            <rect x="2" y="0" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1"/>
+            <rect x="0" y="2" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
           </svg>
         </button>
         <button class="window-btn close-btn" @click="closeWindow" title="关闭">
@@ -318,6 +351,11 @@ if (typeof document !== 'undefined') {
 }
 
 .window-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.window-btn.maximize-btn:hover {
   background-color: rgba(255, 255, 255, 0.1);
   color: #ffffff;
 }

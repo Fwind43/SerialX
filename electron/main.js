@@ -262,6 +262,15 @@ function createWindow() {
     }
   })
 
+  // 监听窗口状态变化并通知渲染进程
+  mainWindow.on('maximize', () => {
+    mainWindow.webContents.send('window:maximized')
+  })
+
+  mainWindow.on('unmaximize', () => {
+    mainWindow.webContents.send('window:unmaximized')
+  })
+
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:5173')
     mainWindow.webContents.openDevTools()
@@ -356,6 +365,20 @@ app.whenReady().then(() => {
   ipcMain.on('window:minimize', () => {
     if (mainWindow) {
       mainWindow.minimize()
+    }
+  })
+
+  ipcMain.on('window:maximize', () => {
+    if (mainWindow) {
+      if (!mainWindow.isMaximized()) {
+        mainWindow.maximize()
+      }
+    }
+  })
+
+  ipcMain.on('window:unmaximize', () => {
+    if (mainWindow) {
+      mainWindow.unmaximize()
     }
   })
 
