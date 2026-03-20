@@ -317,6 +317,7 @@ export const useSerialStore = defineStore('serial', () => {
     // Hex 模式：将十六进制字符串转换为字节数组
     let actualData = dataToSend
     let logData = dataToSend
+    let rawBytes = null
     if (isHex) {
       try {
         const hexString = dataToSend.replace(/[\s,-]/g, '').toUpperCase()
@@ -329,6 +330,7 @@ export const useSerialStore = defineStore('serial', () => {
           return { success: false, error: '无效的 Hex 格式' }
         }
         actualData = hexToBytes(hexString)
+        rawBytes = Array.from(actualData) // 保存原始字节用于 Hex 显示
         logData = dataToSend
       } catch (error) {
         addPortLog(targetPort, `Hex 转换失败：${error.message}`, 'error')
@@ -339,7 +341,9 @@ export const useSerialStore = defineStore('serial', () => {
     try {
       const result = await window.electronAPI.writeData(targetPort, actualData)
       if (result.success) {
-        addPortLog(targetPort, `TX: ${logData}`, 'tx')
+        // Hex 模式下传递原始字节用于显示
+        const logData_raw = isHex && rawBytes ? { hexData: bytesToHex(rawBytes), rawBytes } : null
+        addPortLog(targetPort, `TX: ${logData}`, 'tx', logData_raw)
         return { success: true }
       } else {
         addPortLog(targetPort, `发送失败：${result.error}`, 'error')

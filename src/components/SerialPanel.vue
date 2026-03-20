@@ -547,7 +547,14 @@ const getPatternPlaceholder = () => {
                 [{{ bytesToAscii(log.rawBytes) }}]
               </span>
             </template>
-            <!-- TX 数据在 Hex 模式下也显示为十六进制 -->
+            <!-- TX 数据在 Hex 模式下使用存储的 hexData -->
+            <template v-else-if="log.type === 'tx' && log.hexData">
+              <span class="hex-data">{{ log.hexData }}</span>
+              <span v-if="portDisplaySettings.showAscii" class="ascii-data">
+                [{{ bytesToAscii(log.rawBytes) }}]
+              </span>
+            </template>
+            <!-- TX 数据没有 hexData 时 fallback -->
             <template v-else-if="log.type === 'tx'">
               <span class="hex-data">{{ formatTxAsHex(log.message) }}</span>
             </template>
