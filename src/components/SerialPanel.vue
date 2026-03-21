@@ -92,8 +92,9 @@ const togglePauseLoopSend = () => {
 }
 
 // 获取暂停状态 - 使用 store 的 getter 函数确保响应式
+// 注意：loopSendCount <= 0 时表示还未启动，显示"开始"按钮
 const isPaused = computed(() => {
-  return serialStore.isLoopSendPaused(props.portPath)
+  return loopSendCount.value <= 0 || serialStore.isLoopSendPaused(props.portPath)
 })
 
 // 获取当前串口的循环发送次数
@@ -237,8 +238,8 @@ const enabledCommands = computed(() => {
         </span>
         <!-- 循环发送状态指示 -->
         <span v-if="portControlSettings.isLoopSend" class="loop-send-status">
-          <span class="loop-indicator" :class="{ 'paused': isPaused }">{{ isPaused ? '⏸' : '🔁' }}</span>
-          <span class="loop-count">{{ loopSendCount }}{{ portControlSettings.loopMaxCount > 0 ? '/' + portControlSettings.loopMaxCount : '' }}{{ isPaused ? ' (暂停)' : '' }}</span>
+          <span class="loop-indicator" :class="{ 'paused': isPaused && loopSendCount > 0 }">{{ loopSendCount <= 0 ? '▶' : (isPaused ? '⏸' : '🔁') }}</span>
+          <span class="loop-count">{{ loopSendCount }}{{ portControlSettings.loopMaxCount > 0 ? '/' + portControlSettings.loopMaxCount : '' }}{{ loopSendCount <= 0 ? ' (未启动)' : (isPaused ? ' (暂停)' : '') }}</span>
         </span>
       </div>
       <div class="panel-actions">
@@ -457,10 +458,10 @@ const enabledCommands = computed(() => {
         <button
           v-if="portControlSettings.isLoopSend"
           @click="togglePauseLoopSend"
-          :class="isPaused ? 'loop-start-btn' : 'loop-pause-btn'"
-          :title="isPaused ? '继续循环发送' : '暂停循环发送'"
+          :class="loopSendCount <= 0 ? 'loop-start-btn' : (isPaused ? 'loop-start-btn' : 'loop-pause-btn')"
+          :title="loopSendCount <= 0 ? '开始循环发送' : (isPaused ? '继续循环发送' : '暂停循环发送')"
         >
-          {{ isPaused ? '▶ 继续' : '⏸ 暂停' }}
+          {{ loopSendCount <= 0 ? '▶ 开始' : (isPaused ? '▶ 继续' : '⏸ 暂停') }}
         </button>
         <!-- 停止按钮 -->
         <button
