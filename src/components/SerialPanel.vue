@@ -90,9 +90,9 @@ const loopSendCount = computed(() => {
   return serialStore.portLoopSendCounts.get(props.portPath) || 0
 })
 
-// 是否正在循环发送中（已启动且未中止）
+// 是否正在循环发送中
 const isLoopSending = computed(() => {
-  return portControlSettings.value.isLoopSend && loopSendCount.value > 0
+  return serialStore.isLoopSendRunning(props.portPath)
 })
 
 // 更新循环间隔

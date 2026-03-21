@@ -26,6 +26,7 @@ export const useSerialStore = defineStore('serial', () => {
   let loopTimer = null
   const portLoopSendCounts = ref(new Map()) // path -> 已发送次数
   const portLoopSendPaused = ref(new Map()) // path -> 是否暂停
+  const portLoopSendRunning = ref(new Map()) // path -> 是否正在运行中
 
   // 每个串口的显示设置（独立配置）
   const portDisplaySettings = ref(new Map()) // path -> { hexReceive: boolean, showAscii: boolean }
@@ -536,14 +537,17 @@ export const useSerialStore = defineStore('serial', () => {
     // 获取该串口的循环发送设置
     const portControl = getPortControlSettings(targetPort)
 
-    // 初始化该串口的发送计数和暂停状态
+    // 初始化该串口的发送计数、暂停状态和运行状态
     const counts = portLoopSendCounts.value
     const paused = portLoopSendPaused.value
+    const running = portLoopSendRunning.value
     counts.set(targetPort, 0)
     paused.set(targetPort, false)
+    running.set(targetPort, true)
     // 触发响应式更新
     portLoopSendCounts.value = counts
     portLoopSendPaused.value = paused
+    portLoopSendRunning.value = running
 
     const loopData = { port: targetPort, timer: null }
 
@@ -612,20 +616,24 @@ export const useSerialStore = defineStore('serial', () => {
     return portLoopSendPaused.value.get(portPath) || false
   }
 
+  function isLoopSendRunning(portPath) {
+    return portLoopSendRunning.value.get(portPath) || false
+  }
+
   function stopLoopSendForPort(portPath) {
     // 如果只停止特定串口的循环发送
     if (loopTimer) {
       clearInterval(loopTimer)
       loopTimer = null
     }
-    // 重置暂停状态
+    // 重置暂停状态和运行状态
     const paused = portLoopSendPaused.value
     paused.set(portPath, false)
     portLoopSendPaused.value = paused
-    // 重置发送计数为 0，这样按钮可以变回"开始"
-    const counts = portLoopSendCounts.value
-    counts.set(portPath, 0)
-    portLoopSendCounts.value = counts
+
+    const running = portLoopSendRunning.value
+    running.set(portPath, false)
+    portLoopSendRunning.value = running
   }
 
   function stopLoopSend() {
@@ -837,6 +845,7 @@ export const useSerialStore = defineStore('serial', () => {
     resumeLoopSendForPort,
     togglePauseLoopSendForPort,
     isLoopSendPaused,
+    isLoopSendRunning,
     addLog,
     addPortLog,
     getPortLogs,
