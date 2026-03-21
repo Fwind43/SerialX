@@ -52,7 +52,7 @@ const toggleAutoScroll = () => {
   })
 }
 
-// 循环发送切换
+// 循环发送切换 - 直接开始发送
 const toggleLoopSend = () => {
   if (portControlSettings.value.isLoopSend) {
     // 停止循环发送
@@ -60,42 +60,26 @@ const toggleLoopSend = () => {
     serialStore.updatePortControlSettings(props.portPath, { isLoopSend: false })
     serialStore.addPortLog(props.portPath, '循环发送已停止', 'info')
   } else {
-    // 开启循环发送模式，但不立即开始发送
-    // 用户需要先输入要发送的数据，然后手动启动
+    // 开启循环发送并立即开始
+    if (!serialStore.getPortSendingData(props.portPath)) {
+      serialStore.addPortLog(props.portPath, '请先输入要发送的数据', 'warning')
+      return
+    }
+    if (!isConnected.value) {
+      serialStore.addPortLog(props.portPath, '请先连接串口', 'warning')
+      return
+    }
     serialStore.updatePortControlSettings(props.portPath, { isLoopSend: true })
-    serialStore.addPortLog(props.portPath, '循环发送模式已开启，请点击"▶ 开始"按钮启动发送', 'info')
+    serialStore.startLoopSend(props.portPath)
   }
 }
 
-// 启动循环发送
-const startLoopSend = () => {
-  if (!serialStore.getPortSendingData(props.portPath)) {
-    serialStore.addPortLog(props.portPath, '请先输入要发送的数据', 'warning')
-    return
-  }
-  if (!isConnected.value) {
-    serialStore.addPortLog(props.portPath, '请先连接串口', 'warning')
-    return
-  }
-  serialStore.startLoopSend(props.portPath)
+// 中止循环发送
+const stopLoopSend = () => {
+  serialStore.stopLoopSendForPort(props.portPath)
+  serialStore.updatePortControlSettings(props.portPath, { isLoopSend: false })
+  serialStore.addPortLog(props.portPath, '循环发送已中止', 'info')
 }
-
-// 暂停/恢复循环发送
-const togglePauseLoopSend = () => {
-  // 如果还未启动，先启动
-  if (loopSendCount.value <= 0) {
-    startLoopSend()
-    return
-  }
-  // 切换暂停状态 - 直接使用 store 的 toggle 函数
-  serialStore.togglePauseLoopSendForPort(props.portPath)
-}
-
-// 获取暂停状态 - 使用 store 的 getter 函数确保响应式
-// 注意：loopSendCount <= 0 时表示还未启动，显示"开始"按钮
-const isPaused = computed(() => {
-  return loopSendCount.value <= 0 || serialStore.isLoopSendPaused(props.portPath)
-})
 
 // 获取当前串口的循环发送次数
 const loopSendCount = computed(() => {
@@ -238,8 +222,8 @@ const enabledCommands = computed(() => {
         </span>
         <!-- 循环发送状态指示 -->
         <span v-if="portControlSettings.isLoopSend" class="loop-send-status">
-          <span class="loop-indicator" :class="{ 'paused': isPaused && loopSendCount > 0 }">{{ loopSendCount <= 0 ? '▶' : (isPaused ? '⏸' : '🔁') }}</span>
-          <span class="loop-count">{{ loopSendCount }}{{ portControlSettings.loopMaxCount > 0 ? '/' + portControlSettings.loopMaxCount : '' }}{{ loopSendCount <= 0 ? ' (未启动)' : (isPaused ? ' (暂停)' : '') }}</span>
+          <span class="loop-indicator">🔁</span>
+          <span class="loop-count">{{ loopSendCount }}{{ portControlSettings.loopMaxCount > 0 ? '/' + portControlSettings.loopMaxCount : '' }}</span>
         </span>
       </div>
       <div class="panel-actions">
@@ -454,23 +438,14 @@ const enabledCommands = computed(() => {
           <input type="checkbox" :checked="portControlSettings.isLoopSend" @change="toggleLoopSend" />
           <span class="option-text">循环发送</span>
         </label>
-        <!-- 循环发送开始/暂停按钮 -->
+        <!-- 循环发送中止按钮 -->
         <button
           v-if="portControlSettings.isLoopSend"
-          @click="togglePauseLoopSend"
-          :class="loopSendCount <= 0 ? 'loop-start-btn' : (isPaused ? 'loop-start-btn' : 'loop-pause-btn')"
-          :title="loopSendCount <= 0 ? '开始循环发送' : (isPaused ? '继续循环发送' : '暂停循环发送')"
-        >
-          {{ loopSendCount <= 0 ? '▶ 开始' : (isPaused ? '▶ 继续' : '⏸ 暂停') }}
-        </button>
-        <!-- 停止按钮 -->
-        <button
-          v-if="portControlSettings.isLoopSend && loopSendCount > 0"
-          @click="toggleLoopSend"
+          @click="stopLoopSend"
           class="loop-stop-btn"
-          title="停止循环发送"
+          title="中止循环发送"
         >
-          ⏹ 停止
+          ⏹ 中止
         </button>
         <label v-if="portControlSettings.isLoopSend" class="interval-group">
           <span class="interval-label">间隔:</span>
@@ -935,8 +910,8 @@ const enabledCommands = computed(() => {
   cursor: pointer;
 }
 
-/* 循环发送开始/暂停/停止按钮 */
-.loop-start-btn, .loop-pause-btn, .loop-stop-btn {
+/* 循环发送中止按钮 */
+.loop-stop-btn {
   padding: 4px 12px;
   font-size: 12px;
   border-radius: 3px;
@@ -944,29 +919,6 @@ const enabledCommands = computed(() => {
   cursor: pointer;
   transition: all 0.15s;
   font-weight: 500;
-}
-
-.loop-start-btn {
-  background-color: #0e639c;
-  color: white;
-  border-color: #0b4f7a;
-}
-
-.loop-start-btn:hover {
-  background-color: #1177bb;
-}
-
-.loop-pause-btn {
-  background-color: #d97706;
-  color: white;
-  border-color: #b45309;
-}
-
-.loop-pause-btn:hover {
-  background-color: #f59e0b;
-}
-
-.loop-stop-btn {
   background-color: #c42b1c;
   color: white;
   border-color: #a02015;
