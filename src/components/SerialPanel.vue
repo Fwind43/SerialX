@@ -52,7 +52,7 @@ const toggleAutoScroll = () => {
   })
 }
 
-// 循环发送切换 - 直接开始发送
+// 循环发送切换 - 只切换模式，不立即开始
 const toggleLoopSend = () => {
   if (portControlSettings.value.isLoopSend) {
     // 停止循环发送
@@ -60,18 +60,23 @@ const toggleLoopSend = () => {
     serialStore.updatePortControlSettings(props.portPath, { isLoopSend: false })
     serialStore.addPortLog(props.portPath, '循环发送已停止', 'info')
   } else {
-    // 开启循环发送并立即开始
-    if (!serialStore.getPortSendingData(props.portPath)) {
-      serialStore.addPortLog(props.portPath, '请先输入要发送的数据', 'warning')
-      return
-    }
-    if (!isConnected.value) {
-      serialStore.addPortLog(props.portPath, '请先连接串口', 'warning')
-      return
-    }
+    // 开启循环发送模式
     serialStore.updatePortControlSettings(props.portPath, { isLoopSend: true })
-    serialStore.startLoopSend(props.portPath)
+    serialStore.addPortLog(props.portPath, '循环发送模式已开启，请点击"开始"按钮启动', 'info')
   }
+}
+
+// 开始循环发送
+const startLoopSend = () => {
+  if (!serialStore.getPortSendingData(props.portPath)) {
+    serialStore.addPortLog(props.portPath, '请先输入要发送的数据', 'warning')
+    return
+  }
+  if (!isConnected.value) {
+    serialStore.addPortLog(props.portPath, '请先连接串口', 'warning')
+    return
+  }
+  serialStore.startLoopSend(props.portPath)
 }
 
 // 中止循环发送
@@ -438,9 +443,17 @@ const enabledCommands = computed(() => {
           <input type="checkbox" :checked="portControlSettings.isLoopSend" @change="toggleLoopSend" />
           <span class="option-text">循环发送</span>
         </label>
-        <!-- 循环发送中止按钮 -->
+        <!-- 循环发送开始/中止按钮 -->
         <button
-          v-if="portControlSettings.isLoopSend"
+          v-if="portControlSettings.isLoopSend && loopSendCount <= 0"
+          @click="startLoopSend"
+          class="loop-start-btn"
+          title="开始循环发送"
+        >
+          ▶ 开始
+        </button>
+        <button
+          v-if="portControlSettings.isLoopSend && loopSendCount > 0"
           @click="stopLoopSend"
           class="loop-stop-btn"
           title="中止循环发送"
@@ -910,8 +923,8 @@ const enabledCommands = computed(() => {
   cursor: pointer;
 }
 
-/* 循环发送中止按钮 */
-.loop-stop-btn {
+/* 循环发送开始/中止按钮 */
+.loop-start-btn, .loop-stop-btn {
   padding: 4px 12px;
   font-size: 12px;
   border-radius: 3px;
@@ -919,6 +932,19 @@ const enabledCommands = computed(() => {
   cursor: pointer;
   transition: all 0.15s;
   font-weight: 500;
+}
+
+.loop-start-btn {
+  background-color: #0e639c;
+  color: white;
+  border-color: #0b4f7a;
+}
+
+.loop-start-btn:hover {
+  background-color: #1177bb;
+}
+
+.loop-stop-btn {
   background-color: #c42b1c;
   color: white;
   border-color: #a02015;
