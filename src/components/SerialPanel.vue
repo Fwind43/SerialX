@@ -82,13 +82,17 @@ const startLoopSend = () => {
 // 中止循环发送
 const stopLoopSend = () => {
   serialStore.stopLoopSendForPort(props.portPath)
-  serialStore.updatePortControlSettings(props.portPath, { isLoopSend: false })
   serialStore.addPortLog(props.portPath, '循环发送已中止', 'info')
 }
 
 // 获取当前串口的循环发送次数
 const loopSendCount = computed(() => {
   return serialStore.portLoopSendCounts.get(props.portPath) || 0
+})
+
+// 是否正在循环发送中（已启动且未中止）
+const isLoopSending = computed(() => {
+  return portControlSettings.value.isLoopSend && loopSendCount.value > 0
 })
 
 // 更新循环间隔
@@ -227,8 +231,8 @@ const enabledCommands = computed(() => {
         </span>
         <!-- 循环发送状态指示 -->
         <span v-if="portControlSettings.isLoopSend" class="loop-send-status">
-          <span class="loop-indicator">🔁</span>
-          <span class="loop-count">{{ loopSendCount }}{{ portControlSettings.loopMaxCount > 0 ? '/' + portControlSettings.loopMaxCount : '' }}</span>
+          <span class="loop-indicator">{{ isLoopSending ? '🔁' : '⏸' }}</span>
+          <span class="loop-count">{{ loopSendCount }}{{ portControlSettings.loopMaxCount > 0 ? '/' + portControlSettings.loopMaxCount : '' }}{{ !isLoopSending && loopSendCount > 0 ? ' (已中止)' : '' }}</span>
         </span>
       </div>
       <div class="panel-actions">
@@ -445,7 +449,7 @@ const enabledCommands = computed(() => {
         </label>
         <!-- 循环发送开始/中止按钮 -->
         <button
-          v-if="portControlSettings.isLoopSend && loopSendCount <= 0"
+          v-if="portControlSettings.isLoopSend && !isLoopSending"
           @click="startLoopSend"
           class="loop-start-btn"
           title="开始循环发送"
@@ -453,7 +457,7 @@ const enabledCommands = computed(() => {
           ▶ 开始
         </button>
         <button
-          v-if="portControlSettings.isLoopSend && loopSendCount > 0"
+          v-if="portControlSettings.isLoopSend && isLoopSending"
           @click="stopLoopSend"
           class="loop-stop-btn"
           title="中止循环发送"
