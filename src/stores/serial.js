@@ -622,6 +622,10 @@ export const useSerialStore = defineStore('serial', () => {
     const paused = portLoopSendPaused.value
     paused.set(portPath, false)
     portLoopSendPaused.value = paused
+    // 重置发送计数为 0，这样按钮可以变回"开始"
+    const counts = portLoopSendCounts.value
+    counts.set(portPath, 0)
+    portLoopSendCounts.value = counts
   }
 
   function stopLoopSend() {
