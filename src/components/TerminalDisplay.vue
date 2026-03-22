@@ -239,7 +239,11 @@ const initTerminal = () => {
 
   fitAddon = new FitAddon()
   searchAddon = new SearchAddon({
-    highlightLimit: 1000
+    highlightLimit: 1000,
+    highlightStyle: {
+      match: { backgroundColor: '#ffd700', color: '#000000', fontWeight: 'bold' },
+      currentMatch: { backgroundColor: '#ff8c00', color: '#ffffff', fontWeight: 'bold' }
+    }
   })
 
   terminal.loadAddon(fitAddon)
@@ -348,6 +352,10 @@ const performSearch = () => {
     return
   }
 
+  // 清除之前的搜索结果
+  terminal.clearSelection()
+  searchAddon.clearDecorations()
+
   // 计算总匹配数 - 遍历所有日志
   let matchCount = 0
   const searchStr = searchQuery.value.toLowerCase()
@@ -420,6 +428,9 @@ const clearSearch = () => {
   clearSearchDebounce()
   if (terminal) {
     terminal.clearSelection()
+  }
+  if (searchAddon) {
+    searchAddon.clearDecorations()
   }
 }
 
@@ -749,6 +760,15 @@ defineExpose({
   background-color: #ff8c00 !important;
   color: #ffffff !important;
   font-weight: bold;
+}
+
+/* xterm SearchAddon 高亮样式 */
+.terminal-container ::v-deep(.xterm .xterm-find-match-decoration) {
+  background-color: #ffd700 !important;
+}
+
+.terminal-container ::v-deep(.xterm .xterm-find-match-current-decoration) {
+  background-color: #ff8c00 !important;
 }
 
 /* 搜索浮窗 */
