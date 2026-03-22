@@ -239,11 +239,7 @@ const initTerminal = () => {
 
   fitAddon = new FitAddon()
   searchAddon = new SearchAddon({
-    highlightLimit: 1000,
-    highlightStyle: {
-      match: { backgroundColor: '#ffd700', color: '#000000', fontWeight: 'bold' },
-      currentMatch: { backgroundColor: '#ff8c00', color: '#ffffff', fontWeight: 'bold' }
-    }
+    highlightLimit: 1000
   })
 
   terminal.loadAddon(fitAddon)
@@ -354,37 +350,26 @@ const performSearch = () => {
 
   // 清除之前的搜索结果
   terminal.clearSelection()
-  searchAddon.clearDecorations()
-
-  // 计算总匹配数 - 遍历所有日志
-  let matchCount = 0
-  const searchStr = searchQuery.value.toLowerCase()
-
-  for (let i = 0; i < logEntries.length; i++) {
-    const log = portLogs.value?.find(l => l.id === logEntries[i].id)
-    if (log) {
-      const lineText = formatLogLine(log).toLowerCase()
-      let pos = 0
-      while ((pos = lineText.indexOf(searchStr, pos)) !== -1) {
-        matchCount++
-        pos += searchStr.length
-      }
-    }
+  if (searchAddon.clearDecorations) {
+    searchAddon.clearDecorations()
   }
 
-  // 使用 xterm SearchAddon 查找第一个匹配项
-  const found = searchAddon.findNext(searchQuery.value, {
+  // 使用 xterm SearchAddon 查找所有匹配项
+  const searchOptions = {
     caseSensitive: false,
     wholeWord: false,
-    regex: false
-  })
+    regex: false,
+    decorations: true
+  }
 
-  if (found) {
-    searchMatchCount.value = matchCount > 0 ? matchCount : 1
-    currentMatchIndex.value = 1
-  } else {
-    searchMatchCount.value = 0
-    currentMatchIndex.value = 0
+  // 查找所有匹配项
+  const matches = searchAddon.findMatches(searchQuery.value)
+  searchMatchCount.value = matches?.length || 0
+  currentMatchIndex.value = matches?.length > 0 ? 1 : 0
+
+  // 定位到第一个匹配项
+  if (matches && matches.length > 0) {
+    searchAddon.findNext(searchQuery.value, searchOptions)
   }
 }
 
@@ -762,13 +747,15 @@ defineExpose({
   font-weight: bold;
 }
 
-/* xterm SearchAddon 高亮样式 */
-.terminal-container ::v-deep(.xterm .xterm-find-match-decoration) {
+/* xterm 5.x search addon 高亮样式 */
+.terminal-container ::v-deep(span.xterm-highlight) {
   background-color: #ffd700 !important;
+  color: #000000 !important;
 }
 
-.terminal-container ::v-deep(.xterm .xterm-find-match-current-decoration) {
-  background-color: #ff8c00 !important;
+.terminal-container ::v-deep(.xterm .xterm-selection-match) {
+  background-color: #ffd700 !important;
+  color: #000000 !important;
 }
 
 /* 搜索浮窗 */
