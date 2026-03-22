@@ -21,7 +21,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   unmaximizeWindow: () => ipcRenderer.send('window:unmaximize'),
   closeWindow: () => ipcRenderer.send('window:close'),
-  moveWindow: (x, y) => ipcRenderer.send('window:move', { x, y }),
 
   // Window State Events
   onWindowMaximized: (callback) => {

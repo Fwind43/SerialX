@@ -459,21 +459,6 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.on('window:move', (event, { x, y }) => {
-    // 使用 event.sender 获取发送事件的窗口
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (win) {
-      // 使用 setBounds 保持当前大小，只改变位置
-      const currentBounds = win.getBounds()
-      win.setBounds({
-        x: Math.round(x),
-        y: Math.round(y),
-        width: currentBounds.width,
-        height: currentBounds.height
-      })
-    }
-  })
-
   // 配置管理 - 常用命令持久化
   ipcMain.handle('config:load', async () => {
     return loadConfig()

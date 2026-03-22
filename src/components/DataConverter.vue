@@ -23,10 +23,6 @@ const inputUint32 = ref('')
 // 字节序：little-endian 或 big-endian
 const byteOrder = ref('little')
 
-// 独立窗口拖动相关
-const isDragging = ref(false)
-const dragStart = ref({ x: 0, y: 0 })
-
 // 监听字节序变化，重新转换
 watch(byteOrder, () => {
   if (inputHex.value) {
@@ -41,21 +37,16 @@ const debouncedConvert = (fn) => {
   debounceTimer = setTimeout(fn, 50)
 }
 
-// 独立窗口时添加全局快捷键 Alt+C 和 Ctrl+W 关闭
+// 独立窗口时添加全局快捷键
 onMounted(() => {
   if (props.standalone) {
     window.addEventListener('keydown', handleGlobalKey)
-    // 添加拖动事件监听
-    window.addEventListener('mousemove', handleDragMove)
-    window.addEventListener('mouseup', handleDragEnd)
   }
 })
 
 onBeforeUnmount(() => {
   if (props.standalone) {
     window.removeEventListener('keydown', handleGlobalKey)
-    window.removeEventListener('mousemove', handleDragMove)
-    window.removeEventListener('mouseup', handleDragEnd)
   }
 })
 
@@ -65,34 +56,6 @@ const handleGlobalKey = (e) => {
     e.preventDefault()
     closeWindow()
   }
-}
-
-// 拖动开始
-const handleDragStart = (e) => {
-  if (!props.standalone) return
-  isDragging.value = true
-  dragStart.value = {
-    x: e.screenX - window.screenX,
-    y: e.screenY - window.screenY
-  }
-  e.preventDefault()
-}
-
-// 拖动移动
-const handleDragMove = (e) => {
-  if (!isDragging.value || !props.standalone) return
-  const newX = e.screenX - dragStart.value.x
-  const newY = e.screenY - dragStart.value.y
-  // 使用 Electron API 移动窗口
-  if (window.electronAPI) {
-    window.electronAPI.moveWindow(newX, newY)
-  }
-  e.preventDefault()
-}
-
-// 拖动结束
-const handleDragEnd = () => {
-  isDragging.value = false
 }
 
 const closeWindow = () => {
@@ -356,7 +319,7 @@ const clearAll = () => {
 
 <template>
   <div class="converter-container" :class="{ standalone: standalone }">
-    <div class="converter-header" v-if="standalone" @mousedown="handleDragStart">
+    <div class="converter-header" v-if="standalone">
       <div class="header-left">
         <span class="title-icon">🔢</span>
         <span class="title-text">进制转换工具</span>
@@ -578,6 +541,11 @@ const clearAll = () => {
   border-radius: 14px 14px 0 0;
   border-bottom: none;
   box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+  -webkit-app-region: drag;
+}
+
+.standalone .header-actions {
+  -webkit-app-region: no-drag;
 }
 
 .standalone .title-icon {
