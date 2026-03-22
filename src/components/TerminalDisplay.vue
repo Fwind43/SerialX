@@ -129,23 +129,29 @@ const shouldHideLog = (log) => {
 }
 
 // 格式化日志行 - 使用 ANSI 转义码添加颜色
-const HEX_LENGTH_PER_LINE = 48 // 每行最多显示 48 个字符（约 16 个字节）
+const getHexLengthPerLine = () => {
+  // 根据终端实际列数动态计算（减去时间戳和前缀占用的空间）
+  const terminalCols = terminal?.cols || 100
+  const reservedCols = 18 // 时间戳 (8) + 空格 (1) + 前缀 (4) + 空格 (1) + 续行标记 (2) + 余量 (2)
+  return Math.max(16, terminalCols - reservedCols)
+}
 
 const formatLogLine = (log) => {
   const timestamp = log.timestamp.padEnd(8)
   const prefix = getLogPrefix(log.type)
+  const hexLengthPerLine = getHexLengthPerLine()
 
   let content = ''
   if (portDisplaySettings.value.hexReceive && log.hexData) {
-    // Hex 模式 - 长数据自动分段
+    // Hex 模式 - 长数据根据终端宽度自动分段
     const hexData = log.hexData
-    if (hexData.length <= HEX_LENGTH_PER_LINE) {
+    if (hexData.length <= hexLengthPerLine) {
       content = hexData
     } else {
       // 分段显示长数据
       const lines = []
-      for (let i = 0; i < hexData.length; i += HEX_LENGTH_PER_LINE) {
-        const segment = hexData.slice(i, i + HEX_LENGTH_PER_LINE)
+      for (let i = 0; i < hexData.length; i += hexLengthPerLine) {
+        const segment = hexData.slice(i, i + hexLengthPerLine)
         const continuation = i > 0 ? '  ' : '' // 续行标记
         lines.push(continuation + segment)
       }
@@ -248,6 +254,8 @@ const initTerminal = () => {
 const handleResize = () => {
   if (fitAddon) {
     fitAddon.fit()
+    // 终端列数变化后，刷新显示以更新换行
+    refreshDisplay()
   }
 }
 
