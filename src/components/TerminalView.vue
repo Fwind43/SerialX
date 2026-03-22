@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useSerialStore } from '../stores/serial'
 import SerialPanel from './SerialPanel.vue'
 
@@ -12,6 +12,10 @@ const splitPanes = ref([{ tabs: [], activeTab: '' }])
 const draggedData = ref(null)
 const dropZoneIndex = ref(-1)
 const dropPosition = ref('') // 'left', 'right'
+const isDraggingSeparator = ref(false)
+const draggingSeparatorIndex = ref(-1)
+const separatorStartX = ref(0)
+const draggedSeparatorEl = ref(null)
 
 // 获取所有已连接的串口
 const connectedPorts = computed(() => {
@@ -84,6 +88,16 @@ const splitPane = (paneIndex) => {
     tabs: [lastTab],
     activeTab: lastTab
   })
+}
+
+// 删除空分区
+const removeEmptyPane = (paneIndex) => {
+  // 至少保留一个分区
+  if (splitPanes.value.length <= 1) return
+  const pane = splitPanes.value[paneIndex]
+  if (pane.tabs.length > 0) return
+
+  splitPanes.value.splice(paneIndex, 1)
 }
 
 // 内容区域拖拽
@@ -194,6 +208,64 @@ const handleDragEnd = () => {
   dropZoneIndex.value = -1
   dropPosition.value = ''
 }
+
+// 分隔线拖拽调整宽度
+const handleSeparatorMouseDown = (e, index) => {
+  isDraggingSeparator.value = true
+  draggingSeparatorIndex.value = index
+  separatorStartX.value = e.clientX
+  draggedSeparatorEl.value = e.currentTarget
+  document.body.style.cursor = 'col-resize'
+  e.preventDefault()
+}
+
+const handleSeparatorMouseMove = (e) => {
+  if (!isDraggingSeparator.value || draggingSeparatorIndex.value === -1) return
+
+  const delta = e.clientX - separatorStartX.value
+  const index = draggingSeparatorIndex.value
+
+  // 最小宽度限制（像素）
+  const MIN_WIDTH = 200
+
+  const paneGroups = document.querySelectorAll('.split-pane-group')
+  const leftPane = paneGroups[index - 1]
+  const rightPane = paneGroups[index]
+
+  if (!leftPane || !rightPane) return
+
+  const leftWidth = leftPane.offsetWidth
+  const rightWidth = rightPane.offsetWidth
+
+  const newLeftWidth = leftWidth + delta
+  const newRightWidth = rightWidth - delta
+
+  // 检查是否满足最小宽度限制
+  if (newLeftWidth < MIN_WIDTH || newRightWidth < MIN_WIDTH) return
+
+  // 更新宽度 - 使用 flex 简写
+  leftPane.style.flex = `0 0 ${newLeftWidth}px`
+  rightPane.style.flex = `0 0 ${newRightWidth}px`
+
+  separatorStartX.value = e.clientX
+}
+
+const handleSeparatorMouseUp = () => {
+  isDraggingSeparator.value = false
+  draggingSeparatorIndex.value = -1
+  draggedSeparatorEl.value = null
+  document.body.style.cursor = ''
+}
+
+onMounted(() => {
+  window.addEventListener('mousemove', handleSeparatorMouseMove)
+  window.addEventListener('mouseup', handleSeparatorMouseUp)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('mousemove', handleSeparatorMouseMove)
+  window.removeEventListener('mouseup', handleSeparatorMouseUp)
+})
 </script>
 
 <template>
@@ -205,6 +277,7 @@ const handleDragEnd = () => {
         <div
           v-if="paneIndex > 0"
           class="split-separator"
+          @mousedown="handleSeparatorMouseDown($event, paneIndex)"
           @dragover="handleTabListDragOver"
           @drop="handleTabListDrop($event, paneIndex)"
         ></div>
@@ -252,6 +325,9 @@ const handleDragEnd = () => {
             <div v-else class="empty-state">
               <span class="empty-icon">📡</span>
               <p>暂无串口</p>
+              <button class="delete-empty-btn" @click="removeEmptyPane(paneIndex)" title="删除此分区">
+                删除分区
+              </button>
             </div>
           </div>
         </div>
@@ -278,26 +354,25 @@ const handleDragEnd = () => {
   position: relative;
 }
 
-/* 分隔线 */
-.split-separator {
-  width: 4px;
-  background-color: #3e3e42;
-  flex-shrink: 0;
-  cursor: pointer;
-  transition: background-color 0.15s;
-}
-
-.split-separator:hover {
-  background-color: #007acc;
-}
-
-/* 分屏组（标签 + 内容） */
 .split-pane-group {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+}
+
+/* 分隔线 */
+.split-separator {
+  width: 4px;
+  background-color: #3e3e42;
+  flex-shrink: 0;
+  cursor: col-resize;
+  transition: background-color 0.15s;
+}
+
+.split-separator:hover {
+  background-color: #007acc;
 }
 
 /* 标签栏区域 */
@@ -462,5 +537,24 @@ const handleDragEnd = () => {
 .empty-state .hint {
   color: #858585;
   font-size: 12px;
+}
+
+.delete-empty-btn {
+  margin-top: 12px;
+  padding: 6px 16px;
+  background-color: #c42b1c;
+  border: 1px solid #a02015;
+  color: #ffffff;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.delete-empty-btn:hover {
+  background-color: #d63a2a;
+  border-color: #b4281a;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(196, 43, 28, 0.3);
 }
 </style>

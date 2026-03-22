@@ -116,10 +116,15 @@ const updateLoopMaxCount = (value) => {
   serialStore.updatePortControlSettings(props.portPath, { loopMaxCount: Number(value) })
 }
 
-// 执行常用命令
-const executeCommand = async (command) => {
+// 更新分包超时
+const updatePacketTimeout = (value) => {
+  serialStore.updatePortControlSettings(props.portPath, { packetTimeout: Number(value) })
+}
+
+// 执行常用命令 - 选中后填充到输入框，不立即发送
+const executeCommand = (command) => {
   serialStore.setPortSendingData(props.portPath, command)
-  await serialStore.sendData(props.portPath)
+  serialStore.addPortLog(props.portPath, `命令 "${command}" 已填充到输入框，请按 Enter 键发送`, 'info')
 }
 
 // 获取当前串口的设置和状态
@@ -147,7 +152,7 @@ const portLogs = computed(() => {
 })
 
 const handleClearLogs = () => {
-  serialStore.portLogs.set(props.portPath, [])
+  serialStore.portLogs.value.set(props.portPath, [])
 }
 
 const handleSend = async () => {
@@ -253,7 +258,7 @@ const enabledCommands = computed(() => {
           <span class="stats-rx" title="接收">RX: {{ portStats.rxCount }}/{{ formatBytes(portStats.rxBytes) }}</span>
         </div>
         <button @click="showFilters = !showFilters" class="action-btn filter" :class="{ active: showFilters }" title="数据过滤">
-          <span>🔍</span>
+          <span>⚙️</span>
         </button>
         <button @click="handleClearLogs" class="action-btn" title="清空日志">清空</button>
         <button @click="handleDisconnect" class="action-btn disconnect" title="断开连接">断开</button>
@@ -500,6 +505,20 @@ const enabledCommands = computed(() => {
             title="设置发送次数上限，0=无限"
           />
           <span class="interval-unit">{{ portControlSettings.loopMaxCount > 0 ? '次' : '∞' }}</span>
+        </label>
+        <!-- 分包超时配置 -->
+        <label class="interval-group">
+          <span class="interval-label" title="数据包接收超时时间，超过该时间未收到完整数据包则自动分包">分包超时:</span>
+          <input
+            type="number"
+            :value="portControlSettings.packetTimeout"
+            @input="updatePacketTimeout($event.target.value)"
+            :min="100"
+            :step="100"
+            class="interval-input"
+            title="设置数据包接收超时时间（毫秒）"
+          />
+          <span class="interval-unit">ms</span>
         </label>
       </div>
     </div>

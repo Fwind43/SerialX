@@ -31,6 +31,11 @@ const searchQuery = ref('')
 const searchMatchCount = ref(0)
 const currentMatchIndex = ref(0)
 
+// 右键菜单
+const showContextMenu = ref(false)
+const contextMenuPosition = ref({ x: 0, y: 0 })
+const selectedText = ref('')
+
 // 打开搜索框
 const openSearch = () => {
   showSearch.value = true
@@ -124,14 +129,28 @@ const shouldHideLog = (log) => {
 }
 
 // 格式化日志行 - 使用 ANSI 转义码添加颜色
+const HEX_LENGTH_PER_LINE = 48 // 每行最多显示 48 个字符（约 16 个字节）
+
 const formatLogLine = (log) => {
   const timestamp = log.timestamp.padEnd(8)
   const prefix = getLogPrefix(log.type)
 
   let content = ''
   if (portDisplaySettings.value.hexReceive && log.hexData) {
-    // Hex 模式
-    content = log.hexData
+    // Hex 模式 - 长数据自动分段
+    const hexData = log.hexData
+    if (hexData.length <= HEX_LENGTH_PER_LINE) {
+      content = hexData
+    } else {
+      // 分段显示长数据
+      const lines = []
+      for (let i = 0; i < hexData.length; i += HEX_LENGTH_PER_LINE) {
+        const segment = hexData.slice(i, i + HEX_LENGTH_PER_LINE)
+        const continuation = i > 0 ? '  ' : '' // 续行标记
+        lines.push(continuation + segment)
+      }
+      content = lines.join('\n')
+    }
     if (portDisplaySettings.value.showAscii) {
       const ascii = log.hexData.split(' ').map(h => {
         const code = parseInt(h, 16)
@@ -188,7 +207,7 @@ const initTerminal = () => {
       black: '#1e1e1e',
       red: '#f44747',
       green: '#6a9955',
-      yellow: '#dcdcaa',
+      yellow: '#ffd700',
       blue: '#569cd6',
       magenta: '#c586c0',
       cyan: '#4ec9b0',
@@ -196,7 +215,7 @@ const initTerminal = () => {
       brightBlack: '#808080',
       brightRed: '#f44747',
       brightGreen: '#6a9955',
-      brightYellow: '#dcdcaa',
+      brightYellow: '#ffd700',
       brightBlue: '#569cd6',
       brightMagenta: '#c586c0',
       brightCyan: '#4ec9b0',
@@ -466,7 +485,63 @@ onMounted(() => {
   window.addEventListener('serialx-open-search', handleOpenSearch)
   // 直接监听键盘事件（捕获阶段，优先处理 Ctrl+F）
   document.addEventListener('keydown', handleKeyDown, true)
+  // 监听右键菜单
+  if (terminalContainer.value) {
+    terminalContainer.value.addEventListener('contextmenu', handleContextMenu)
+  }
+  // 点击其他地方关闭菜单
+  document.addEventListener('click', closeContextMenu)
 })
+
+// 右键菜单处理
+const handleContextMenu = (e) => {
+  e.preventDefault()
+  const text = terminal?.getSelection()?.trim()
+  if (text) {
+    selectedText.value = text
+    contextMenuPosition.value = { x: e.clientX, y: e.clientY }
+    showContextMenu.value = true
+  }
+}
+
+// 复制选中的文本
+const copySelection = async () => {
+  const text = terminal?.getSelection()
+  if (text) {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch (err) {
+      // 降级处理
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+  }
+  showContextMenu.value = false
+}
+
+// 全选
+const selectAll = () => {
+  if (terminal) {
+    const range = document.createRange()
+    range.selectNodeContents(terminal.element)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+  }
+  showContextMenu.value = false
+}
+
+// 关闭右键菜单
+const closeContextMenu = (e) => {
+  // 如果点击的是菜单内部，不关闭
+  if (e && e.target && e.target.closest('.context-menu')) return
+  showContextMenu.value = false
+  selectedText.value = ''
+}
 
 // 组件卸载
 onUnmounted(() => {
@@ -474,6 +549,9 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleGlobalKeyDown, true)
   document.removeEventListener('keydown', handleKeyDown, true)
   window.removeEventListener('serialx-open-search', handleOpenSearch)
+  if (terminalContainer.value) {
+    terminalContainer.value.removeEventListener('contextmenu', handleContextMenu)
+  }
   if (terminal) {
     terminal.dispose()
     terminal = null
@@ -513,6 +591,23 @@ defineExpose({
             <span>✕</span>
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- 右键菜单 -->
+    <div
+      v-if="showContextMenu"
+      class="context-menu"
+      :style="{ left: contextMenuPosition.x + 'px', top: contextMenuPosition.y + 'px' }"
+      @click.stop
+    >
+      <div class="context-menu-item" @click="copySelection">
+        <span>📋</span>
+        <span>复制</span>
+      </div>
+      <div class="context-menu-item" @click="selectAll">
+        <span>✓</span>
+        <span>全选</span>
       </div>
     </div>
 
@@ -580,6 +675,19 @@ defineExpose({
 /* 确保 xterm 内部元素不显示额外边框 */
 .terminal-container ::v-deep(.xterm) {
   background: transparent !important;
+}
+
+/* 搜索高亮样式 - 鲜艳黄色 */
+.terminal-container ::v-deep(.xterm-find-match) {
+  background-color: #ffd700 !important;
+  color: #000000 !important;
+  font-weight: bold;
+}
+
+.terminal-container ::v-deep(.xterm-find-match-current) {
+  background-color: #ff8c00 !important;
+  color: #ffffff !important;
+  font-weight: bold;
 }
 
 /* 搜索浮窗 */
@@ -662,5 +770,43 @@ defineExpose({
 .search-btn.close:hover {
   background-color: #c42b1c;
   border-color: #a02015;
+}
+
+/* 右键菜单 */
+.context-menu {
+  position: fixed;
+  background-color: #2d2d30;
+  border: 1px solid #3e3e42;
+  border-radius: 6px;
+  padding: 4px 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  min-width: 120px;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: #cccccc;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.context-menu-item:hover {
+  background-color: #007acc;
+  color: #ffffff;
+}
+
+.context-menu-item span:first-child {
+  font-size: 14px;
 }
 </style>

@@ -31,7 +31,7 @@ export const useSerialStore = defineStore('serial', () => {
   const portDisplaySettings = ref(new Map()) // path -> { hexReceive: boolean, showAscii: boolean }
 
   // 每个串口的控制设置（独立配置）
-  const portControlSettings = ref(new Map()) // path -> { isAutoScroll: boolean, isLoopSend: boolean, loopInterval: number, loopMaxCount: number, hexSend: boolean }
+  const portControlSettings = ref(new Map()) // path -> { isAutoScroll: boolean, isLoopSend: boolean, loopInterval: number, loopMaxCount: number, hexSend: boolean, packetTimeout: number }
 
   // 获取串口控制设置
   const getPortControlSettings = (portPath) => {
@@ -41,7 +41,8 @@ export const useSerialStore = defineStore('serial', () => {
         isLoopSend: false,
         loopInterval: 1000,
         loopMaxCount: 0,
-        hexSend: false
+        hexSend: false,
+        packetTimeout: 500 // 分包超时时间（毫秒）
       })
     }
     return portControlSettings.value.get(portPath)
@@ -240,6 +241,8 @@ export const useSerialStore = defineStore('serial', () => {
   const setPortFilters = (portPath, filters) => {
     const current = getPortFilters(portPath)
     portFilters.value.set(portPath, { ...current, ...filters })
+    // 配置变更时自动保存
+    saveSessionState()
   }
 
   // 检查日志是否应该被过滤（返回 true 表示过滤掉）
@@ -618,7 +621,13 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   function addLog(message, type = 'info') {
-    const timestamp = new Date().toLocaleTimeString()
+    const timestamp = new Date().toLocaleTimeString('zh-CN', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      fractionalSecondDigits: 3
+    })
     logs.value.push({
       id: Date.now() + Math.random(),
       timestamp,
@@ -661,7 +670,13 @@ export const useSerialStore = defineStore('serial', () => {
       portLogs.value.set(portPath, [])
     }
 
-    const timestamp = new Date().toLocaleTimeString()
+    const timestamp = new Date().toLocaleTimeString('zh-CN', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      fractionalSecondDigits: 3
+    })
     const logEntry = {
       id: Date.now() + Math.random(),
       timestamp,
