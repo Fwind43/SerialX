@@ -254,13 +254,21 @@ const initTerminal = () => {
   window.addEventListener('resize', handleResize)
 }
 
-// 处理窗口大小变化
+// 处理窗口大小变化 - 防抖处理
+let resizeDebounceTimer = null
 const handleResize = () => {
-  if (fitAddon) {
-    fitAddon.fit()
-    // 终端列数变化后，刷新显示以更新换行
-    refreshDisplay()
+  if (resizeDebounceTimer) {
+    clearTimeout(resizeDebounceTimer)
   }
+  resizeDebounceTimer = setTimeout(() => {
+    if (fitAddon) {
+      fitAddon.fit()
+      // 等待终端列数更新后再刷新显示
+      nextTick(() => {
+        refreshDisplay()
+      })
+    }
+  }, 100) // 100ms 防抖
 }
 
 // 加载历史日志
@@ -563,6 +571,9 @@ const closeContextMenu = (e) => {
 // 组件卸载
 onUnmounted(() => {
   clearSearchDebounce()
+  if (resizeDebounceTimer) {
+    clearTimeout(resizeDebounceTimer)
+  }
   document.removeEventListener('keydown', handleGlobalKeyDown, true)
   document.removeEventListener('keydown', handleKeyDown, true)
   window.removeEventListener('serialx-open-search', handleOpenSearch)
