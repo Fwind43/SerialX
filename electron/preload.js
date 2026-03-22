@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Config Operations - 配置持久化
   loadConfig: () => ipcRenderer.invoke('config:load'),
   saveConfig: (config) => ipcRenderer.invoke('config:save', config),
+  exportSettings: (payload) => ipcRenderer.invoke('settings:export', payload),
+  importSettings: () => ipcRenderer.invoke('settings:import'),
 
   // Window Operations
   openConverterWindow: () => ipcRenderer.send('window:open-converter'),

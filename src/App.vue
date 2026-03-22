@@ -52,10 +52,12 @@ const openCommandPalette = () => {
   showCommandPalette.value = true
 }
 
+const showSettingsMessage = (message) => {
+  window.alert(message)
+}
+
 // 全局键盘快捷键处理
 const handleGlobalKeydown = (e) => {
-  console.log('[App] Keydown:', e.key, 'Ctrl:', e.ctrlKey)
-
   // Ctrl+P 打开快捷命令面板
   if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
     // 检查是否有输入框获得焦点
@@ -73,7 +75,6 @@ const handleGlobalKeydown = (e) => {
     const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
     if (!isInputFocused) {
       e.preventDefault()
-      console.log('[App] Dispatching serialx-open-search')
       // 触发自定义事件，由 TerminalDisplay 组件监听
       window.dispatchEvent(new CustomEvent('serialx-open-search', {
         detail: {
@@ -126,6 +127,46 @@ const openAppearanceSettings = () => {
   showSettingsMenu.value = false
 }
 
+const exportSettings = async () => {
+  showSettingsMenu.value = false
+  const result = await window.electronAPI?.exportSettings(serialStore.buildSettingsSnapshot())
+  if (!result || result.canceled) return
+
+  if (result.success) {
+    showSettingsMessage(`设置已导出到：\n${result.filePath}`)
+    return
+  }
+
+  showSettingsMessage(`导出设置失败：${result.error || '未知错误'}`)
+}
+
+const importSettings = async () => {
+  showSettingsMenu.value = false
+  const result = await window.electronAPI?.importSettings()
+  if (!result || result.canceled) return
+
+  if (!result.success) {
+    showSettingsMessage(`导入设置失败：${result.error || '未知错误'}`)
+    return
+  }
+
+  try {
+    await serialStore.applySettingsSnapshot(result.data)
+    showSettingsMessage(`设置已导入：\n${result.filePath}`)
+  } catch (error) {
+    showSettingsMessage(`应用设置失败：${error.message}`)
+  }
+}
+
+const resetAllSettings = async () => {
+  showSettingsMenu.value = false
+  const confirmed = window.confirm('确定要恢复默认设置吗？这会重置终端外观、串口默认参数和常用命令。')
+  if (!confirmed) return
+
+  await serialStore.resetAppSettings()
+  showSettingsMessage('已恢复默认设置。')
+}
+
 // 关闭命令配置
 const closeCommandsModal = () => {
   showCommandsModal.value = false
@@ -165,7 +206,6 @@ onMounted(async () => {
 
   // 监听全局键盘快捷键
   window.addEventListener('keydown', handleGlobalKeydown)
-  console.log('[App] Registered keydown listener on window')
 
   // 监听命令发送事件
   window.addEventListener('serialx-send-command', handleSendCommand)
@@ -211,6 +251,18 @@ document.addEventListener('click', handleClickOutside)
               <div class="dropdown-item" @click="openAppearanceSettings">
                 <span class="dropdown-icon">🎨</span>
                 <span class="dropdown-text">终端外观设置</span>
+              </div>
+              <div class="dropdown-item" @click="exportSettings">
+                <span class="dropdown-icon">📤</span>
+                <span class="dropdown-text">导出设置</span>
+              </div>
+              <div class="dropdown-item" @click="importSettings">
+                <span class="dropdown-icon">📥</span>
+                <span class="dropdown-text">导入设置</span>
+              </div>
+              <div class="dropdown-item danger" @click="resetAllSettings">
+                <span class="dropdown-icon">↺</span>
+                <span class="dropdown-text">恢复默认设置</span>
               </div>
               <div class="dropdown-item" @click="openCommandsConfig">
                 <span class="dropdown-icon">⚡</span>
@@ -391,6 +443,10 @@ document.addEventListener('click', handleClickOutside)
 
 .dropdown-item:hover {
   background-color: rgba(255, 255, 255, 0.1);
+}
+
+.dropdown-item.danger:hover {
+  background-color: rgba(196, 43, 28, 0.2);
 }
 
 .dropdown-icon {

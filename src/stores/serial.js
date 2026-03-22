@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch, reactive } from 'vue'
 
 export const useSerialStore = defineStore('serial', () => {
+  const SETTINGS_SNAPSHOT_VERSION = 1
+
   const createDefaultTerminalAppearance = () => ({
     terminalBackground: '#11161c',
     terminalForeground: '#d7e0ea',
@@ -13,6 +15,20 @@ export const useSerialStore = defineStore('serial', () => {
     searchCurrentMatchTextColor: '#161b22',
     searchLineHighlightColor: 'rgba(255, 214, 102, 0.16)'
   })
+
+  const createDefaultSettings = () => ({
+    baudRate: 9600,
+    dataBits: 8,
+    stopBits: 1,
+    parity: 'none'
+  })
+
+  const createDefaultCommonCommands = () => ([
+    { id: 1, name: '复位', command: 'RESET', enabled: true },
+    { id: 2, name: '状态查询', command: 'STATUS?', enabled: true },
+    { id: 3, name: '版本信息', command: 'VERSION', enabled: true },
+    { id: 4, name: '帮助', command: 'HELP', enabled: true }
+  ])
 
   // State
   const ports = ref([])
@@ -26,12 +42,7 @@ export const useSerialStore = defineStore('serial', () => {
   const portFilters = ref(new Map()) // path -> { enabled, mode, matchMode, pattern } mode: 'discard' | 'hide', matchMode: 'keyword' | 'regex'
 
   // 当前选中的串口设置（用于新建连接）
-  const defaultSettings = ref({
-    baudRate: 9600,
-    dataBits: 8,
-    stopBits: 1,
-    parity: 'none'
-  })
+  const defaultSettings = ref(createDefaultSettings())
 
   // 全局配置
   const logs = ref([])
@@ -149,6 +160,49 @@ export const useSerialStore = defineStore('serial', () => {
     saveSessionState()
   }
 
+  const buildSettingsSnapshot = () => ({
+    version: SETTINGS_SNAPSHOT_VERSION,
+    exportedAt: new Date().toISOString(),
+    defaultSettings: { ...defaultSettings.value },
+    portDisplaySettings: Object.fromEntries(portDisplaySettings.value),
+    portControlSettings: Object.fromEntries(portControlSettings.value),
+    commonCommands: JSON.parse(JSON.stringify(commonCommands.value)),
+    terminalAppearance: { ...terminalAppearance.value }
+  })
+
+  const applySettingsSnapshot = async (snapshot = {}) => {
+    if (!snapshot || typeof snapshot !== 'object') {
+      throw new Error('设置文件内容无效')
+    }
+
+    defaultSettings.value = {
+      ...createDefaultSettings(),
+      ...(snapshot.defaultSettings || {})
+    }
+    portDisplaySettings.value = new Map(Object.entries(snapshot.portDisplaySettings || {}))
+    portControlSettings.value = new Map(Object.entries(snapshot.portControlSettings || {}))
+    terminalAppearance.value = {
+      ...createDefaultTerminalAppearance(),
+      ...(snapshot.terminalAppearance || {})
+    }
+    commonCommands.value = Array.isArray(snapshot.commonCommands)
+      ? JSON.parse(JSON.stringify(snapshot.commonCommands))
+      : createDefaultCommonCommands()
+
+    await saveSessionState()
+    await saveCommonCommands()
+  }
+
+  const resetAppSettings = async () => {
+    await applySettingsSnapshot({
+      defaultSettings: createDefaultSettings(),
+      portDisplaySettings: {},
+      portControlSettings: {},
+      commonCommands: createDefaultCommonCommands(),
+      terminalAppearance: createDefaultTerminalAppearance()
+    })
+  }
+
   // 保存会话状态到本地存储
   const saveSessionState = async () => {
     try {
@@ -206,22 +260,12 @@ export const useSerialStore = defineStore('serial', () => {
         commonCommands.value = config.commonCommands
       } else {
         // 使用默认配置
-        commonCommands.value = [
-          { id: 1, name: '复位', command: 'RESET', enabled: true },
-          { id: 2, name: '状态查询', command: 'STATUS?', enabled: true },
-          { id: 3, name: '版本信息', command: 'VERSION', enabled: true },
-          { id: 4, name: '帮助', command: 'HELP', enabled: true }
-        ]
+        commonCommands.value = createDefaultCommonCommands()
       }
     } catch (error) {
       console.error('[Store] Error loading config:', error)
       // 使用默认配置
-      commonCommands.value = [
-        { id: 1, name: '复位', command: 'RESET', enabled: true },
-        { id: 2, name: '状态查询', command: 'STATUS?', enabled: true },
-        { id: 3, name: '版本信息', command: 'VERSION', enabled: true },
-        { id: 4, name: '帮助', command: 'HELP', enabled: true }
-      ]
+      commonCommands.value = createDefaultCommonCommands()
     }
   }
 
@@ -955,6 +999,9 @@ export const useSerialStore = defineStore('serial', () => {
     updatePortControlSettings,
     updateTerminalAppearance,
     resetTerminalAppearance,
+    buildSettingsSnapshot,
+    applySettingsSnapshot,
+    resetAppSettings,
     // Hex 工具函数
     hexToBytes,
     bytesToHex,

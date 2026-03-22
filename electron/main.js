@@ -59,6 +59,56 @@ function saveConfig(config) {
   }
 }
 
+async function exportSettingsFile(payload) {
+  try {
+    const defaultFileName = `serialx-settings-${new Date().toISOString().slice(0, 10)}.json`
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: '导出 SerialX 设置',
+      defaultPath: path.join(app.getPath('documents'), defaultFileName),
+      filters: [
+        { name: 'JSON Files', extensions: ['json'] }
+      ]
+    })
+
+    if (canceled || !filePath) {
+      return { success: false, canceled: true }
+    }
+
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8')
+    return { success: true, filePath }
+  } catch (error) {
+    safeErrorLog('[Settings] Error exporting settings:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+async function importSettingsFile() {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: '导入 SerialX 设置',
+      properties: ['openFile'],
+      filters: [
+        { name: 'JSON Files', extensions: ['json'] }
+      ]
+    })
+
+    if (canceled || !filePaths?.length) {
+      return { success: false, canceled: true }
+    }
+
+    const filePath = filePaths[0]
+    const content = fs.readFileSync(filePath, 'utf8')
+    return {
+      success: true,
+      filePath,
+      data: JSON.parse(content)
+    }
+  } catch (error) {
+    safeErrorLog('[Settings] Error importing settings:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 // 通过注册表获取串口列表（兼容 com0com 等虚拟串口）
 function getPortsFromRegistry() {
   try {
@@ -466,6 +516,14 @@ app.whenReady().then(() => {
 
   ipcMain.handle('config:save', async (event, config) => {
     return saveConfig(config)
+  })
+
+  ipcMain.handle('settings:export', async (event, payload) => {
+    return exportSettingsFile(payload)
+  })
+
+  ipcMain.handle('settings:import', async () => {
+    return importSettingsFile()
   })
 })
 

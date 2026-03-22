@@ -274,6 +274,13 @@ const initTerminal = () => {
   terminal.loadAddon(searchAddon)
   terminal.open(terminalContainer.value)
   fitAddon.fit()
+  terminal.attachCustomKeyEventHandler((event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && terminal?.hasSelection()) {
+      copySelection()
+      return false
+    }
+    return true
+  })
 
   // 加载历史日志
   loadHistoryLogs()
@@ -590,19 +597,25 @@ const handleGlobalKeyDown = (e) => {
 const handleOpenSearch = (event) => {
   const targetPortPath = event?.detail?.portPath
   if (targetPortPath && targetPortPath !== props.portPath) return
-  console.log('[TerminalDisplay] Received serialx-open-search')
   serialStore.selectedPort = props.portPath
   openSearch()
 }
 
 // 直接在组件内监听键盘事件（捕获阶段）
 const handleKeyDown = (e) => {
-  console.log('[TerminalDisplay] Keydown:', e.key, 'Ctrl:', e.ctrlKey)
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && serialStore.selectedPort === props.portPath) {
+    const selection = terminal?.getSelection()
+    if (selection) {
+      e.preventDefault()
+      e.stopPropagation()
+      copySelection()
+    }
+    return
+  }
 
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && serialStore.selectedPort === props.portPath) {
     e.preventDefault()
     e.stopPropagation()
-    console.log('[TerminalDisplay] Opening search')
     openSearch()
   }
 }
