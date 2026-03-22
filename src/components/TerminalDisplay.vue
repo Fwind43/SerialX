@@ -271,6 +271,17 @@ const handleResize = () => {
   }, 100) // 100ms 防抖
 }
 
+// ResizeObserver 监听容器大小变化
+let resizeObserver = null
+const initResizeObserver = () => {
+  if (!terminalContainer.value || resizeObserver) return
+
+  resizeObserver = new ResizeObserver(() => {
+    handleResize()
+  })
+  resizeObserver.observe(terminalContainer.value)
+}
+
 // 加载历史日志
 const loadHistoryLogs = () => {
   if (!terminal || !portLogs.value) return
@@ -503,6 +514,7 @@ watch(() => portDisplaySettings.value.hexReceive, () => {
 onMounted(() => {
   nextTick(() => {
     initTerminal()
+    initResizeObserver()
   })
   // 监听全局键盘事件（F3、Escape）
   document.addEventListener('keydown', handleGlobalKeyDown, true)
@@ -573,6 +585,10 @@ onUnmounted(() => {
   clearSearchDebounce()
   if (resizeDebounceTimer) {
     clearTimeout(resizeDebounceTimer)
+  }
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
   }
   document.removeEventListener('keydown', handleGlobalKeyDown, true)
   document.removeEventListener('keydown', handleKeyDown, true)
