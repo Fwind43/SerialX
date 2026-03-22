@@ -15,7 +15,8 @@ const dropPosition = ref('') // 'left', 'right'
 const isDraggingSeparator = ref(false)
 const draggingSeparatorIndex = ref(-1)
 const separatorStartX = ref(0)
-const draggedSeparatorEl = ref(null)
+const initialLeftWidth = ref(0)
+const initialRightWidth = ref(0)
 
 // 获取所有已连接的串口
 const connectedPorts = computed(() => {
@@ -214,7 +215,16 @@ const handleSeparatorMouseDown = (e, index) => {
   isDraggingSeparator.value = true
   draggingSeparatorIndex.value = index
   separatorStartX.value = e.clientX
-  draggedSeparatorEl.value = e.currentTarget
+
+  const paneGroups = document.querySelectorAll('.split-pane-group')
+  const leftPane = paneGroups[index - 1]
+  const rightPane = paneGroups[index]
+
+  if (leftPane && rightPane) {
+    initialLeftWidth.value = leftPane.offsetWidth
+    initialRightWidth.value = rightPane.offsetWidth
+  }
+
   document.body.style.cursor = 'col-resize'
   e.preventDefault()
 }
@@ -234,37 +244,72 @@ const handleSeparatorMouseMove = (e) => {
 
   if (!leftPane || !rightPane) return
 
-  const leftWidth = leftPane.offsetWidth
-  const rightWidth = rightPane.offsetWidth
-
-  const newLeftWidth = leftWidth + delta
-  const newRightWidth = rightWidth - delta
+  // 计算新宽度（基于初始宽度）
+  const newLeftWidth = initialLeftWidth.value + delta
+  const newRightWidth = initialRightWidth.value - delta
 
   // 检查是否满足最小宽度限制
   if (newLeftWidth < MIN_WIDTH || newRightWidth < MIN_WIDTH) return
 
-  // 更新宽度 - 使用 flex 简写
+  // 更新宽度
   leftPane.style.flex = `0 0 ${newLeftWidth}px`
   rightPane.style.flex = `0 0 ${newRightWidth}px`
-
-  separatorStartX.value = e.clientX
 }
 
 const handleSeparatorMouseUp = () => {
   isDraggingSeparator.value = false
   draggingSeparatorIndex.value = -1
-  draggedSeparatorEl.value = null
   document.body.style.cursor = ''
+}
+
+// 窗口大小改变时，调整分区宽度比例
+const handleResize = () => {
+  if (isDraggingSeparator.value) return
+
+  const paneGroups = document.querySelectorAll('.split-pane-group')
+  const separators = document.querySelectorAll('.split-separator')
+
+  if (paneGroups.length === 0) return
+
+  // 计算当前总宽度
+  let totalWidth = 0
+  const widths = []
+  paneGroups.forEach(pane => {
+    const width = pane.offsetWidth
+    widths.push(width)
+    totalWidth += width
+  })
+
+  // 添加分隔线宽度
+  totalWidth += separators.length * 4
+
+  // 获取容器宽度
+  const container = document.querySelector('.content-container')
+  if (!container) return
+
+  const containerWidth = container.offsetWidth
+
+  // 如果总宽度与容器宽度差异不大，不调整
+  if (Math.abs(totalWidth - containerWidth) < 10) return
+
+  // 按比例调整每个分区宽度
+  const scale = containerWidth / totalWidth
+  paneGroups.forEach((pane, index) => {
+    const newWidth = Math.max(200, Math.floor(widths[index] * scale))
+    pane.style.flex = `0 0 ${newWidth}px`
+  })
 }
 
 onMounted(() => {
   window.addEventListener('mousemove', handleSeparatorMouseMove)
   window.addEventListener('mouseup', handleSeparatorMouseUp)
+  window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
   window.removeEventListener('mousemove', handleSeparatorMouseMove)
   window.removeEventListener('mouseup', handleSeparatorMouseUp)
+  window.removeEventListener('resize', handleResize)
 })
 </script>
 
