@@ -460,8 +460,10 @@ app.whenReady().then(() => {
   })
 
   ipcMain.on('window:move', (event, { x, y }) => {
-    if (mainWindow) {
-      mainWindow.setPosition(Math.round(x), Math.round(y))
+    // 使用 event.sender 获取发送事件的窗口
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) {
+      win.setPosition(Math.round(x), Math.round(y))
     }
   })
 
