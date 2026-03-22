@@ -652,18 +652,18 @@ defineExpose({
   position: relative;
   background-color: #1e1e1e;
   min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .terminal-container {
+  flex: 1;
   width: 100%;
-  height: 100%;
+  position: relative;
   padding: 4px 8px;
   box-sizing: border-box;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  overflow: hidden;
 }
 
 /* 隐藏 xterm 默认滚动条样式，使用自定义样式 */
@@ -703,12 +703,17 @@ defineExpose({
 /* 确保 xterm 内部元素不显示额外边框 */
 .terminal-container ::v-deep(.xterm) {
   background: transparent !important;
+  width: 100% !important;
+  height: 100% !important;
 }
 
-/* 确保 xterm screen 容器宽度动态 */
+/* 确保 xterm 所有内部容器宽度动态 */
+.terminal-container ::v-deep(.xterm .xterm-screen),
 .terminal-container ::v-deep(.xterm .xterm-screen-canvas),
-.terminal-container ::v-deep(.xterm .xterm-rows) {
+.terminal-container ::v-deep(.xterm .xterm-rows),
+.terminal-container ::v-deep(.xterm .xterm-scroll-area) {
   width: 100% !important;
+  max-width: 100% !important;
 }
 
 /* 搜索高亮样式 - 鲜艳黄色 */
