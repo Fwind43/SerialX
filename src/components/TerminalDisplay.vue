@@ -133,32 +133,36 @@ const getHexLengthPerLine = () => {
   // 根据终端实际列数动态计算（减去时间戳和前缀占用的空间）
   const terminalCols = terminal?.cols || 100
   const reservedCols = 18 // 时间戳 (8) + 空格 (1) + 前缀 (4) + 空格 (1) + 续行标记 (2) + 余量 (2)
-  return Math.max(16, terminalCols - reservedCols)
+  return Math.max(4, terminalCols - reservedCols)
 }
 
 const formatLogLine = (log) => {
   const timestamp = log.timestamp.padEnd(8)
   const prefix = getLogPrefix(log.type)
-  const hexLengthPerLine = getHexLengthPerLine()
+  const maxCharsPerLine = getHexLengthPerLine()
 
   let content = ''
   if (portDisplaySettings.value.hexReceive && log.hexData) {
-    // Hex 模式 - 长数据根据终端宽度自动分段
+    // Hex 模式 - hexData 是带空格的格式（如 "41 42 43"），每字节占 3 字符
     const hexData = log.hexData
-    if (hexData.length <= hexLengthPerLine) {
+    // 计算每行能容纳的最大字节数（每字节 3 字符：2 位 hex+1 空格）
+    const bytesPerLine = Math.floor(maxCharsPerLine / 3)
+
+    if (hexData.length <= maxCharsPerLine) {
       content = hexData
     } else {
-      // 分段显示长数据
+      // 分段显示长数据 - 按字节分割
       const lines = []
-      for (let i = 0; i < hexData.length; i += hexLengthPerLine) {
-        const segment = hexData.slice(i, i + hexLengthPerLine)
+      const hexBytes = hexData.split(' ') // 按空格分割成字节数组
+      for (let i = 0; i < hexBytes.length; i += bytesPerLine) {
+        const segment = hexBytes.slice(i, i + bytesPerLine).join(' ')
         const continuation = i > 0 ? '  ' : '' // 续行标记
         lines.push(continuation + segment)
       }
       content = lines.join('\n')
     }
     if (portDisplaySettings.value.showAscii) {
-      const ascii = log.hexData.split(' ').map(h => {
+      const ascii = hexData.split(' ').map(h => {
         const code = parseInt(h, 16)
         return (code >= 32 && code <= 126) ? String.fromCharCode(code) : '.'
       }).join('')
