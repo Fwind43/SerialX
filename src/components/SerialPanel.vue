@@ -152,7 +152,7 @@ const portLogs = computed(() => {
 })
 
 const handleClearLogs = () => {
-  serialStore.portLogs.value.set(props.portPath, [])
+  serialStore.clearPortLogs(props.portPath)
 }
 
 const handleSend = async () => {

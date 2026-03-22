@@ -719,6 +719,13 @@ export const useSerialStore = defineStore('serial', () => {
     portLogs.value.clear()
   }
 
+  function clearPortLogs(portPath) {
+    // 创建新 Map 触发响应式更新
+    const newMap = new Map(portLogs.value)
+    newMap.set(portPath, [])
+    portLogs.value = newMap
+  }
+
   function formatDisplayData(data) {
     return data
   }
@@ -837,6 +844,7 @@ export const useSerialStore = defineStore('serial', () => {
     addPortLog,
     getPortLogs,
     clearLogs,
+    clearPortLogs,
     formatDisplayData,
     updateDefaultSetting,
     setupEventListeners,
