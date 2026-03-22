@@ -716,6 +716,12 @@ defineExpose({
   max-width: 100% !important;
 }
 
+/* 修复 xterm-rows 子 div 宽度 - 这些是实际的行元素 */
+.terminal-container ::v-deep(.xterm-rows > div) {
+  width: auto !important;
+  max-width: 100% !important;
+}
+
 /* 搜索高亮样式 - 鲜艳黄色 */
 .terminal-container ::v-deep(.xterm-find-match) {
   background-color: #ffd700 !important;
