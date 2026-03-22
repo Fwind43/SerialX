@@ -15,15 +15,20 @@ const props = defineProps({
 
 const serialStore = useSerialStore()
 const terminalContainer = ref(null)
+const searchInput = ref(null)
 
 // xterm 实例
 let terminal = null
 let fitAddon = null
 let searchAddon = null
+let activeMatchLineHighlight = null
 
 // 日志数据跟踪
 let logEntries = [] // 存储所有日志条目 { id, line }
 const MAX_LOG_COUNT = 1000 // xterm 最大行数
+let renderedLogCount = 0
+let renderedFirstLogId = null
+let renderedLastLogId = null
 
 // 搜索功能
 const showSearch = ref(false)
@@ -43,10 +48,9 @@ const openSearch = () => {
   searchMatchCount.value = 0
   currentMatchIndex.value = 0
   nextTick(() => {
-    const input = document.querySelector('.search-input')
-    if (input) {
-      input.focus()
-      input.select()
+    if (searchInput.value) {
+      searchInput.value.focus()
+      searchInput.value.select()
     }
   })
 }
@@ -79,7 +83,20 @@ const portFilters = computed(() => {
   return serialStore.getPortFilters(props.portPath)
 })
 
-// 获取当前串口的日志
+const terminalAppearance = computed(() => {
+  return serialStore.terminalAppearance
+})
+
+const terminalCssVars = computed(() => ({
+  '--terminal-background': terminalAppearance.value.terminalBackground,
+  '--terminal-foreground': terminalAppearance.value.terminalForeground,
+  '--search-match-text-color': terminalAppearance.value.searchMatchTextColor,
+  '--search-match-shadow': `inset 0 -0.62em 0 ${terminalAppearance.value.searchMatchColor}`,
+  '--search-current-match-text-color': terminalAppearance.value.searchCurrentMatchTextColor,
+  '--search-current-match-shadow': `inset 0 -0.68em 0 ${terminalAppearance.value.searchCurrentMatchColor}`,
+  '--search-line-highlight': terminalAppearance.value.searchLineHighlightColor
+}))
+
 const portLogs = computed(() => {
   return serialStore.getPortLogs(props.portPath)
 })
@@ -193,44 +210,55 @@ const getLogPrefix = (type) => {
   const prefixes = {
     tx: '[TX]',
     rx: '[RX]',
-    info: 'ℹ️',
-    success: '✅',
-    error: '❌',
-    warning: '⚠️'
+    info: '[INFO]',
+    success: '[OK]',
+    error: '[ERR]',
+    warning: '[WARN]'
   }
-  return prefixes[type] || 'ℹ️'
+  return prefixes[type] || '[INFO]'
 }
 
-// 初始化 xterm
+const getTerminalTheme = () => ({
+  background: terminalAppearance.value.terminalBackground,
+  foreground: terminalAppearance.value.terminalForeground,
+  cursor: terminalAppearance.value.cursorColor,
+  cursorAccent: terminalAppearance.value.terminalBackground,
+  selection: terminalAppearance.value.selectionColor,
+  black: '#1e1e1e',
+  red: '#f44747',
+  green: '#6a9955',
+  yellow: '#ffd700',
+  blue: '#569cd6',
+  magenta: '#c586c0',
+  cyan: '#4ec9b0',
+  white: '#cccccc',
+  brightBlack: '#808080',
+  brightRed: '#f44747',
+  brightGreen: '#6a9955',
+  brightYellow: '#ffd700',
+  brightBlue: '#569cd6',
+  brightMagenta: '#c586c0',
+  brightCyan: '#4ec9b0',
+  brightWhite: '#ffffff'
+})
+
+const applyTerminalAppearance = () => {
+  if (!terminal) return
+  terminal.options.theme = getTerminalTheme()
+  refreshSearchResults()
+  nextTick(() => {
+    updateActiveMatchLineHighlight()
+  })
+}
+
 const initTerminal = () => {
   if (!terminalContainer.value) return
 
   terminal = new Terminal({
+    allowProposedApi: true,
     fontSize: 13,
     fontFamily: 'Consolas, "Courier New", monospace',
-    theme: {
-      background: '#1e1e1e',
-      foreground: '#cccccc',
-      cursor: '#cccccc',
-      cursorAccent: '#1e1e1e',
-      selection: '#404040',
-      black: '#1e1e1e',
-      red: '#f44747',
-      green: '#6a9955',
-      yellow: '#ffd700',
-      blue: '#569cd6',
-      magenta: '#c586c0',
-      cyan: '#4ec9b0',
-      white: '#cccccc',
-      brightBlack: '#808080',
-      brightRed: '#f44747',
-      brightGreen: '#6a9955',
-      brightYellow: '#ffd700',
-      brightBlue: '#569cd6',
-      brightMagenta: '#c586c0',
-      brightCyan: '#4ec9b0',
-      brightWhite: '#ffffff'
-    },
+    theme: getTerminalTheme(),
     scrollback: 1000,
     convertEol: true,
     cursorBlink: false,
@@ -254,6 +282,9 @@ const initTerminal = () => {
   searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
     searchMatchCount.value = resultCount
     currentMatchIndex.value = resultIndex >= 0 ? resultIndex + 1 : 0
+    nextTick(() => {
+      updateActiveMatchLineHighlight()
+    })
   })
 
   // 监听窗口大小变化
@@ -311,6 +342,11 @@ const loadHistoryLogs = () => {
     })
   }
 
+  const renderedLogs = logs.slice(startIdx)
+  renderedLogCount = logs.length
+  renderedFirstLogId = renderedLogs[0]?.id ?? null
+  renderedLastLogId = renderedLogs[renderedLogs.length - 1]?.id ?? null
+
   terminal.scrollToBottom()
 }
 
@@ -340,79 +376,162 @@ const addLogEntry = (log) => {
   }
 }
 
+const resetRenderedLogState = () => {
+  renderedLogCount = 0
+  renderedFirstLogId = null
+  renderedLastLogId = null
+}
+
+const syncTerminalLogs = () => {
+  if (!terminal) return
+
+  const logs = portLogs.value || []
+  if (logs.length === 0) {
+    terminal.clear()
+    logEntries = []
+    resetRenderedLogState()
+    performSearch()
+    return
+  }
+
+  const currentFirstLogId = logs[0]?.id ?? null
+  const currentLastLogId = logs[logs.length - 1]?.id ?? null
+  const canAppendIncrementally =
+    renderedLogCount > 0 &&
+    currentFirstLogId === renderedFirstLogId &&
+    logs.length >= renderedLogCount
+
+  if (!canAppendIncrementally) {
+    loadHistoryLogs()
+    refreshSearchResults()
+    return
+  }
+
+  for (let i = renderedLogCount; i < logs.length; i++) {
+    addLogEntry(logs[i])
+  }
+
+  renderedLogCount = logs.length
+  renderedLastLogId = currentLastLogId
+  refreshSearchResults()
+}
+
 // 刷新显示（用于设置变更）
 const refreshDisplay = () => {
   if (!terminal) return
   loadHistoryLogs()
+  refreshSearchResults()
+}
+
+const getSearchOptions = () => ({
+  caseSensitive: false,
+  wholeWord: false,
+  regex: false,
+  decorations: {
+    matchBackground: terminalAppearance.value.searchMatchColor,
+    matchBorder: terminalAppearance.value.searchMatchColor,
+    matchOverviewRuler: terminalAppearance.value.searchMatchColor,
+    activeMatchBackground: terminalAppearance.value.searchCurrentMatchColor,
+    activeMatchBorder: terminalAppearance.value.searchCurrentMatchColor,
+    activeMatchColorOverviewRuler: terminalAppearance.value.searchCurrentMatchColor
+  }
+})
+
+const clearActiveMatchLineHighlight = () => {
+  if (activeMatchLineHighlight) {
+    activeMatchLineHighlight.dispose()
+    activeMatchLineHighlight = null
+  }
+}
+
+const updateActiveMatchLineHighlight = () => {
+  clearActiveMatchLineHighlight()
+
+  if (!terminal || !searchQuery.value || searchMatchCount.value <= 0) return
+
+  const selectionPosition = terminal.getSelectionPosition()
+  if (!selectionPosition) return
+
+  const markerOffset = -terminal.buffer.active.baseY - terminal.buffer.active.cursorY + selectionPosition.start.y
+  const marker = terminal.registerMarker(markerOffset)
+  if (!marker) return
+
+  const decoration = terminal.registerDecoration({
+    marker,
+    x: 0,
+    width: terminal.cols,
+    backgroundColor: terminalAppearance.value.searchLineHighlightColor
+  })
+
+  if (!decoration) {
+    marker.dispose()
+    return
+  }
+
+  const onRenderDisposable = decoration.onRender((element) => {
+    element.classList.add('xterm-find-active-line-decoration')
+  })
+
+  activeMatchLineHighlight = {
+    dispose() {
+      onRenderDisposable.dispose()
+      decoration.dispose()
+      marker.dispose()
+    }
+  }
+}
+
+const clearSearchHighlights = () => {
+  clearActiveMatchLineHighlight()
+  if (terminal) {
+    terminal.clearSelection()
+  }
+  if (searchAddon?.clearDecorations) {
+    searchAddon.clearDecorations()
+  }
+}
+
+const refreshSearchResults = () => {
+  if (!showSearch.value || !searchQuery.value || !terminal || !searchAddon) return
+  nextTick(() => {
+    searchAddon.findNext(searchQuery.value, getSearchOptions())
+  })
 }
 
 // 搜索功能
 const performSearch = () => {
-  if (!searchQuery.value || !terminal || !searchAddon) {
+  if (!terminal || !searchAddon) {
     searchMatchCount.value = 0
     currentMatchIndex.value = 0
     return
   }
 
   // 清除之前的搜索结果
-  terminal.clearSelection()
-  if (searchAddon.clearDecorations) {
-    searchAddon.clearDecorations()
+  if (!searchQuery.value) {
+    clearSearchHighlights()
+    searchMatchCount.value = 0
+    currentMatchIndex.value = 0
+    return
   }
+
+  clearSearchHighlights()
 
   // 使用 xterm SearchAddon 查找，启用高亮装饰
-  const searchOptions = {
-    caseSensitive: false,
-    wholeWord: false,
-    regex: false,
-    decorations: {
-      matchBackground: '#ffd700',
-      matchBorder: '#ffd700',
-      matchOverviewRuler: '#ffd700',
-      activeMatchBackground: '#ff8c00',
-      activeMatchBorder: '#ff8c00',
-      activeMatchColorOverviewRuler: '#ff8c00'
-    }
-  }
 
   // 定位到第一个匹配项，onDidChangeResults 会更新计数
-  searchAddon.findNext(searchQuery.value, searchOptions)
+  searchAddon.findNext(searchQuery.value, getSearchOptions())
 }
 
 // 导航到下一个匹配项
 const goToNextMatch = () => {
   if (!searchQuery.value || !terminal || !searchAddon) return
-  searchAddon.findNext(searchQuery.value, {
-    caseSensitive: false,
-    wholeWord: false,
-    regex: false,
-    decorations: {
-      matchBackground: '#ffd700',
-      matchBorder: '#ffd700',
-      matchOverviewRuler: '#ffd700',
-      activeMatchBackground: '#ff8c00',
-      activeMatchBorder: '#ff8c00',
-      activeMatchColorOverviewRuler: '#ff8c00'
-    }
-  })
+  searchAddon.findNext(searchQuery.value, getSearchOptions())
 }
 
 // 导航到上一个匹配项
 const goToPreviousMatch = () => {
   if (!searchQuery.value || !terminal || !searchAddon) return
-  searchAddon.findPrevious(searchQuery.value, {
-    caseSensitive: false,
-    wholeWord: false,
-    regex: false,
-    decorations: {
-      matchBackground: '#ffd700',
-      matchBorder: '#ffd700',
-      matchOverviewRuler: '#ffd700',
-      activeMatchBackground: '#ff8c00',
-      activeMatchBorder: '#ff8c00',
-      activeMatchColorOverviewRuler: '#ff8c00'
-    }
-  })
+  searchAddon.findPrevious(searchQuery.value, getSearchOptions())
 }
 
 // 处理 Enter 键导航
@@ -427,12 +546,7 @@ const clearSearch = () => {
   searchMatchCount.value = 0
   currentMatchIndex.value = 0
   clearSearchDebounce()
-  if (terminal) {
-    terminal.clearSelection()
-  }
-  if (searchAddon) {
-    searchAddon.clearDecorations()
-  }
+  clearSearchHighlights()
 }
 
 // 监听搜索输入
@@ -456,12 +570,12 @@ const handleGlobalKeyDown = (e) => {
       e.preventDefault()
       e.stopPropagation()
       clearSearch()
+      return
     }
-    return
   }
 
   // F3 和 Shift+F3 导航（只有搜索打开时才响应）
-  if (showSearch.value && searchQuery.value && e.key === 'F3') {
+  if (searchQuery.value && e.key === 'F3') {
     e.preventDefault()
     e.stopPropagation()
     if (e.shiftKey) {
@@ -473,8 +587,11 @@ const handleGlobalKeyDown = (e) => {
 }
 
 // 监听全局搜索打开事件
-const handleOpenSearch = () => {
+const handleOpenSearch = (event) => {
+  const targetPortPath = event?.detail?.portPath
+  if (targetPortPath && targetPortPath !== props.portPath) return
   console.log('[TerminalDisplay] Received serialx-open-search')
+  serialStore.selectedPort = props.portPath
   openSearch()
 }
 
@@ -482,7 +599,7 @@ const handleOpenSearch = () => {
 const handleKeyDown = (e) => {
   console.log('[TerminalDisplay] Keydown:', e.key, 'Ctrl:', e.ctrlKey)
 
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && serialStore.selectedPort === props.portPath) {
     e.preventDefault()
     e.stopPropagation()
     console.log('[TerminalDisplay] Opening search')
@@ -490,31 +607,21 @@ const handleKeyDown = (e) => {
   }
 }
 
-// 监听日志变化
-watch(() => portLogs.value?.length, () => {
-  if (!terminal) return
-
-  const logs = portLogs.value
-  if (!logs || logs.length === 0) {
-    // 日志被清空
-    terminal.clear()
-    logEntries = []
-    return
-  }
-
-  // 检查是否有新日志
-  const lastLog = logs[logs.length - 1]
-  const lastEntry = logEntries[logEntries.length - 1]
-
-  if (!lastEntry || lastEntry.id !== lastLog.id) {
-    // 新日志，添加
-    addLogEntry(lastLog)
-  }
-}, { deep: true })
+// 监听日志变化，兼容批量刷新和日志裁剪
+watch(() => {
+  const logs = portLogs.value || []
+  return `${logs.length}:${logs[0]?.id ?? ''}:${logs[logs.length - 1]?.id ?? ''}`
+}, () => {
+  syncTerminalLogs()
+})
 
 // 监听设置变更
 watch([portDisplaySettings, portFilters], () => {
   refreshDisplay()
+}, { deep: true })
+
+watch(terminalAppearance, () => {
+  applyTerminalAppearance()
 }, { deep: true })
 
 // 监听 HEX 接收设置
@@ -595,6 +702,7 @@ const closeContextMenu = (e) => {
 // 组件卸载
 onUnmounted(() => {
   clearSearchDebounce()
+  resetRenderedLogState()
   if (resizeDebounceTimer) {
     clearTimeout(resizeDebounceTimer)
   }
@@ -621,11 +729,12 @@ defineExpose({
 </script>
 
 <template>
-  <div class="terminal-wrapper">
+  <div class="terminal-wrapper" :style="terminalCssVars">
     <!-- 搜索浮窗 -->
     <div v-if="showSearch" class="search-widget">
       <div class="search-input-wrapper">
         <input
+          ref="searchInput"
           v-model="searchQuery"
           type="text"
           class="search-input"
@@ -678,7 +787,7 @@ defineExpose({
   flex: 1;
   overflow: hidden;
   position: relative;
-  background-color: #1e1e1e;
+  background-color: var(--terminal-background);
   min-height: 0;
   width: 100%;
   display: flex;
@@ -697,7 +806,7 @@ defineExpose({
 /* 隐藏 xterm 默认滚动条样式，使用自定义样式 */
 .terminal-container ::v-deep(.xterm-viewport) {
   width: auto !important;
-  background-color: #1e1e1e !important;
+  background-color: var(--terminal-background) !important;
   border-left: none !important;
 }
 
@@ -706,14 +815,14 @@ defineExpose({
 }
 
 .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-track) {
-  background: #1e1e1e !important;
+  background: var(--terminal-background) !important;
   border: none !important;
 }
 
 .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-thumb) {
   background: #424242 !important;
   border-radius: 7px !important;
-  border: 2px solid #1e1e1e !important;
+  border: 2px solid var(--terminal-background) !important;
 }
 
 .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-thumb:hover) {
@@ -752,26 +861,38 @@ defineExpose({
 
 /* 搜索高亮样式 - 鲜艳黄色 */
 .terminal-container ::v-deep(.xterm-find-match) {
-  background-color: #ffd700 !important;
-  color: #000000 !important;
-  font-weight: bold;
+  background-color: transparent !important;
+  color: var(--search-match-text-color) !important;
+  font-weight: 600;
+  box-shadow: var(--search-match-shadow);
+  border-radius: 0.08em;
 }
 
 .terminal-container ::v-deep(.xterm-find-match-current) {
-  background-color: #ff8c00 !important;
-  color: #ffffff !important;
-  font-weight: bold;
+  background-color: transparent !important;
+  color: var(--search-current-match-text-color) !important;
+  font-weight: 700;
+  box-shadow: var(--search-current-match-shadow);
+  border-radius: 0.1em;
 }
 
 /* xterm 5.x search addon 高亮样式 */
 .terminal-container ::v-deep(span.xterm-highlight) {
-  background-color: #ffd700 !important;
-  color: #000000 !important;
+  background-color: transparent !important;
+  color: var(--search-match-text-color) !important;
+  box-shadow: var(--search-match-shadow);
+  border-radius: 0.08em;
 }
 
 .terminal-container ::v-deep(.xterm .xterm-selection-match) {
-  background-color: #ffd700 !important;
-  color: #000000 !important;
+  background-color: transparent !important;
+  color: var(--search-match-text-color) !important;
+  box-shadow: var(--search-match-shadow);
+}
+
+.terminal-container ::v-deep(.xterm-find-active-line-decoration) {
+  background: linear-gradient(90deg, var(--search-line-highlight), transparent 72%) !important;
+  box-shadow: none;
 }
 
 /* 搜索浮窗 */

@@ -6,6 +6,7 @@ import TerminalView from './components/TerminalView.vue'
 import DataConverter from './components/DataConverter.vue'
 import CommandsModal from './components/CommandsModal.vue'
 import CommandPalette from './components/CommandPalette.vue'
+import AppearanceSettingsModal from './components/AppearanceSettingsModal.vue'
 
 const serialStore = useSerialStore()
 
@@ -19,6 +20,7 @@ const showToolsMenu = ref(false)
 const showSettingsMenu = ref(false)
 const showCommandsModal = ref(false)
 const showCommandPalette = ref(false)
+const showAppearanceSettingsModal = ref(false)
 
 // 关闭所有菜单
 const closeAllMenus = () => {
@@ -73,7 +75,11 @@ const handleGlobalKeydown = (e) => {
       e.preventDefault()
       console.log('[App] Dispatching serialx-open-search')
       // 触发自定义事件，由 TerminalDisplay 组件监听
-      window.dispatchEvent(new CustomEvent('serialx-open-search'))
+      window.dispatchEvent(new CustomEvent('serialx-open-search', {
+        detail: {
+          portPath: serialStore.selectedPort
+        }
+      }))
     }
   }
 }
@@ -112,6 +118,11 @@ const openConverter = () => {
 // 打开常用命令配置
 const openCommandsConfig = () => {
   showCommandsModal.value = true
+  showSettingsMenu.value = false
+}
+
+const openAppearanceSettings = () => {
+  showAppearanceSettingsModal.value = true
   showSettingsMenu.value = false
 }
 
@@ -197,6 +208,10 @@ document.addEventListener('click', handleClickOutside)
           <div class="menubar-item" @click.stop="toggleSettingsMenu">
             <span class="menubar-label">设置</span>
             <div v-if="showSettingsMenu" class="menubar-dropdown">
+              <div class="dropdown-item" @click="openAppearanceSettings">
+                <span class="dropdown-icon">🎨</span>
+                <span class="dropdown-text">终端外观设置</span>
+              </div>
               <div class="dropdown-item" @click="openCommandsConfig">
                 <span class="dropdown-icon">⚡</span>
                 <span class="dropdown-text">常用命令配置</span>
@@ -270,6 +285,10 @@ document.addEventListener('click', handleClickOutside)
     />
 
     <!-- 快捷命令面板 -->
+    <AppearanceSettingsModal
+      v-model:show="showAppearanceSettingsModal"
+    />
+
     <CommandPalette
       v-model="showCommandPalette"
     />

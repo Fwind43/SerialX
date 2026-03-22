@@ -55,19 +55,13 @@ const toggleAutoScroll = () => {
 // 循环发送切换
 const toggleLoopSend = () => {
   if (portControlSettings.value.isLoopSend) {
-    // 停止循环发送
     serialStore.stopLoopSendForPort(props.portPath)
-    serialStore.updatePortControlSettings(props.portPath, { isLoopSend: false })
-    serialStore.addPortLog(props.portPath, '循环发送已停止', 'info')
   } else {
-    // 开启循环发送模式，但不立即开始发送
-    // 用户需要先输入要发送的数据，然后手动启动
     serialStore.updatePortControlSettings(props.portPath, { isLoopSend: true })
-    serialStore.addPortLog(props.portPath, '循环发送模式已开启，请点击"▶ 开始"按钮启动发送', 'info')
+    serialStore.addPortLog(props.portPath, '循环发送已启用，请点击“开始”按钮启动', 'info')
   }
 }
 
-// 启动循环发送
 const startLoopSend = () => {
   if (!serialStore.getPortSendingData(props.portPath)) {
     serialStore.addPortLog(props.portPath, '请先输入要发送的数据', 'warning')
@@ -106,7 +100,23 @@ const loopSendCount = computed(() => {
   return serialStore.portLoopSendCounts.get(props.portPath) || 0
 })
 
-// 更新循环间隔
+const loopHasStarted = computed(() => loopSendCount.value > 0)
+
+const loopActionLabel = computed(() => {
+  if (!loopHasStarted.value) return '开始'
+  return isPaused.value ? '继续' : '暂停'
+})
+
+const loopActionTitle = computed(() => {
+  if (!loopHasStarted.value) return '开始循环发送'
+  return isPaused.value ? '继续循环发送' : '暂停循环发送'
+})
+
+const loopActionClass = computed(() => {
+  if (!loopHasStarted.value || isPaused.value) return 'loop-start-btn'
+  return 'loop-pause-btn'
+})
+
 const updateLoopInterval = (value) => {
   serialStore.updatePortControlSettings(props.portPath, { loopInterval: Number(value) })
 }
@@ -153,6 +163,10 @@ const portLogs = computed(() => {
 
 const handleClearLogs = () => {
   serialStore.clearPortLogs(props.portPath)
+}
+
+const handlePanelFocus = () => {
+  serialStore.selectedPort = props.portPath
 }
 
 const handleSend = async () => {
@@ -235,7 +249,7 @@ const enabledCommands = computed(() => {
 </script>
 
 <template>
-  <div class="serial-panel">
+  <div class="serial-panel" @mousedown="handlePanelFocus">
     <!-- 面板标题栏 -->
     <div class="panel-header">
       <div class="panel-title">
@@ -467,10 +481,10 @@ const enabledCommands = computed(() => {
         <button
           v-if="portControlSettings.isLoopSend"
           @click="togglePauseLoopSend"
-          :class="isPaused ? 'loop-start-btn' : 'loop-pause-btn'"
-          :title="isPaused ? '继续循环发送' : '暂停循环发送'"
+          :class="loopActionClass"
+          :title="loopActionTitle"
         >
-          {{ isPaused ? '▶ 继续' : '⏸ 暂停' }}
+          {{ loopActionLabel }}
         </button>
         <!-- 停止按钮 -->
         <button

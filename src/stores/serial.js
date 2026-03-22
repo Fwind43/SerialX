@@ -2,6 +2,18 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch, reactive } from 'vue'
 
 export const useSerialStore = defineStore('serial', () => {
+  const createDefaultTerminalAppearance = () => ({
+    terminalBackground: '#11161c',
+    terminalForeground: '#d7e0ea',
+    cursorColor: '#8bd3ff',
+    selectionColor: 'rgba(139, 211, 255, 0.24)',
+    searchMatchColor: 'rgba(240, 230, 92, 0.62)',
+    searchMatchTextColor: '#182026',
+    searchCurrentMatchColor: 'rgba(255, 183, 77, 0.82)',
+    searchCurrentMatchTextColor: '#161b22',
+    searchLineHighlightColor: 'rgba(255, 214, 102, 0.16)'
+  })
+
   // State
   const ports = ref([])
   const selectedPort = ref(null)
@@ -23,7 +35,8 @@ export const useSerialStore = defineStore('serial', () => {
 
   // 全局配置
   const logs = ref([])
-  let loopTimer = null
+  const portLoopSendTimers = reactive(new Map()) // path -> timeout id
+  const portLoopSendInFlight = reactive(new Map()) // path -> whether send is in progress
   const portLoopSendCounts = reactive(new Map()) // path -> 已发送次数
   const portLoopSendPaused = reactive(new Map()) // path -> 是否暂停
 
@@ -32,6 +45,7 @@ export const useSerialStore = defineStore('serial', () => {
 
   // 每个串口的控制设置（独立配置）
   const portControlSettings = ref(new Map()) // path -> { isAutoScroll: boolean, isLoopSend: boolean, loopInterval: number, loopMaxCount: number, hexSend: boolean, packetTimeout: number }
+  const terminalAppearance = ref(createDefaultTerminalAppearance())
 
   // 获取串口控制设置
   const getPortControlSettings = (portPath) => {
@@ -54,6 +68,10 @@ export const useSerialStore = defineStore('serial', () => {
     portControlSettings.value.set(portPath, { ...current, ...updates })
     // 配置变更时自动保存
     saveSessionState()
+
+    if (portLoopSendTimers.has(portPath) && ('loopInterval' in updates || 'loopMaxCount' in updates || 'hexSend' in updates)) {
+      restartLoopSendForPort(portPath, { preserveCount: true, silent: true })
+    }
   }
 
   // 每个串口的统计数据
@@ -118,6 +136,19 @@ export const useSerialStore = defineStore('serial', () => {
     saveSessionState()
   }
 
+  const updateTerminalAppearance = (updates) => {
+    terminalAppearance.value = {
+      ...terminalAppearance.value,
+      ...updates
+    }
+    saveSessionState()
+  }
+
+  const resetTerminalAppearance = () => {
+    terminalAppearance.value = createDefaultTerminalAppearance()
+    saveSessionState()
+  }
+
   // 保存会话状态到本地存储
   const saveSessionState = async () => {
     try {
@@ -125,7 +156,8 @@ export const useSerialStore = defineStore('serial', () => {
         defaultSettings: defaultSettings.value,
         portDisplaySettings: Object.fromEntries(portDisplaySettings.value),
         portControlSettings: Object.fromEntries(portControlSettings.value),
-        commonCommands: commonCommands.value
+        commonCommands: commonCommands.value,
+        terminalAppearance: terminalAppearance.value
       }
       localStorage.setItem('serialx-session-state', JSON.stringify(state))
     } catch (error) {
@@ -150,6 +182,12 @@ export const useSerialStore = defineStore('serial', () => {
         }
         if (state.commonCommands) {
           commonCommands.value = state.commonCommands
+        }
+        if (state.terminalAppearance) {
+          terminalAppearance.value = {
+            ...createDefaultTerminalAppearance(),
+            ...state.terminalAppearance
+          }
         }
       }
     } catch (error) {
@@ -529,63 +567,141 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
-  function startLoopSend(portPath = null) {
-    const targetPort = portPath || selectedPort.value
-    if (!targetPort || !getPortSendingData(targetPort)) {
-      addPortLog(targetPort, '循环发送失败：没有数据', 'error')
+  function clearLoopSendTimer(portPath) {
+    const timer = portLoopSendTimers.get(portPath)
+    if (timer) {
+      clearTimeout(timer)
+      portLoopSendTimers.delete(portPath)
+    }
+  }
+
+  function scheduleLoopSend(portPath) {
+    clearLoopSendTimer(portPath)
+
+    const portControl = getPortControlSettings(portPath)
+    const interval = Math.max(100, Number(portControl.loopInterval) || 1000)
+    const timer = setTimeout(async () => {
+      await runLoopSendIteration(portPath)
+    }, interval)
+
+    portLoopSendTimers.set(portPath, timer)
+  }
+
+  async function runLoopSendIteration(portPath) {
+    if (!getPortControlSettings(portPath).isLoopSend) {
+      clearLoopSendTimer(portPath)
       return
     }
 
-    // 获取该串口的循环发送设置
-    const portControl = getPortControlSettings(targetPort)
+    if (portLoopSendPaused.get(portPath)) {
+      scheduleLoopSend(portPath)
+      return
+    }
 
-    // 初始化该串口的发送计数
-    portLoopSendCounts.set(targetPort, 0)
-    portLoopSendPaused.set(targetPort, false)
+    if (portLoopSendInFlight.get(portPath)) {
+      scheduleLoopSend(portPath)
+      return
+    }
 
-    const loopData = { port: targetPort, timer: null }
+    const dataToSend = getPortSendingData(portPath)
+    if (!dataToSend) {
+      stopLoopSendForPort(portPath, { resetCount: false, silent: true })
+      updatePortControlSettings(portPath, { isLoopSend: false })
+      addPortLog(portPath, '循环发送已停止：发送内容为空', 'warning')
+      return
+    }
 
-    // 立即发送第一帧
-    sendData(targetPort, getPortSendingData(targetPort), portControl.hexSend)
-      .then(() => {
-        portLoopSendCounts.set(targetPort, 1)
-      })
+    if (!openPorts.value.get(portPath)?.isConnected) {
+      stopLoopSendForPort(portPath, { resetCount: false, silent: true })
+      updatePortControlSettings(portPath, { isLoopSend: false })
+      addPortLog(portPath, '循环发送已停止：串口已断开', 'warning')
+      return
+    }
 
-    loopData.timer = setInterval(async () => {
-      const portStatus = openPorts.value.get(targetPort)
-      const dataToSend = getPortSendingData(targetPort)
-      // 检查是否暂停
-      const isPaused = portLoopSendPaused.get(targetPort)
-      if (isPaused) return
+    const portControl = getPortControlSettings(portPath)
+    const currentCount = portLoopSendCounts.get(portPath) || 0
+    if (portControl.loopMaxCount > 0 && currentCount >= portControl.loopMaxCount) {
+      stopLoopSendForPort(portPath, { resetCount: false, silent: true })
+      updatePortControlSettings(portPath, { isLoopSend: false })
+      addPortLog(portPath, `循环发送已完成（${currentCount}/${portControl.loopMaxCount}）`, 'info')
+      return
+    }
 
-      if (portStatus?.isConnected && dataToSend) {
-        // 检查是否达到最大发送次数
-        const currentCount = portLoopSendCounts.get(targetPort) || 0
-        if (portControl.loopMaxCount > 0 && currentCount >= portControl.loopMaxCount) {
-          stopLoopSendForPort(targetPort)
-          updatePortControlSettings(targetPort, { isLoopSend: false })
-          addPortLog(targetPort, `循环发送已达到上限 (${portControl.loopMaxCount} 次)`, 'info')
-          return
-        }
-        await sendData(targetPort, dataToSend, portControl.hexSend)
-        // 更新发送计数
-        portLoopSendCounts.set(targetPort, currentCount + 1)
+    portLoopSendInFlight.set(portPath, true)
+    try {
+      const result = await sendData(portPath, dataToSend, portControl.hexSend)
+      if (result.success) {
+        portLoopSendCounts.set(portPath, currentCount + 1)
+      } else {
+        addPortLog(portPath, `循环发送失败：${result.error}`, 'error')
       }
-    }, portControl.loopInterval)
+    } finally {
+      portLoopSendInFlight.set(portPath, false)
+    }
 
-    loopTimer = loopData.timer
-    updatePortControlSettings(targetPort, { isLoopSend: true })
-    addPortLog(targetPort, `循环发送已启动 (间隔：${portControl.loopInterval}ms${portControl.loopMaxCount > 0 ? `, 上限：${portControl.loopMaxCount} 次` : ''})`, 'info')
+    if (getPortControlSettings(portPath).isLoopSend) {
+      scheduleLoopSend(portPath)
+    }
+  }
+
+  function startLoopSend(portPath = null, options = {}) {
+    const targetPort = portPath || selectedPort.value
+    const { preserveCount = false, silent = false } = options
+
+    if (!targetPort || !getPortSendingData(targetPort)) {
+      addPortLog(targetPort, '循环发送启动失败：没有发送内容', 'error')
+      return false
+    }
+
+    if (!openPorts.value.get(targetPort)?.isConnected) {
+      addPortLog(targetPort, '循环发送启动失败：串口未连接', 'error')
+      return false
+    }
+
+    clearLoopSendTimer(targetPort)
+    portLoopSendPaused.set(targetPort, false)
+    portLoopSendInFlight.set(targetPort, false)
+
+    if (!preserveCount) {
+      portLoopSendCounts.set(targetPort, 0)
+    }
+
+    const currentControl = getPortControlSettings(targetPort)
+    if (!currentControl.isLoopSend) {
+      updatePortControlSettings(targetPort, { isLoopSend: true })
+    }
+
+    if (!silent) {
+      const currentCount = portLoopSendCounts.get(targetPort) || 0
+      addPortLog(
+        targetPort,
+        `循环发送已启动（间隔：${Math.max(100, Number(currentControl.loopInterval) || 1000)}ms${currentControl.loopMaxCount > 0 ? `，上限：${currentControl.loopMaxCount} 次` : ''}${currentCount > 0 ? `，从第 ${currentCount + 1} 次继续` : ''}）`,
+        'info'
+      )
+    }
+
+    runLoopSendIteration(targetPort)
+    return true
+  }
+
+  function restartLoopSendForPort(portPath, options = {}) {
+    if (!getPortControlSettings(portPath).isLoopSend) return false
+    stopLoopSendForPort(portPath, { resetCount: false, silent: true })
+    return startLoopSend(portPath, { preserveCount: true, silent: true, ...options })
   }
 
   function pauseLoopSendForPort(portPath) {
     portLoopSendPaused.set(portPath, true)
+    clearLoopSendTimer(portPath)
     addPortLog(portPath, '循环发送已暂停', 'info')
   }
 
   function resumeLoopSendForPort(portPath) {
     portLoopSendPaused.set(portPath, false)
-    addPortLog(portPath, '循环发送已恢复', 'info')
+    addPortLog(portPath, '循环发送已继续', 'info')
+    if (getPortControlSettings(portPath).isLoopSend) {
+      scheduleLoopSend(portPath)
+    }
   }
 
   function togglePauseLoopSendForPort(portPath) {
@@ -602,22 +718,35 @@ export const useSerialStore = defineStore('serial', () => {
     return portLoopSendPaused.get(portPath) || false
   }
 
-  function stopLoopSendForPort(portPath) {
-    // 如果只停止特定串口的循环发送
-    if (loopTimer) {
-      clearInterval(loopTimer)
-      loopTimer = null
-    }
-    // 重置暂停状态
+  function stopLoopSendForPort(portPath, options = {}) {
+    const { resetCount = true, silent = false } = options
+
+    clearLoopSendTimer(portPath)
     portLoopSendPaused.set(portPath, false)
+    portLoopSendInFlight.set(portPath, false)
+
+    if (resetCount) {
+      portLoopSendCounts.set(portPath, 0)
+    }
+
+    if (!silent && getPortControlSettings(portPath).isLoopSend) {
+      updatePortControlSettings(portPath, { isLoopSend: false })
+      addPortLog(portPath, '循环发送已停止', 'info')
+    }
   }
 
   function stopLoopSend() {
-    if (loopTimer) {
-      clearInterval(loopTimer)
-      loopTimer = null
+    const activePorts = new Set([
+      ...portLoopSendTimers.keys(),
+      ...Array.from(portControlSettings.value.entries())
+        .filter(([, settings]) => settings?.isLoopSend)
+        .map(([portPath]) => portPath)
+    ])
+
+    for (const portPath of activePorts) {
+      stopLoopSendForPort(portPath, { silent: true })
+      updatePortControlSettings(portPath, { isLoopSend: false })
     }
-    isLoopSend.value = false
   }
 
   function addLog(message, type = 'info') {
@@ -804,6 +933,7 @@ export const useSerialStore = defineStore('serial', () => {
     defaultSettings,
     logs,
     commonCommands,
+    terminalAppearance,
     portLoopSendCounts,
     portLoopSendPaused,
     // Getters
@@ -823,6 +953,8 @@ export const useSerialStore = defineStore('serial', () => {
     resetPortStats,
     getPortControlSettings,
     updatePortControlSettings,
+    updateTerminalAppearance,
+    resetTerminalAppearance,
     // Hex 工具函数
     hexToBytes,
     bytesToHex,

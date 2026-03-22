@@ -62,11 +62,16 @@ watch(() => connectedPorts.value, (newPorts) => {
       splitPanes.value.splice(emptyIndex, 1)
     }
   }
+
+  if (!newPorts.includes(serialStore.selectedPort)) {
+    serialStore.selectedPort = splitPanes.value.find(pane => pane.activeTab)?.activeTab || newPorts[0] || null
+  }
 }, { deep: true })
 
 // 选择标签
 const selectTab = (paneIndex, port) => {
   splitPanes.value[paneIndex].activeTab = port
+  serialStore.selectedPort = port
 }
 
 // 断开连接
