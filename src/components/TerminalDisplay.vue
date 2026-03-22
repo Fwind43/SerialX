@@ -250,6 +250,12 @@ const initTerminal = () => {
   // 加载历史日志
   loadHistoryLogs()
 
+  // 监听搜索结果变化
+  searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
+    searchMatchCount.value = resultCount
+    currentMatchIndex.value = resultIndex >= 0 ? resultIndex + 1 : 0
+  })
+
   // 监听窗口大小变化
   window.addEventListener('resize', handleResize)
 }
@@ -354,49 +360,59 @@ const performSearch = () => {
     searchAddon.clearDecorations()
   }
 
-  // 使用 xterm SearchAddon 查找所有匹配项
+  // 使用 xterm SearchAddon 查找，启用高亮装饰
   const searchOptions = {
     caseSensitive: false,
     wholeWord: false,
     regex: false,
-    decorations: true
+    decorations: {
+      matchBackground: '#ffd700',
+      matchBorder: '#ffd700',
+      matchOverviewRuler: '#ffd700',
+      activeMatchBackground: '#ff8c00',
+      activeMatchBorder: '#ff8c00',
+      activeMatchColorOverviewRuler: '#ff8c00'
+    }
   }
 
-  // 查找所有匹配项
-  const matches = searchAddon.findMatches(searchQuery.value)
-  searchMatchCount.value = matches?.length || 0
-  currentMatchIndex.value = matches?.length > 0 ? 1 : 0
-
-  // 定位到第一个匹配项
-  if (matches && matches.length > 0) {
-    searchAddon.findNext(searchQuery.value, searchOptions)
-  }
+  // 定位到第一个匹配项，onDidChangeResults 会更新计数
+  searchAddon.findNext(searchQuery.value, searchOptions)
 }
 
 // 导航到下一个匹配项
 const goToNextMatch = () => {
   if (!searchQuery.value || !terminal || !searchAddon) return
-  const found = searchAddon.findNext(searchQuery.value, {
+  searchAddon.findNext(searchQuery.value, {
     caseSensitive: false,
     wholeWord: false,
-    regex: false
+    regex: false,
+    decorations: {
+      matchBackground: '#ffd700',
+      matchBorder: '#ffd700',
+      matchOverviewRuler: '#ffd700',
+      activeMatchBackground: '#ff8c00',
+      activeMatchBorder: '#ff8c00',
+      activeMatchColorOverviewRuler: '#ff8c00'
+    }
   })
-  if (found && searchMatchCount.value > 0) {
-    currentMatchIndex.value = (currentMatchIndex.value % searchMatchCount.value) + 1
-  }
 }
 
 // 导航到上一个匹配项
 const goToPreviousMatch = () => {
   if (!searchQuery.value || !terminal || !searchAddon) return
-  const found = searchAddon.findPrevious(searchQuery.value, {
+  searchAddon.findPrevious(searchQuery.value, {
     caseSensitive: false,
     wholeWord: false,
-    regex: false
+    regex: false,
+    decorations: {
+      matchBackground: '#ffd700',
+      matchBorder: '#ffd700',
+      matchOverviewRuler: '#ffd700',
+      activeMatchBackground: '#ff8c00',
+      activeMatchBorder: '#ff8c00',
+      activeMatchColorOverviewRuler: '#ff8c00'
+    }
   })
-  if (found && searchMatchCount.value > 0) {
-    currentMatchIndex.value = currentMatchIndex.value <= 1 ? searchMatchCount.value : currentMatchIndex.value - 1
-  }
 }
 
 // 处理 Enter 键导航
