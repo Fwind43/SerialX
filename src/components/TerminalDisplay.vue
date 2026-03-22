@@ -668,7 +668,7 @@ defineExpose({
 
 /* 隐藏 xterm 默认滚动条样式，使用自定义样式 */
 .terminal-container ::v-deep(.xterm-viewport) {
-  width: 14px !important;
+  width: auto !important;
   background-color: #1e1e1e !important;
   border-left: none !important;
 }
@@ -703,6 +703,12 @@ defineExpose({
 /* 确保 xterm 内部元素不显示额外边框 */
 .terminal-container ::v-deep(.xterm) {
   background: transparent !important;
+}
+
+/* 确保 xterm screen 容器宽度动态 */
+.terminal-container ::v-deep(.xterm .xterm-screen-canvas),
+.terminal-container ::v-deep(.xterm .xterm-rows) {
+  width: 100% !important;
 }
 
 /* 搜索高亮样式 - 鲜艳黄色 */
