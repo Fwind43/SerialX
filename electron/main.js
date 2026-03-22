@@ -459,6 +459,12 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.on('window:move', (event, { x, y }) => {
+    if (mainWindow) {
+      mainWindow.setPosition(Math.round(x), Math.round(y))
+    }
+  })
+
   // 配置管理 - 常用命令持久化
   ipcMain.handle('config:load', async () => {
     return loadConfig()

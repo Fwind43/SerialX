@@ -83,7 +83,10 @@ const handleDragMove = (e) => {
   if (!isDragging.value || !props.standalone) return
   const newX = e.screenX - dragStart.value.x
   const newY = e.screenY - dragStart.value.y
-  window.moveTo(newX, newY)
+  // 使用 Electron API 移动窗口
+  if (window.electronAPI) {
+    window.electronAPI.moveWindow(newX, newY)
+  }
   e.preventDefault()
 }
 
