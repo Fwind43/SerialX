@@ -456,10 +456,10 @@ const handleKeyDown = (e) => {
 }
 
 // 监听日志变化
-watch(() => portLogs.value?.get(props.portPath)?.length, () => {
+watch(() => portLogs.value?.length, () => {
   if (!terminal) return
 
-  const logs = portLogs.value?.get(props.portPath)
+  const logs = portLogs.value
   if (!logs || logs.length === 0) {
     // 日志被清空
     terminal.clear()
