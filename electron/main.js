@@ -343,7 +343,7 @@ function createWindow() {
   })
 
   if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:5173')
+    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173')
     mainWindow.webContents.openDevTools()
   } else {
     // 生产环境：使用 file:// 协议加载打包后的文件
@@ -378,7 +378,7 @@ function createConverterWindow() {
   })
 
   if (process.env.NODE_ENV === 'development') {
-    converterWindow.loadURL('http://localhost:5173/#/converter')
+    converterWindow.loadURL((process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173') + '/#/converter')
   } else {
     converterWindow.loadFile(path.join(__dirname, '../out/renderer/index.html'), {
       hash: '/converter'
