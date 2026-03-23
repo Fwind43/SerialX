@@ -296,14 +296,19 @@ const loadHistoryLogs = () => {
   terminal.clear()
 
   const startIdx = Math.max(0, logs.length - MAX_LOG_COUNT)
+  const lines = []
   for (let i = startIdx; i < logs.length; i++) {
     const log = logs[i]
     const line = formatLogLine(log)
-    terminal.writeln(line)
+    lines.push(line)
     logEntries.push({
       id: log.id,
-      line: terminal.rows - 1
+      line: i - startIdx
     })
+  }
+
+  if (lines.length > 0) {
+    terminal.write(`${lines.join('\r\n')}\r\n`)
   }
 
   const renderedLogs = logs.slice(startIdx)
