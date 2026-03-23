@@ -28,6 +28,10 @@ export const useSerialStore = defineStore('serial', () => {
     paneWidths: []
   })
 
+  const createDefaultAppUiState = () => ({
+    sidebarCollapsed: false
+  })
+
   const createDefaultCommonCommands = () => ([
     { id: 1, name: '复位', command: 'RESET', enabled: true },
     { id: 2, name: '状态查询', command: 'STATUS?', enabled: true },
@@ -65,6 +69,7 @@ export const useSerialStore = defineStore('serial', () => {
   const portControlSettings = ref(new Map()) // path -> { isAutoScroll: boolean, isLoopSend: boolean, loopInterval: number, loopMaxCount: number, hexSend: boolean, packetTimeout: number }
   const terminalAppearance = ref(createDefaultTerminalAppearance())
   const workspaceLayout = ref(createDefaultWorkspaceLayout())
+  const appUiState = ref(createDefaultAppUiState())
 
   // 获取串口控制设置
   const getPortControlSettings = (portPath) => {
@@ -228,6 +233,14 @@ export const useSerialStore = defineStore('serial', () => {
     saveSessionState()
   }
 
+  const updateAppUiState = (updates = {}) => {
+    appUiState.value = {
+      ...appUiState.value,
+      ...updates
+    }
+    saveSessionState()
+  }
+
   const buildSettingsSnapshot = () => ({
     version: SETTINGS_SNAPSHOT_VERSION,
     exportedAt: new Date().toISOString(),
@@ -236,7 +249,9 @@ export const useSerialStore = defineStore('serial', () => {
     portControlSettings: Object.fromEntries(portControlSettings.value),
     commonCommands: JSON.parse(JSON.stringify(commonCommands.value)),
     terminalAppearance: { ...terminalAppearance.value },
-    workspaceLayout: JSON.parse(JSON.stringify(workspaceLayout.value))
+    workspaceLayout: JSON.parse(JSON.stringify(workspaceLayout.value)),
+    selectedPort: selectedPort.value,
+    appUiState: { ...appUiState.value }
   })
 
   const validateSettingsSnapshot = (snapshot = {}) => {
@@ -272,6 +287,14 @@ export const useSerialStore = defineStore('serial', () => {
       throw new Error('工作区布局格式无效')
     }
 
+    if ('selectedPort' in snapshot && snapshot.selectedPort !== null && typeof snapshot.selectedPort !== 'string') {
+      throw new Error('当前串口字段格式无效')
+    }
+
+    if (snapshot.appUiState && typeof snapshot.appUiState !== 'object') {
+      throw new Error('界面状态格式无效')
+    }
+
     if (snapshot.commonCommands && !Array.isArray(snapshot.commonCommands)) {
       throw new Error('常用命令配置格式无效')
     }
@@ -294,6 +317,11 @@ export const useSerialStore = defineStore('serial', () => {
       ...createDefaultWorkspaceLayout(),
       ...(snapshot.workspaceLayout || {})
     }
+    selectedPort.value = typeof snapshot.selectedPort === 'string' ? snapshot.selectedPort : null
+    appUiState.value = {
+      ...createDefaultAppUiState(),
+      ...(snapshot.appUiState || {})
+    }
     commonCommands.value = Array.isArray(snapshot.commonCommands)
       ? JSON.parse(JSON.stringify(snapshot.commonCommands))
       : createDefaultCommonCommands()
@@ -309,7 +337,9 @@ export const useSerialStore = defineStore('serial', () => {
       portControlSettings: {},
       commonCommands: createDefaultCommonCommands(),
       terminalAppearance: createDefaultTerminalAppearance(),
-      workspaceLayout: createDefaultWorkspaceLayout()
+      workspaceLayout: createDefaultWorkspaceLayout(),
+      selectedPort: null,
+      appUiState: createDefaultAppUiState()
     })
   }
 
@@ -322,7 +352,9 @@ export const useSerialStore = defineStore('serial', () => {
         portControlSettings: Object.fromEntries(portControlSettings.value),
         commonCommands: commonCommands.value,
         terminalAppearance: terminalAppearance.value,
-        workspaceLayout: workspaceLayout.value
+        workspaceLayout: workspaceLayout.value,
+        selectedPort: selectedPort.value,
+        appUiState: appUiState.value
       }
       localStorage.setItem('serialx-session-state', JSON.stringify(state))
     } catch (error) {
@@ -358,6 +390,15 @@ export const useSerialStore = defineStore('serial', () => {
           workspaceLayout.value = {
             ...createDefaultWorkspaceLayout(),
             ...state.workspaceLayout
+          }
+        }
+        if (typeof state.selectedPort === 'string' || state.selectedPort === null) {
+          selectedPort.value = state.selectedPort
+        }
+        if (state.appUiState) {
+          appUiState.value = {
+            ...createDefaultAppUiState(),
+            ...state.appUiState
           }
         }
       }
@@ -402,6 +443,10 @@ export const useSerialStore = defineStore('serial', () => {
   watch(() => commonCommands.value, () => {
     saveCommonCommands()
   }, { deep: true })
+
+  watch(selectedPort, () => {
+    saveSessionState()
+  })
 
   // Getters
   const availableBaudRates = computed(() => [
@@ -1173,6 +1218,7 @@ export const useSerialStore = defineStore('serial', () => {
     commonCommands,
     terminalAppearance,
     workspaceLayout,
+    appUiState,
     portLoopSendCounts,
     portLoopSendPaused,
     portNotices,
@@ -1198,6 +1244,7 @@ export const useSerialStore = defineStore('serial', () => {
     updateTerminalAppearance,
     resetTerminalAppearance,
     updateWorkspaceLayout,
+    updateAppUiState,
     buildSettingsSnapshot,
     applySettingsSnapshot,
     resetAppSettings,

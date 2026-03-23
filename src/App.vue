@@ -17,8 +17,13 @@ const showSettingsMenu = ref(false)
 const showCommandsModal = ref(false)
 const showCommandPalette = ref(false)
 const showAppearanceSettingsModal = ref(false)
-const isSidebarCollapsed = ref(false)
 const isMaximized = ref(false)
+const isSidebarCollapsed = computed({
+  get: () => serialStore.appUiState?.sidebarCollapsed ?? false,
+  set: (value) => {
+    serialStore.updateAppUiState({ sidebarCollapsed: value })
+  }
+})
 
 const closeAllMenus = () => {
   showToolsMenu.value = false
