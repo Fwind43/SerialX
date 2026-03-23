@@ -57,6 +57,13 @@ const showSettingsMessage = (message) => {
   window.alert(message)
 }
 
+const formatImportedSettingsSummary = (result) => {
+  const snapshot = result?.data || {}
+  const versionText = typeof snapshot.version === 'number' ? `v${snapshot.version}` : '未知版本'
+  const hasLayout = snapshot.workspaceLayout ? '包含工作区布局' : '不包含工作区布局'
+  return `设置已导入：\n${result.filePath}\n版本：${versionText}\n内容：${hasLayout}`
+}
+
 const handleGlobalKeydown = (event) => {
   const activeElement = document.activeElement
   const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
@@ -134,7 +141,7 @@ const importSettings = async () => {
 
   try {
     await serialStore.applySettingsSnapshot(result.data)
-    showSettingsMessage(`设置已导入：\n${result.filePath}`)
+    showSettingsMessage(formatImportedSettingsSummary(result))
   } catch (error) {
     showSettingsMessage(`应用设置失败：${error.message}`)
   }
