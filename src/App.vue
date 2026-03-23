@@ -18,12 +18,21 @@ const showCommandsModal = ref(false)
 const showCommandPalette = ref(false)
 const showAppearanceSettingsModal = ref(false)
 const isMaximized = ref(false)
+const settingsToast = ref({
+  visible: false,
+  tone: 'info',
+  title: '',
+  message: ''
+})
+const showResetConfirm = ref(false)
 const isSidebarCollapsed = computed({
   get: () => serialStore.appUiState?.sidebarCollapsed ?? false,
   set: (value) => {
     serialStore.updateAppUiState({ sidebarCollapsed: value })
   }
 })
+
+let settingsToastTimer = null
 
 const closeAllMenus = () => {
   showToolsMenu.value = false
@@ -58,15 +67,37 @@ const toggleSidebar = () => {
   isSidebarCollapsed.value = !isSidebarCollapsed.value
 }
 
-const showSettingsMessage = (message) => {
-  window.alert(message)
+const showSettingsMessage = (message, tone = 'info', title = '设置') => {
+  settingsToast.value = {
+    visible: true,
+    tone,
+    title,
+    message
+  }
+
+  if (settingsToastTimer) {
+    clearTimeout(settingsToastTimer)
+  }
+
+  settingsToastTimer = setTimeout(() => {
+    settingsToast.value.visible = false
+    settingsToastTimer = null
+  }, 2800)
+}
+
+const hideSettingsToast = () => {
+  settingsToast.value.visible = false
+  if (settingsToastTimer) {
+    clearTimeout(settingsToastTimer)
+    settingsToastTimer = null
+  }
 }
 
 const formatImportedSettingsSummary = (result) => {
   const snapshot = result?.data || {}
   const versionText = typeof snapshot.version === 'number' ? `v${snapshot.version}` : '未知版本'
-  const hasLayout = snapshot.workspaceLayout ? '包含工作区布局' : '不包含工作区布局'
-  return `设置已导入：\n${result.filePath}\n版本：${versionText}\n内容：${hasLayout}`
+  const hasLayout = snapshot.workspaceLayout ? '包含工作区布局' : '未包含工作区布局'
+  return `已导入设置\n${result.filePath}\n版本：${versionText}\n内容：${hasLayout}`
 }
 
 const handleGlobalKeydown = (event) => {
@@ -127,11 +158,11 @@ const exportSettings = async () => {
   if (!result || result.canceled) return
 
   if (result.success) {
-    showSettingsMessage(`设置已导出到：\n${result.filePath}`)
+    showSettingsMessage(`设置已导出到\n${result.filePath}`, 'success', '导出成功')
     return
   }
 
-  showSettingsMessage(`导出设置失败：${result.error || '未知错误'}`)
+  showSettingsMessage(`导出设置失败\n${result.error || '未知错误'}`, 'error', '导出失败')
 }
 
 const importSettings = async () => {
@@ -140,25 +171,31 @@ const importSettings = async () => {
   if (!result || result.canceled) return
 
   if (!result.success) {
-    showSettingsMessage(`导入设置失败：${result.error || '未知错误'}`)
+    showSettingsMessage(`导入设置失败\n${result.error || '未知错误'}`, 'error', '导入失败')
     return
   }
 
   try {
     await serialStore.applySettingsSnapshot(result.data)
-    showSettingsMessage(formatImportedSettingsSummary(result))
+    showSettingsMessage(formatImportedSettingsSummary(result), 'success', '导入成功')
   } catch (error) {
-    showSettingsMessage(`应用设置失败：${error.message}`)
+    showSettingsMessage(`应用设置失败\n${error.message}`, 'error', '应用失败')
   }
 }
 
-const resetAllSettings = async () => {
+const resetAllSettings = () => {
   showSettingsMenu.value = false
-  const confirmed = window.confirm('确定要恢复默认设置吗？这会重置终端外观、串口默认参数和常用命令。')
-  if (!confirmed) return
+  showResetConfirm.value = true
+}
 
+const confirmResetAllSettings = async () => {
+  showResetConfirm.value = false
   await serialStore.resetAppSettings()
-  showSettingsMessage('已恢复默认设置。')
+  showSettingsMessage('终端外观、默认串口参数和常用命令都已恢复默认。', 'success', '已恢复默认')
+}
+
+const cancelResetAllSettings = () => {
+  showResetConfirm.value = false
 }
 
 const handleSendCommand = (event) => {
@@ -200,6 +237,10 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleGlobalKeydown)
   window.removeEventListener('serialx-send-command', handleSendCommand)
   document.removeEventListener('click', handleClickOutside)
+  if (settingsToastTimer) {
+    clearTimeout(settingsToastTimer)
+    settingsToastTimer = null
+  }
 })
 </script>
 
@@ -225,6 +266,7 @@ onUnmounted(() => {
           <div class="menubar-item" @click.stop="toggleSettingsMenu">
             <span class="menubar-label">设置</span>
             <div v-if="showSettingsMenu" class="menubar-dropdown">
+              <div class="dropdown-section-label">外观与命令</div>
               <div class="dropdown-item" @click="openAppearanceSettings">
                 <span class="dropdown-icon" aria-hidden="true">
                   <svg viewBox="0 0 16 16" width="16" height="16">
@@ -233,6 +275,16 @@ onUnmounted(() => {
                 </span>
                 <span class="dropdown-text">终端外观设置</span>
               </div>
+              <div class="dropdown-item" @click="openCommandsConfig">
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M3 3h10v10H3zM5 6h6v1H5zm0 2h6v1H5zm0 2h4v1H5z" fill="currentColor" />
+                  </svg>
+                </span>
+                <span class="dropdown-text">常用命令配置</span>
+              </div>
+              <div class="dropdown-divider"></div>
+              <div class="dropdown-section-label">数据与恢复</div>
               <div class="dropdown-item" @click="exportSettings">
                 <span class="dropdown-icon" aria-hidden="true">
                   <svg viewBox="0 0 16 16" width="16" height="16">
@@ -257,14 +309,6 @@ onUnmounted(() => {
                 </span>
                 <span class="dropdown-text">恢复默认设置</span>
               </div>
-              <div class="dropdown-item" @click="openCommandsConfig">
-                <span class="dropdown-icon" aria-hidden="true">
-                  <svg viewBox="0 0 16 16" width="16" height="16">
-                    <path d="M3 3h10v10H3zM5 6h6v1H5zm0 2h6v1H5zm0 2h4v1H5z" fill="currentColor" />
-                  </svg>
-                </span>
-                <span class="dropdown-text">常用命令配置</span>
-              </div>
             </div>
           </div>
 
@@ -282,7 +326,7 @@ onUnmounted(() => {
           <span class="app-title">SerialX</span>
           <span class="app-subtitle">串口调试工作台</span>
         </div>
-        <span class="app-version-chip">v0.0.4-dev</span>
+        <span class="app-version-chip">v0.0.5-dev</span>
       </div>
 
       <div class="header-right window-controls">
@@ -341,6 +385,27 @@ onUnmounted(() => {
         <span class="status-value">{{ serialStore.openPorts.size }}</span>
       </span>
     </footer>
+
+    <transition name="toast-fade">
+      <div v-if="settingsToast.visible" :class="['settings-toast', settingsToast.tone]">
+        <div class="toast-copy">
+          <div class="toast-title">{{ settingsToast.title }}</div>
+          <div class="toast-message">{{ settingsToast.message }}</div>
+        </div>
+        <button class="toast-close" @click="hideSettingsToast">×</button>
+      </div>
+    </transition>
+
+    <div v-if="showResetConfirm" class="confirm-overlay" @click.self="cancelResetAllSettings">
+      <div class="confirm-dialog">
+        <div class="confirm-title">恢复默认设置</div>
+        <div class="confirm-message">这会重置终端外观、默认串口参数和常用命令，当前会话布局不会被清空。</div>
+        <div class="confirm-actions">
+          <button class="confirm-btn secondary" @click="cancelResetAllSettings">取消</button>
+          <button class="confirm-btn danger" @click="confirmResetAllSettings">恢复默认</button>
+        </div>
+      </div>
+    </div>
 
     <CommandsModal v-model:show="showCommandsModal" />
     <AppearanceSettingsModal v-model:show="showAppearanceSettingsModal" />
@@ -453,7 +518,7 @@ onUnmounted(() => {
   position: absolute;
   top: 100%;
   left: 0;
-  min-width: 208px;
+  min-width: 228px;
   background: rgba(8, 15, 22, 0.96);
   border: 1px solid var(--app-border);
   border-radius: 12px;
@@ -462,6 +527,21 @@ onUnmounted(() => {
   z-index: 1000;
   margin-top: 6px;
   backdrop-filter: blur(14px);
+}
+
+.dropdown-section-label {
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #7fa0b6;
+  text-transform: uppercase;
+}
+
+.dropdown-divider {
+  height: 1px;
+  margin: 6px 6px 4px;
+  background: rgba(125, 162, 186, 0.1);
 }
 
 .dropdown-item {
@@ -705,6 +785,135 @@ onUnmounted(() => {
 .status-value {
   font-weight: 700;
   color: #f4fbff;
+}
+
+.settings-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 1200;
+  min-width: 300px;
+  max-width: 440px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 14px 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(125, 162, 186, 0.14);
+  background: rgba(8, 15, 22, 0.94);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
+}
+
+.settings-toast.success {
+  border-color: rgba(82, 215, 166, 0.2);
+}
+
+.settings-toast.error {
+  border-color: rgba(232, 84, 84, 0.22);
+}
+
+.toast-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f4fbff;
+}
+
+.toast-message {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #a8bece;
+  white-space: pre-line;
+}
+
+.toast-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #dbe8f1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1190;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+}
+
+.confirm-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 20px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #1b2730, #111a22);
+  border: 1px solid rgba(125, 162, 186, 0.16);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.34);
+}
+
+.confirm-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f4fbff;
+}
+
+.confirm-message {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #9db2c2;
+}
+
+.confirm-actions {
+  margin-top: 18px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.confirm-btn {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.confirm-btn.secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #dce8f0;
+}
+
+.confirm-btn.danger {
+  background: rgba(196, 43, 28, 0.16);
+  border-color: rgba(196, 43, 28, 0.24);
+  color: #ffd4d0;
+}
+
+.toast-fade-enter-active,
+.toast-fade-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.toast-fade-enter-from,
+.toast-fade-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 .converter-only {

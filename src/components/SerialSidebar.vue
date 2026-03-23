@@ -16,7 +16,7 @@ const handleConnect = async (portPath = null) => {
   const targetPort = portPath || serialStore.selectedPort
 
   if (!targetPort) {
-    serialStore.addLog('请选择串口', 'error')
+    serialStore.addLog('请先选择串口', 'error')
     return
   }
 
@@ -60,7 +60,7 @@ const settingsSummary = computed(() => {
       <div class="section-header">
         <span>可用串口</span>
         <span class="section-meta">{{ serialStore.ports.length }} 个</span>
-        <button class="refresh-btn" title="刷新" @click="handleRefresh">
+        <button class="refresh-btn" title="刷新串口列表" @click="handleRefresh">
           刷新
         </button>
       </div>
