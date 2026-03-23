@@ -50,6 +50,7 @@ export const useSerialStore = defineStore('serial', () => {
   const portLoopSendInFlight = reactive(new Map()) // path -> whether send is in progress
   const portLoopSendCounts = reactive(new Map()) // path -> 已发送次数
   const portLoopSendPaused = reactive(new Map()) // path -> 是否暂停
+  const portLoopSendFailures = reactive(new Map()) // path -> consecutive failure count
   const portManualDisconnects = reactive(new Set())
 
   // 每个串口的显示设置（独立配置）
@@ -66,7 +67,9 @@ export const useSerialStore = defineStore('serial', () => {
         isAutoScroll: true,
         isLoopSend: false,
         loopInterval: 1000,
+        loopStartDelay: 0,
         loopMaxCount: 0,
+        loopFailureLimit: 0,
         hexSend: false,
         packetTimeout: 500 // 分包超时时间（毫秒）
       })
@@ -81,7 +84,7 @@ export const useSerialStore = defineStore('serial', () => {
     // 配置变更时自动保存
     saveSessionState()
 
-    if (portLoopSendTimers.has(portPath) && ('loopInterval' in updates || 'loopMaxCount' in updates || 'hexSend' in updates)) {
+    if (portLoopSendTimers.has(portPath) && ('loopInterval' in updates || 'loopStartDelay' in updates || 'loopMaxCount' in updates || 'loopFailureLimit' in updates || 'hexSend' in updates)) {
       restartLoopSendForPort(portPath, { preserveCount: true, silent: true })
     }
   }
@@ -702,11 +705,13 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
-  function scheduleLoopSend(portPath) {
+  function scheduleLoopSend(portPath, delayOverride = null) {
     clearLoopSendTimer(portPath)
 
     const portControl = getPortControlSettings(portPath)
-    const interval = Math.max(100, Number(portControl.loopInterval) || 1000)
+    const interval = delayOverride === null
+      ? Math.max(100, Number(portControl.loopInterval) || 1000)
+      : Math.max(0, Number(delayOverride) || 0)
     const timer = setTimeout(async () => {
       await runLoopSendIteration(portPath)
     }, interval)
@@ -759,8 +764,18 @@ export const useSerialStore = defineStore('serial', () => {
       const result = await sendData(portPath, dataToSend, portControl.hexSend)
       if (result.success) {
         portLoopSendCounts.set(portPath, currentCount + 1)
+        portLoopSendFailures.set(portPath, 0)
       } else {
+        const failureCount = (portLoopSendFailures.get(portPath) || 0) + 1
+        portLoopSendFailures.set(portPath, failureCount)
         addPortLog(portPath, `循环发送失败：${result.error}`, 'error')
+
+        if (portControl.loopFailureLimit > 0 && failureCount >= portControl.loopFailureLimit) {
+          stopLoopSendForPort(portPath, { resetCount: false, silent: true })
+          updatePortControlSettings(portPath, { isLoopSend: false })
+          addPortLog(portPath, `循环发送已停止：连续失败 ${failureCount} 次`, 'warning')
+          return
+        }
       }
     } finally {
       portLoopSendInFlight.set(portPath, false)
@@ -792,6 +807,9 @@ export const useSerialStore = defineStore('serial', () => {
     if (!preserveCount) {
       portLoopSendCounts.set(targetPort, 0)
     }
+    if (!preserveCount) {
+      portLoopSendFailures.set(targetPort, 0)
+    }
 
     const currentControl = getPortControlSettings(targetPort)
     if (!currentControl.isLoopSend) {
@@ -802,12 +820,17 @@ export const useSerialStore = defineStore('serial', () => {
       const currentCount = portLoopSendCounts.get(targetPort) || 0
       addPortLog(
         targetPort,
-        `循环发送已启动（间隔：${Math.max(100, Number(currentControl.loopInterval) || 1000)}ms${currentControl.loopMaxCount > 0 ? `，上限：${currentControl.loopMaxCount} 次` : ''}${currentCount > 0 ? `，从第 ${currentCount + 1} 次继续` : ''}）`,
+        `循环发送已启动（间隔：${Math.max(100, Number(currentControl.loopInterval) || 1000)}ms${Math.max(0, Number(currentControl.loopStartDelay) || 0) > 0 ? `，启动延时：${Math.max(0, Number(currentControl.loopStartDelay) || 0)}ms` : ''}${currentControl.loopMaxCount > 0 ? `，上限：${currentControl.loopMaxCount} 次` : ''}${currentControl.loopFailureLimit > 0 ? `，失败阈值：${currentControl.loopFailureLimit} 次` : ''}${currentCount > 0 ? `，从第 ${currentCount + 1} 次继续` : ''}）`,
         'info'
       )
     }
 
-    runLoopSendIteration(targetPort)
+    const initialDelay = preserveCount ? 0 : Math.max(0, Number(currentControl.loopStartDelay) || 0)
+    if (initialDelay > 0) {
+      scheduleLoopSend(targetPort, initialDelay)
+    } else {
+      runLoopSendIteration(targetPort)
+    }
     return true
   }
 
@@ -854,6 +877,9 @@ export const useSerialStore = defineStore('serial', () => {
 
     if (resetCount) {
       portLoopSendCounts.set(portPath, 0)
+    }
+    if (resetCount) {
+      portLoopSendFailures.set(portPath, 0)
     }
 
     if (!silent && getPortControlSettings(portPath).isLoopSend) {

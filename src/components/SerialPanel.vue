@@ -126,6 +126,14 @@ const updateLoopMaxCount = (value) => {
   serialStore.updatePortControlSettings(props.portPath, { loopMaxCount: Number(value) })
 }
 
+const updateLoopStartDelay = (value) => {
+  serialStore.updatePortControlSettings(props.portPath, { loopStartDelay: Number(value) })
+}
+
+const updateLoopFailureLimit = (value) => {
+  serialStore.updatePortControlSettings(props.portPath, { loopFailureLimit: Number(value) })
+}
+
 const updatePacketTimeout = (value) => {
   serialStore.updatePortControlSettings(props.portPath, { packetTimeout: Number(value) })
 }
@@ -477,6 +485,34 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
       </div>
 
       <div v-if="showAdvancedOptions" class="advanced-options">
+        <label v-if="portControlSettings.isLoopSend" class="interval-group packet-timeout">
+          <span class="interval-label packet-label">启动延时</span>
+          <input
+            type="number"
+            :value="portControlSettings.loopStartDelay"
+            @input="updateLoopStartDelay($event.target.value)"
+            :min="0"
+            :step="100"
+            class="interval-input"
+            title="开始循环发送前先等待一段时间"
+          />
+          <span class="interval-unit">ms</span>
+        </label>
+
+        <label v-if="portControlSettings.isLoopSend" class="interval-group packet-timeout">
+          <span class="interval-label packet-label">失败停止</span>
+          <input
+            type="number"
+            :value="portControlSettings.loopFailureLimit"
+            @input="updateLoopFailureLimit($event.target.value)"
+            :min="0"
+            :step="1"
+            class="interval-input"
+            title="连续发送失败达到该次数后自动停止，0 表示不限"
+          />
+          <span class="interval-unit">{{ portControlSettings.loopFailureLimit > 0 ? '次' : '不限' }}</span>
+        </label>
+
         <label class="interval-group packet-timeout">
           <span class="interval-label packet-label">分包超时</span>
           <input
