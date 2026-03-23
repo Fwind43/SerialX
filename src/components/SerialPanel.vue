@@ -26,6 +26,7 @@ const portFilters = computed(() => serialStore.getPortFilters(props.portPath))
 const isConnected = computed(() => serialStore.getPortStatus(props.portPath))
 const portNotice = computed(() => serialStore.getPortNotice(props.portPath))
 const enabledCommands = computed(() => serialStore.getEnabledCommands)
+const quickCommands = computed(() => enabledCommands.value.slice(0, 3))
 const isPaused = computed(() => serialStore.portLoopSendPaused.get(props.portPath) || false)
 const loopSendCount = computed(() => serialStore.portLoopSendCounts.get(props.portPath) || 0)
 const loopHasStarted = computed(() => loopSendCount.value > 0)
@@ -416,6 +417,19 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
       </div>
 
       <div class="send-options">
+        <div v-if="quickCommands.length > 0" class="quick-command-row">
+          <button
+            v-for="cmd in quickCommands"
+            :key="cmd.id"
+            class="quick-command-btn"
+            :disabled="!isConnected"
+            :title="cmd.command"
+            @click="executeCommand(cmd.command)"
+          >
+            {{ cmd.name }}
+          </button>
+        </div>
+
         <select
           v-if="enabledCommands.length > 0"
           @change="executeCommand($event.target.value); $event.target.value = ''"
@@ -890,6 +904,34 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+}
+
+.quick-command-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quick-command-btn {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(87, 199, 255, 0.14);
+  background: rgba(87, 199, 255, 0.07);
+  color: #c7edff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.quick-command-btn:hover:not(:disabled) {
+  background: rgba(87, 199, 255, 0.14);
+  border-color: rgba(87, 199, 255, 0.24);
+}
+
+.quick-command-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .advanced-options {
