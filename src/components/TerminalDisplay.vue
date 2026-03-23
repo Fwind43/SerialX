@@ -22,6 +22,7 @@ let fitAddon = null
 let searchAddon = null
 
 let logEntries = []
+const formattedLogCache = new Map()
 const MAX_LOG_COUNT = 1000
 let renderedLogCount = 0
 let renderedFirstLogId = null
@@ -98,7 +99,26 @@ const getLogPrefix = (type) => {
   return prefixes[type] || '[INFO]'
 }
 
+const clearFormattedLogCache = () => {
+  formattedLogCache.clear()
+}
+
+const buildLogCacheKey = (log) => {
+  return [
+    log.id,
+    portDisplaySettings.value.hexReceive ? 'hex' : 'text',
+    portDisplaySettings.value.showAscii ? 'ascii' : 'plain',
+    getHexLengthPerLine()
+  ].join(':')
+}
+
 const formatLogLine = (log) => {
+  const cacheKey = buildLogCacheKey(log)
+  const cachedLine = formattedLogCache.get(cacheKey)
+  if (cachedLine) {
+    return cachedLine
+  }
+
   const timestamp = log.timestamp.padEnd(8)
   const prefix = getLogPrefix(log.type)
   const maxCharsPerLine = getHexLengthPerLine()
@@ -143,7 +163,14 @@ const formatLogLine = (log) => {
 
   const reset = '\x1b[0m'
   const color = colorCodes[log.type] || colorCodes.info
-  return `${timestamp} ${color}${prefix}${reset} ${content}`
+  const formattedLine = `${timestamp} ${color}${prefix}${reset} ${content}`
+
+  formattedLogCache.set(cacheKey, formattedLine)
+  if (formattedLogCache.size > MAX_LOG_COUNT * 8) {
+    formattedLogCache.clear()
+  }
+
+  return formattedLine
 }
 
 const getTerminalTheme = () => ({
@@ -318,6 +345,7 @@ const syncTerminalLogs = () => {
   if (logs.length === 0) {
     terminal.clear()
     logEntries = []
+    clearFormattedLogCache()
     resetRenderedLogState()
     performSearch()
     return
@@ -543,6 +571,7 @@ watch(() => {
 })
 
 watch([portDisplaySettings, portFilters], () => {
+  clearFormattedLogCache()
   refreshDisplay()
 }, { deep: true })
 
@@ -551,6 +580,7 @@ watch(terminalAppearance, () => {
 }, { deep: true })
 
 watch(() => portDisplaySettings.value.hexReceive, () => {
+  clearFormattedLogCache()
   refreshDisplay()
 })
 
