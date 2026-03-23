@@ -439,8 +439,15 @@ const goToPreviousMatch = () => {
   searchAddon.findPrevious(searchQuery.value, getSearchOptions())
 }
 
-// 处理 Enter 键导航
-const handleEnterKey = () => {
+// 处理搜索框内的键盘导航
+const handleSearchKeyDown = (event) => {
+  if (event.key !== 'Enter') return
+
+  if (event.shiftKey) {
+    goToPreviousMatch()
+    return
+  }
+
   goToNextMatch()
 }
 
@@ -651,8 +658,7 @@ defineExpose({
           type="text"
           class="search-input"
           placeholder="搜索日志内容..."
-          @keydown.enter.prevent="handleEnterKey"
-          @keydown.shift.enter.prevent="goToPreviousMatch"
+          @keydown.enter.prevent="handleSearchKeyDown"
         />
         <div class="search-controls">
           <span class="search-count">
