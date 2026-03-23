@@ -14,6 +14,7 @@ const serialStore = useSerialStore()
 const terminalRef = ref(null)
 const showFilters = ref(false)
 const showAdvancedOptions = ref(false)
+const sendErrorMessage = ref('')
 
 const portDisplaySettings = computed(() => serialStore.getPortDisplaySettings(props.portPath))
 const portControlSettings = computed(() => serialStore.getPortControlSettings(props.portPath))
@@ -127,6 +128,7 @@ const updatePacketTimeout = (value) => {
 
 const executeCommand = (command) => {
   serialStore.setPortSendingData(props.portPath, command)
+  sendErrorMessage.value = ''
   serialStore.addPortLog(props.portPath, `命令 "${command}" 已填入输入框，请按 Enter 发送`, 'info')
 }
 
@@ -138,14 +140,23 @@ const handlePanelFocus = () => {
   serialStore.selectedPort = props.portPath
 }
 
+const handleSendingInput = (value) => {
+  serialStore.setPortSendingData(props.portPath, value)
+  sendErrorMessage.value = ''
+}
+
 const handleSend = async () => {
   const data = serialStore.getPortSendingData(props.portPath)
   if (!data) return
 
   const result = await serialStore.sendData(props.portPath, null, portControlSettings.value.hexSend)
   if (!result.success) {
-    console.error('发送失败', result.error)
+    sendErrorMessage.value = result.error || '发送失败'
+    serialStore.addPortLog(props.portPath, `发送失败：${sendErrorMessage.value}`, 'error')
+    return
   }
+
+  sendErrorMessage.value = ''
 }
 
 const handleDisconnect = async () => {
@@ -334,16 +345,20 @@ const textPlaceholder = '输入要发送的数据，按 Enter 发送...'
       <div class="send-row">
         <input
           :value="serialStore.getPortSendingData(props.portPath)"
-          @input="serialStore.setPortSendingData(props.portPath, $event.target.value)"
+          @input="handleSendingInput($event.target.value)"
           type="text"
           class="send-input"
-          :class="{ 'hex-invalid': portControlSettings.hexSend && !isHexInputValid }"
+          :class="{ 'hex-invalid': portControlSettings.hexSend && !isHexInputValid, 'send-error': !!sendErrorMessage }"
           :placeholder="portControlSettings.hexSend ? hexPlaceholder : textPlaceholder"
           @keyup.enter="handleSend"
         />
         <button @click="handleSend" class="send-button" :disabled="isSendDisabled">
           发送
         </button>
+      </div>
+
+      <div v-if="sendErrorMessage" class="send-feedback error">
+        {{ sendErrorMessage }}
       </div>
 
       <div class="send-options">
@@ -713,6 +728,10 @@ const textPlaceholder = '输入要发送的数据，按 Enter 发送...'
   box-shadow: 0 0 0 3px rgba(196, 43, 28, 0.1);
 }
 
+.send-input.send-error {
+  border-color: rgba(196, 43, 28, 0.32);
+}
+
 .send-input::placeholder {
   color: #698193;
 }
@@ -745,6 +764,16 @@ const textPlaceholder = '输入要发送的数据，按 Enter 发送...'
   color: #688093;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.send-feedback {
+  margin: -2px 0 8px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.send-feedback.error {
+  color: #ffb8b1;
 }
 
 .send-options {

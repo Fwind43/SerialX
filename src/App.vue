@@ -21,6 +21,7 @@ const showSettingsMenu = ref(false)
 const showCommandsModal = ref(false)
 const showCommandPalette = ref(false)
 const showAppearanceSettingsModal = ref(false)
+const isSidebarCollapsed = ref(false)
 
 // 关闭所有菜单
 const closeAllMenus = () => {
@@ -50,6 +51,10 @@ const toggleSettingsMenu = () => {
 // 打开快捷命令面板
 const openCommandPalette = () => {
   showCommandPalette.value = true
+}
+
+const toggleSidebar = () => {
+  isSidebarCollapsed.value = !isSidebarCollapsed.value
 }
 
 const showSettingsMessage = (message) => {
@@ -310,12 +315,28 @@ document.addEventListener('click', handleClickOutside)
 
     <div class="workspace">
       <!-- 左侧边栏：串口列表 -->
-      <aside class="sidebar">
+      <aside :class="['sidebar', { collapsed: isSidebarCollapsed }]">
         <SerialSidebar />
       </aside>
+      <button
+        class="sidebar-toggle"
+        :class="{ collapsed: isSidebarCollapsed }"
+        :title="isSidebarCollapsed ? '展开侧栏' : '收起侧栏'"
+        @click="toggleSidebar"
+      >
+        <span class="sidebar-toggle-icon">{{ isSidebarCollapsed ? '>' : '<' }}</span>
+      </button>
 
       <!-- 中间内容区：多分屏终端 -->
-      <main class="main-area">
+      <main :class="['main-area', { expanded: isSidebarCollapsed }]">
+        <button
+          class="sidebar-toggle main-sidebar-toggle"
+          :class="{ collapsed: isSidebarCollapsed }"
+          :title="isSidebarCollapsed ? '灞曞紑渚ф爮' : '鏀惰捣渚ф爮'"
+          @click="toggleSidebar"
+        >
+          <span class="sidebar-toggle-icon">{{ isSidebarCollapsed ? '>' : '<' }}</span>
+        </button>
         <TerminalView />
       </main>
     </div>
@@ -610,6 +631,52 @@ document.addEventListener('click', handleClickOutside)
   flex-direction: column;
   overflow: hidden;
   backdrop-filter: blur(12px);
+  transition: width 0.22s ease, min-width 0.22s ease, opacity 0.18s ease, border-color 0.18s ease;
+}
+
+.sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  border-color: transparent;
+  opacity: 0;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  width: 12px;
+  min-width: 12px;
+  height: 52px;
+  border: 1px solid rgba(125, 162, 186, 0.08);
+  border-radius: 999px;
+  background: rgba(10, 19, 27, 0.72);
+  color: #8fa5b6;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+}
+
+.sidebar-toggle:hover {
+  color: #f4fbff;
+  border-color: rgba(87, 199, 255, 0.18);
+  background: rgba(13, 25, 35, 0.88);
+}
+
+.sidebar-toggle.collapsed {
+  left: 6px;
+}
+
+.sidebar-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 /* 中间内容区 */
@@ -623,6 +690,15 @@ document.addEventListener('click', handleClickOutside)
   border: 1px solid var(--app-border);
   border-radius: 18px;
   backdrop-filter: blur(8px);
+  position: relative;
+}
+
+.main-area.expanded .sidebar-toggle {
+  left: 6px;
+}
+
+.workspace > .sidebar-toggle {
+  display: none;
 }
 
 /* 底部状态栏 */

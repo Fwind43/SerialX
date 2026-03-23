@@ -1,16 +1,10 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useSerialStore } from '../stores/serial'
 
 const serialStore = useSerialStore()
+const showSettings = ref(false)
 
-const openedPorts = computed(() => {
-  return Array.from(serialStore.openPorts.entries())
-    .filter(([, data]) => data.isConnected)
-    .map(([path, data]) => ({ path, ...data }))
-})
-
-const selectedPortConnected = computed(() => serialStore.getPortStatus(serialStore.selectedPort))
 const isPortConnected = (portPath) => serialStore.getPortStatus(portPath)
 
 const selectPort = (portPath) => {
@@ -39,6 +33,17 @@ const handleConnect = async (portPath = null) => {
 const handleRefresh = async () => {
   await serialStore.refreshPorts()
 }
+
+const settingsSummary = computed(() => {
+  const { baudRate, dataBits, stopBits, parity } = serialStore.defaultSettings
+  const parityLabelMap = {
+    none: 'N',
+    even: 'E',
+    odd: 'O'
+  }
+
+  return `${baudRate} / ${dataBits}${parityLabelMap[parity] || 'N'}${stopBits}`
+})
 </script>
 
 <template>
@@ -60,7 +65,7 @@ const handleRefresh = async () => {
       </div>
       <div class="ports-list">
         <div v-if="serialStore.ports.length === 0" class="no-ports">
-          <span class="no-ports-icon">◎</span>
+          <span class="no-ports-icon">○</span>
           <span>未找到串口设备</span>
         </div>
         <div
@@ -87,21 +92,21 @@ const handleRefresh = async () => {
       </div>
     </div>
 
-    <div class="connect-section">
-      <button
-        @click="handleConnect()"
-        :class="['connect-btn', selectedPortConnected ? 'connected' : 'disconnected']"
-        :disabled="!serialStore.selectedPort"
-      >
-        {{ selectedPortConnected ? '断开当前串口' : '连接当前串口' }}
-      </button>
-    </div>
-
     <div class="settings-section">
       <div class="section-header settings-header">
-        <span>默认串口参数</span>
+        <div class="settings-copy">
+          <span>默认串口参数</span>
+          <span class="settings-summary">{{ settingsSummary }}</span>
+        </div>
+        <button
+          class="settings-toggle"
+          :title="showSettings ? '收起默认参数' : '展开默认参数'"
+          @click="showSettings = !showSettings"
+        >
+          {{ showSettings ? '收起' : '编辑' }}
+        </button>
       </div>
-      <div class="settings-grid">
+      <div v-if="showSettings" class="settings-grid">
         <div class="setting-item">
           <label>波特率</label>
           <select v-model="serialStore.defaultSettings.baudRate" class="setting-select">
@@ -182,7 +187,7 @@ const handleRefresh = async () => {
   justify-content: flex-start;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px 8px;
+  padding: 8px 12px;
   font-size: 11px;
   font-weight: 600;
   color: #93acbf;
@@ -365,47 +370,6 @@ const handleRefresh = async () => {
   background: rgba(196, 43, 28, 0.16);
 }
 
-.connect-section {
-  padding: 0 12px 12px;
-}
-
-.connect-btn {
-  width: 100%;
-  padding: 14px 18px;
-  border: 1px solid transparent;
-  border-radius: 18px;
-  color: #fff;
-  font-weight: 700;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.connect-btn.connected {
-  background: linear-gradient(135deg, #cf564c, #a8291f);
-  box-shadow: 0 12px 22px rgba(168, 41, 31, 0.24);
-}
-
-.connect-btn.connected:hover {
-  transform: translateY(-1px);
-}
-
-.connect-btn.disconnected {
-  background: linear-gradient(135deg, #57c7ff, #1190dc);
-  box-shadow: 0 14px 24px rgba(17, 144, 220, 0.26);
-}
-
-.connect-btn.disconnected:hover {
-  transform: translateY(-1px);
-}
-
-.connect-btn:disabled {
-  background: rgba(255, 255, 255, 0.06);
-  color: #688093;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
 .settings-section {
   margin: 0 10px 10px;
   padding: 2px 0 0;
@@ -415,7 +379,35 @@ const handleRefresh = async () => {
 }
 
 .settings-header {
-  padding-bottom: 2px;
+  justify-content: space-between;
+  padding-bottom: 6px;
+}
+
+.settings-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-summary {
+  font-size: 10px;
+  letter-spacing: normal;
+  color: #6f889a;
+}
+
+.settings-toggle {
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(126, 161, 183, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: #a9c0d0;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.settings-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .settings-grid {

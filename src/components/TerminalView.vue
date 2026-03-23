@@ -5,8 +5,13 @@ import SerialPanel from './SerialPanel.vue'
 
 const serialStore = useSerialStore()
 
+const MIN_PANE_WIDTH = 240
+const PANE_GAP_WIDTH = 18
+
 const splitPanes = ref([{ tabs: [], activeTab: '' }])
+const paneWidths = ref([])
 const paneRefs = ref([])
+const contentContainer = ref(null)
 
 const draggedData = ref(null)
 const dropZoneIndex = ref(-1)
@@ -30,33 +35,107 @@ const setPaneRef = (element, paneIndex) => {
   }
 }
 
-const clearPaneWidths = () => {
-  paneRefs.value.forEach((pane) => {
-    if (pane) {
-      pane.style.flex = ''
-    }
-  })
+const getAvailablePaneWidth = (paneCount = splitPanes.value.length) => {
+  const containerWidth = contentContainer.value?.clientWidth || 0
+  return Math.max(0, containerWidth - Math.max(0, paneCount - 1) * PANE_GAP_WIDTH)
 }
 
-const rebalancePaneWidths = (widths = null) => {
-  nextTick(() => {
-    const paneElements = paneRefs.value.filter(Boolean)
-    if (!paneElements.length) return
+const getEvenPaneWidths = (paneCount = splitPanes.value.length) => {
+  if (paneCount <= 1) return []
+  const availableWidth = getAvailablePaneWidth(paneCount)
+  const widthPerPane = availableWidth > 0 ? availableWidth / paneCount : 0
+  return Array.from({ length: paneCount }, () => widthPerPane)
+}
 
-    if (!widths || widths.length !== paneElements.length) {
-      clearPaneWidths()
-      return
-    }
+const getCurrentPaneWidths = (paneCount = splitPanes.value.length) => {
+  if (paneCount <= 1) return []
+  if (paneWidths.value.length === paneCount) {
+    return [...paneWidths.value]
+  }
 
-    paneElements.forEach((pane, index) => {
-      pane.style.flex = `0 0 ${Math.max(240, Math.floor(widths[index]))}px`
+  const measuredWidths = paneRefs.value
+    .slice(0, paneCount)
+    .map((pane) => pane?.offsetWidth || 0)
+    .filter((width) => width > 0)
+
+  if (measuredWidths.length === paneCount) {
+    return measuredWidths
+  }
+
+  return getEvenPaneWidths(paneCount)
+}
+
+const normalizePaneWidths = (widths, paneCount = splitPanes.value.length) => {
+  if (!widths || paneCount <= 1) return []
+  if (widths.length !== paneCount) return getEvenPaneWidths(paneCount)
+
+  const safeWidths = widths.map((width) => Math.max(0, Number(width) || 0))
+  const totalWidth = safeWidths.reduce((sum, width) => sum + width, 0)
+  const availableWidth = getAvailablePaneWidth(paneCount)
+
+  if (!totalWidth || !availableWidth) return getEvenPaneWidths(paneCount)
+
+  const minimumTotalWidth = paneCount * MIN_PANE_WIDTH
+  if (availableWidth <= minimumTotalWidth) {
+    return safeWidths.map((width) => width / totalWidth * availableWidth)
+  }
+
+  let normalizedWidths = safeWidths.map((width) => Math.max(MIN_PANE_WIDTH, width / totalWidth * availableWidth))
+  let overflow = normalizedWidths.reduce((sum, width) => sum + width, 0) - availableWidth
+
+  while (overflow > 0.5) {
+    const adjustableIndexes = normalizedWidths
+      .map((width, index) => ({ width, index }))
+      .filter(({ width }) => width > MIN_PANE_WIDTH + 0.5)
+
+    if (!adjustableIndexes.length) break
+
+    const deduction = overflow / adjustableIndexes.length
+    adjustableIndexes.forEach(({ index }) => {
+      normalizedWidths[index] = Math.max(MIN_PANE_WIDTH, normalizedWidths[index] - deduction)
     })
-  })
+    overflow = normalizedWidths.reduce((sum, width) => sum + width, 0) - availableWidth
+  }
+
+  const finalTotalWidth = normalizedWidths.reduce((sum, width) => sum + width, 0)
+  if (finalTotalWidth > 0 && Math.abs(finalTotalWidth - availableWidth) > 0.5) {
+    const scale = availableWidth / finalTotalWidth
+    normalizedWidths = normalizedWidths.map((width) => width * scale)
+  }
+
+  return normalizedWidths
+}
+
+const applyPaneWidths = (widths, paneCount = splitPanes.value.length) => {
+  paneWidths.value = normalizePaneWidths(widths, paneCount)
+}
+
+const removePaneAndWidth = (paneIndex) => {
+  const nextPaneCount = splitPanes.value.length - 1
+  const currentWidths = getCurrentPaneWidths(splitPanes.value.length)
+  let removedWidth = 0
+
+  if (currentWidths.length === splitPanes.value.length) {
+    removedWidth = currentWidths[paneIndex] || 0
+  }
+
+  splitPanes.value.splice(paneIndex, 1)
+
+  if (nextPaneCount <= 1) {
+    paneWidths.value = []
+    return
+  }
+
+  const nextWidths = currentWidths.filter((_, index) => index !== paneIndex)
+  const targetIndex = Math.min(paneIndex, nextWidths.length - 1)
+  if (targetIndex >= 0) {
+    nextWidths[targetIndex] += removedWidth
+  }
+  applyPaneWidths(nextWidths, nextPaneCount)
 }
 
 watch(() => connectedPorts.value, (newPorts) => {
   const currentTabs = allTabs.value
-
   newPorts.forEach((port) => {
     if (!currentTabs.includes(port)) {
       if (splitPanes.value.length === 0) {
@@ -79,7 +158,7 @@ watch(() => connectedPorts.value, (newPorts) => {
   while (splitPanes.value.length > 1 && splitPanes.value.some((pane) => pane.tabs.length === 0)) {
     const emptyIndex = splitPanes.value.findIndex((pane) => pane.tabs.length === 0)
     if (emptyIndex !== -1) {
-      splitPanes.value.splice(emptyIndex, 1)
+      removePaneAndWidth(emptyIndex)
     }
   }
 
@@ -128,30 +207,25 @@ const splitPane = (paneIndex) => {
     activeTab: lastTab
   })
 
-  if (!sourcePaneWidth) return
+  if (!sourcePaneWidth) {
+    paneWidths.value = getEvenPaneWidths(splitPanes.value.length)
+    return
+  }
 
-  const minWidth = 240
-  const nextWidths = paneRefs.value
-    .slice(0, splitPanes.value.length - 1)
-    .map((paneElement, index) => {
-      if (!paneElement) return null
-      if (index !== paneIndex) return paneElement.offsetWidth
-      return Math.max(minWidth, Math.floor(sourcePaneWidth / 2))
-    })
-
-  const splitWidth = Math.max(minWidth, sourcePaneWidth - nextWidths[paneIndex])
+  const nextWidths = getCurrentPaneWidths(splitPanes.value.length - 1)
+  const primaryWidth = Math.max(MIN_PANE_WIDTH, Math.floor(sourcePaneWidth / 2))
+  const splitWidth = Math.max(MIN_PANE_WIDTH, sourcePaneWidth - primaryWidth)
+  nextWidths[paneIndex] = primaryWidth
   nextWidths.splice(paneIndex + 1, 0, splitWidth)
-  rebalancePaneWidths(nextWidths)
+  applyPaneWidths(nextWidths, splitPanes.value.length)
 }
 
 const removeEmptyPane = (paneIndex) => {
   if (splitPanes.value.length <= 1) return
   if (splitPanes.value[paneIndex].tabs.length > 0) return
-  splitPanes.value.splice(paneIndex, 1)
+  removePaneAndWidth(paneIndex)
   nextTick(() => {
     paneRefs.value = paneRefs.value.slice(0, splitPanes.value.length)
-    clearPaneWidths()
-    handleResize()
   })
 }
 
@@ -197,11 +271,9 @@ const handleContentDrop = (event, targetPaneIndex) => {
   }
 
   if (sourcePane.tabs.length === 0 && splitPanes.value.length > 1) {
-    splitPanes.value.splice(sourcePaneIndex, 1)
+    removePaneAndWidth(sourcePaneIndex)
     nextTick(() => {
       paneRefs.value = paneRefs.value.slice(0, splitPanes.value.length)
-      clearPaneWidths()
-      handleResize()
     })
   }
 
@@ -250,11 +322,9 @@ const handleTabListDrop = (event, targetPaneIndex) => {
   }
 
   if (sourcePane.tabs.length === 0 && splitPanes.value.length > 1) {
-    splitPanes.value.splice(sourcePaneIndex, 1)
+    removePaneAndWidth(sourcePaneIndex)
     nextTick(() => {
       paneRefs.value = paneRefs.value.slice(0, splitPanes.value.length)
-      clearPaneWidths()
-      handleResize()
     })
   }
 
@@ -301,8 +371,10 @@ const handleSeparatorMouseMove = (event) => {
 
   if (newLeftWidth < minWidth || newRightWidth < minWidth) return
 
-  leftPane.style.flex = `0 0 ${newLeftWidth}px`
-  rightPane.style.flex = `0 0 ${newRightWidth}px`
+  const nextWidths = getCurrentPaneWidths()
+  nextWidths[draggingSeparatorIndex.value - 1] = newLeftWidth
+  nextWidths[draggingSeparatorIndex.value] = newRightWidth
+  applyPaneWidths(nextWidths)
 }
 
 const handleSeparatorMouseUp = () => {
@@ -314,26 +386,14 @@ const handleSeparatorMouseUp = () => {
 const handleResize = () => {
   if (isDraggingSeparator.value) return
 
-  const paneGroups = document.querySelectorAll('.split-pane-group')
-  const separators = document.querySelectorAll('.split-separator')
-  const container = document.querySelector('.content-container')
+  const paneCount = splitPanes.value.length
+  if (paneCount <= 1) {
+    paneWidths.value = []
+    return
+  }
 
-  if (!paneGroups.length || !container) return
-
-  let totalWidth = separators.length * 10
-  const widths = []
-  paneGroups.forEach((pane) => {
-    widths.push(pane.offsetWidth)
-    totalWidth += pane.offsetWidth
-  })
-
-  const containerWidth = container.offsetWidth
-  if (Math.abs(totalWidth - containerWidth) < 10) return
-
-  const scale = containerWidth / totalWidth
-  paneGroups.forEach((pane, index) => {
-    pane.style.flex = `0 0 ${Math.max(240, Math.floor(widths[index] * scale))}px`
-  })
+  const widths = getCurrentPaneWidths(paneCount)
+  applyPaneWidths(widths, paneCount)
 }
 
 onMounted(() => {
@@ -351,7 +411,7 @@ onUnmounted(() => {
 
 <template>
   <div class="terminal-shell">
-    <div class="content-container">
+    <div ref="contentContainer" class="content-container">
       <template v-for="(pane, paneIndex) in splitPanes" :key="paneIndex">
         <div
           v-if="paneIndex > 0"
@@ -361,7 +421,11 @@ onUnmounted(() => {
           @drop="handleTabListDrop($event, paneIndex)"
         ></div>
 
-        <div :ref="(element) => setPaneRef(element, paneIndex)" class="split-pane-group">
+        <div
+          :ref="(element) => setPaneRef(element, paneIndex)"
+          class="split-pane-group"
+          :style="paneWidths.length === splitPanes.length ? { flex: `0 0 ${Math.floor(paneWidths[paneIndex])}px` } : null"
+        >
           <div class="tab-header-section">
             <div class="tab-list">
               <div
