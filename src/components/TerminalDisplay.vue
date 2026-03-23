@@ -40,18 +40,23 @@ const showContextMenu = ref(false)
 const contextMenuPosition = ref({ x: 0, y: 0 })
 const selectedText = ref('')
 
-// 打开搜索框
-const openSearch = () => {
-  showSearch.value = true
-  // 重置搜索状态
-  searchMatchCount.value = 0
-  currentMatchIndex.value = 0
+const focusSearchInput = () => {
   nextTick(() => {
     if (searchInput.value) {
       searchInput.value.focus()
       searchInput.value.select()
     }
   })
+}
+
+// 打开搜索框
+const openSearch = () => {
+  showSearch.value = true
+  closeContextMenu()
+  // 重置搜索状态
+  searchMatchCount.value = 0
+  currentMatchIndex.value = 0
+  focusSearchInput()
 }
 
 // 搜索防抖定时器
@@ -570,12 +575,9 @@ onMounted(() => {
 // 右键菜单处理
 const handleContextMenu = (e) => {
   e.preventDefault()
-  const text = terminal?.getSelection()?.trim()
-  if (text) {
-    selectedText.value = text
-    contextMenuPosition.value = { x: e.clientX, y: e.clientY }
-    showContextMenu.value = true
-  }
+  selectedText.value = terminal?.getSelection()?.trim() || ''
+  contextMenuPosition.value = { x: e.clientX, y: e.clientY }
+  showContextMenu.value = true
 }
 
 // 复制选中的文本
@@ -597,6 +599,10 @@ const copySelection = async () => {
   showContextMenu.value = false
 }
 
+const openSearchFromContextMenu = () => {
+  openSearch()
+}
+
 // 全选
 const selectAll = () => {
   if (terminal) {
@@ -607,6 +613,11 @@ const selectAll = () => {
     selection?.addRange(range)
   }
   showContextMenu.value = false
+}
+
+const clearTerminalLogs = () => {
+  serialStore.clearPortLogs(props.portPath)
+  closeContextMenu()
 }
 
 // 关闭右键菜单
@@ -684,13 +695,22 @@ defineExpose({
       :style="{ left: contextMenuPosition.x + 'px', top: contextMenuPosition.y + 'px' }"
       @click.stop
     >
-      <div class="context-menu-item" @click="copySelection">
+      <div class="context-menu-item" @click="openSearchFromContextMenu">
+        <span>⌕</span>
+        <span>查找</span>
+      </div>
+      <div class="context-menu-item" :class="{ disabled: !selectedText }" @click="selectedText && copySelection()">
         <span>📋</span>
         <span>复制</span>
       </div>
       <div class="context-menu-item" @click="selectAll">
         <span>✓</span>
         <span>全选</span>
+      </div>
+      <div class="context-menu-divider"></div>
+      <div class="context-menu-item danger" @click="clearTerminalLogs">
+        <span>⌦</span>
+        <span>清空日志</span>
       </div>
     </div>
 
@@ -945,6 +965,26 @@ defineExpose({
 .context-menu-item:hover {
   background-color: #007acc;
   color: #ffffff;
+}
+
+.context-menu-item.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.context-menu-item.disabled:hover {
+  background-color: transparent;
+  color: #cccccc;
+}
+
+.context-menu-item.danger:hover {
+  background-color: rgba(196, 43, 28, 0.86);
+}
+
+.context-menu-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: rgba(126, 161, 183, 0.18);
 }
 
 .context-menu-item span:first-child {
