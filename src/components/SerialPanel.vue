@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useSerialStore } from '../stores/serial'
 import TerminalDisplay from './TerminalDisplay.vue'
 
@@ -30,7 +30,7 @@ const quickCommands = computed(() => enabledCommands.value.slice(0, 3))
 const isPaused = computed(() => serialStore.portLoopSendPaused.get(props.portPath) || false)
 const loopSendCount = computed(() => serialStore.portLoopSendCounts.get(props.portPath) || 0)
 const loopHasStarted = computed(() => loopSendCount.value > 0)
-const connectionStatusText = computed(() => isConnected.value ? '已连接' : '未连接')
+const connectionStatusText = computed(() => (isConnected.value ? '已连接' : '未连接'))
 
 const loopActionLabel = computed(() => {
   if (!loopHasStarted.value) return '开始'
@@ -58,6 +58,21 @@ const isSendDisabled = computed(() => {
   if (!data) return true
   if (portControlSettings.value.hexSend) return !isHexInputValid.value
   return false
+})
+
+const advancedSummary = computed(() => {
+  const summary = [`分包 ${portControlSettings.value.packetTimeout} ms`]
+
+  if (portControlSettings.value.isLoopSend) {
+    summary.push(`启动延时 ${portControlSettings.value.loopStartDelay} ms`)
+    summary.push(
+      portControlSettings.value.loopFailureLimit > 0
+        ? `失败停发 ${portControlSettings.value.loopFailureLimit} 次`
+        : '失败停发 不限'
+    )
+  }
+
+  return summary.join(' · ')
 })
 
 const toggleHexReceive = () => {
@@ -89,7 +104,7 @@ const toggleLoopSend = () => {
     serialStore.stopLoopSendForPort(props.portPath)
   } else {
     serialStore.updatePortControlSettings(props.portPath, { isLoopSend: true })
-    serialStore.addPortLog(props.portPath, '循环发送已启用，请点击“开始”按钮启动', 'info')
+    serialStore.addPortLog(props.portPath, '循环发送已启用，请点击“开始”按钮启动。', 'info')
   }
 }
 
@@ -99,11 +114,13 @@ const startLoopSend = () => {
     serialStore.addPortLog(props.portPath, '请先输入要发送的数据', 'warning')
     return
   }
+
   if (!isConnected.value) {
     serialStore.setPortNotice(props.portPath, 'warning', '请先连接串口')
     serialStore.addPortLog(props.portPath, '请先连接串口', 'warning')
     return
   }
+
   serialStore.clearPortNotice(props.portPath)
   serialStore.startLoopSend(props.portPath)
 }
@@ -146,7 +163,7 @@ const executeCommand = (command) => {
   sendErrorMessage.value = ''
   sendSuccessMessage.value = ''
   serialStore.clearPortNotice(props.portPath)
-  serialStore.addPortLog(props.portPath, `命令 "${command}" 已填入输入框，请按 Enter 发送`, 'info')
+  serialStore.addPortLog(props.portPath, `命令 "${command}" 已填入输入框，请按 Enter 发送。`, 'info')
 }
 
 const handleClearLogs = () => {
@@ -179,9 +196,11 @@ const handleSend = async () => {
   sendErrorMessage.value = ''
   sendSuccessMessage.value = '发送成功'
   serialStore.clearPortNotice(props.portPath)
+
   if (sendFeedbackTimer) {
     clearTimeout(sendFeedbackTimer)
   }
+
   sendFeedbackTimer = setTimeout(() => {
     sendSuccessMessage.value = ''
     sendFeedbackTimer = null
@@ -209,10 +228,6 @@ const handleDisconnect = async () => {
 
 const setFilterEnabled = (enabled) => {
   serialStore.setPortFilters(props.portPath, { enabled })
-}
-
-const setFilterMode = (mode) => {
-  serialStore.setPortFilters(props.portPath, { mode })
 }
 
 const setFilterMatchMode = (matchMode) => {
@@ -248,6 +263,13 @@ const formatBytes = (bytes) => {
 
 const hexPlaceholder = '输入十六进制数据，例如：48 65 6C 6C 6F'
 const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发送...'
+
+onUnmounted(() => {
+  if (sendFeedbackTimer) {
+    clearTimeout(sendFeedbackTimer)
+    sendFeedbackTimer = null
+  }
+})
 </script>
 
 <template>
@@ -267,16 +289,17 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
           </span>
         </span>
       </div>
+
       <div class="panel-actions">
-        <div class="stats-display" @click="resetStats" title="点击重置统计">
+        <div class="stats-display" title="点击重置统计" @click="resetStats">
           <span class="stats-line tx">TX {{ portStats.txCount }} / {{ formatBytes(portStats.txBytes) }}</span>
           <span class="stats-line rx">RX {{ portStats.rxCount }} / {{ formatBytes(portStats.rxBytes) }}</span>
         </div>
-        <button @click="showFilters = !showFilters" class="action-btn filter" :class="{ active: showFilters }">
+        <button class="action-btn filter" :class="{ active: showFilters }" @click="showFilters = !showFilters">
           {{ showFilters ? '隐藏过滤' : '显示过滤' }}
         </button>
-        <button @click="handleClearLogs" class="action-btn">清空日志</button>
-        <button @click="handleDisconnect" class="action-btn disconnect">断开</button>
+        <button class="action-btn" @click="handleClearLogs">清空日志</button>
+        <button class="action-btn disconnect" @click="handleDisconnect">断开</button>
       </div>
     </div>
 
@@ -302,8 +325,8 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
               name="match-mode"
               value="keyword"
               :checked="portFilters.matchMode === 'keyword'"
-              @change="setFilterMatchMode('keyword')"
               :disabled="!portFilters.enabled"
+              @change="setFilterMatchMode('keyword')"
             />
             <span class="mode-text">关键字</span>
           </label>
@@ -313,8 +336,8 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
               name="match-mode"
               value="regex"
               :checked="portFilters.matchMode === 'regex'"
-              @change="setFilterMatchMode('regex')"
               :disabled="!portFilters.enabled"
+              @change="setFilterMatchMode('regex')"
             />
             <span class="mode-text">正则</span>
           </label>
@@ -332,8 +355,8 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
               name="filter-target"
               value="hexData"
               :checked="portFilters.filterTarget === 'hexData'"
-              @change="setFilterTarget('hexData')"
               :disabled="!portFilters.enabled"
+              @change="setFilterTarget('hexData')"
             />
             <span class="mode-text">Hex</span>
           </label>
@@ -343,8 +366,8 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
               name="filter-target"
               value="asciiData"
               :checked="portFilters.filterTarget === 'asciiData'"
-              @change="setFilterTarget('asciiData')"
               :disabled="!portFilters.enabled"
+              @change="setFilterTarget('asciiData')"
             />
             <span class="mode-text">ASCII</span>
           </label>
@@ -354,8 +377,8 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
               name="filter-target"
               value="both"
               :checked="portFilters.filterTarget === 'both' || !portFilters.filterTarget"
-              @change="setFilterTarget('both')"
               :disabled="!portFilters.enabled"
+              @change="setFilterTarget('both')"
             />
             <span class="mode-text">两者</span>
           </label>
@@ -366,10 +389,10 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
         <input
           type="text"
           class="pattern-input"
-          :placeholder="getPatternPlaceholder()"
           :value="portFilters.pattern"
-          @input="setFilterPattern($event.target.value)"
+          :placeholder="getPatternPlaceholder()"
           :disabled="!portFilters.enabled"
+          @input="setFilterPattern($event.target.value)"
         />
       </div>
 
@@ -389,14 +412,14 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
       <div class="send-row">
         <input
           :value="serialStore.getPortSendingData(props.portPath)"
-          @input="handleSendingInput($event.target.value)"
           type="text"
           class="send-input"
           :class="{ 'hex-invalid': portControlSettings.hexSend && !isHexInputValid, 'send-error': !!sendErrorMessage }"
           :placeholder="portControlSettings.hexSend ? hexPlaceholder : textPlaceholder"
+          @input="handleSendingInput($event.target.value)"
           @keydown="handleSendingKeyDown"
         />
-        <button @click="handleSend" class="send-button" :disabled="isSendDisabled">
+        <button class="send-button" :disabled="isSendDisabled" @click="handleSend">
           发送
         </button>
       </div>
@@ -404,15 +427,10 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
       <div v-if="sendErrorMessage" class="send-feedback error">
         {{ sendErrorMessage }}
       </div>
-
       <div v-else-if="sendSuccessMessage" class="send-feedback success">
         {{ sendSuccessMessage }}
       </div>
-
-      <div
-        v-else-if="portNotice"
-        :class="['send-feedback', 'notice', portNotice.type]"
-      >
+      <div v-else-if="portNotice" :class="['send-feedback', 'notice', portNotice.type]">
         {{ portNotice.message }}
       </div>
 
@@ -422,8 +440,8 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
             v-for="cmd in quickCommands"
             :key="cmd.id"
             class="quick-command-btn"
-            :disabled="!isConnected"
             :title="cmd.command"
+            :disabled="!isConnected"
             @click="executeCommand(cmd.command)"
           >
             {{ cmd.name }}
@@ -432,9 +450,9 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
 
         <select
           v-if="enabledCommands.length > 0"
-          @change="executeCommand($event.target.value); $event.target.value = ''"
           class="command-select"
           :disabled="!isConnected"
+          @change="executeCommand($event.target.value); $event.target.value = ''"
         >
           <option value="" disabled>快捷命令</option>
           <option v-for="cmd in enabledCommands" :key="cmd.id" :value="cmd.command">
@@ -466,14 +484,14 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
         </div>
 
         <div v-if="portControlSettings.isLoopSend" class="loop-controls">
-          <button @click="togglePauseLoopSend" :class="loopActionClass" :title="loopActionTitle">
+          <button :class="loopActionClass" :title="loopActionTitle" @click="togglePauseLoopSend">
             {{ loopActionLabel }}
           </button>
           <button
             v-if="loopSendCount > 0"
-            @click="toggleLoopSend"
             class="loop-stop-btn"
             title="停止循环发送"
+            @click="toggleLoopSend"
           >
             停止
           </button>
@@ -482,11 +500,11 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
             <span class="interval-label">间隔</span>
             <input
               type="number"
+              class="interval-input"
               :value="portControlSettings.loopInterval"
-              @input="updateLoopInterval($event.target.value)"
               :min="100"
               :step="100"
-              class="interval-input"
+              @input="updateLoopInterval($event.target.value)"
             />
             <span class="interval-unit">ms</span>
           </label>
@@ -495,67 +513,72 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
             <span class="interval-label">次数</span>
             <input
               type="number"
+              class="interval-input"
               :value="portControlSettings.loopMaxCount"
-              @input="updateLoopMaxCount($event.target.value)"
               :min="0"
               :step="1"
-              class="interval-input"
+              @input="updateLoopMaxCount($event.target.value)"
             />
             <span class="interval-unit">{{ portControlSettings.loopMaxCount > 0 ? '次' : '不限' }}</span>
           </label>
         </div>
 
+        <div class="advanced-summary">
+          <span class="advanced-summary-label">高级参数</span>
+          <span class="advanced-summary-value">{{ advancedSummary }}</span>
+        </div>
+
         <button
           class="advanced-toggle"
           :class="{ active: showAdvancedOptions }"
-          @click="showAdvancedOptions = !showAdvancedOptions"
           :title="showAdvancedOptions ? '收起更多参数' : '展开更多参数'"
+          @click="showAdvancedOptions = !showAdvancedOptions"
         >
           {{ showAdvancedOptions ? '收起参数' : '更多参数' }}
         </button>
       </div>
 
       <div v-if="showAdvancedOptions" class="advanced-options">
-        <label v-if="portControlSettings.isLoopSend" class="interval-group packet-timeout">
-          <span class="interval-label packet-label">启动延时</span>
-          <input
-            type="number"
-            :value="portControlSettings.loopStartDelay"
-            @input="updateLoopStartDelay($event.target.value)"
-            :min="0"
-            :step="100"
-            class="interval-input"
-            title="开始循环发送前先等待一段时间"
-          />
-          <span class="interval-unit">ms</span>
-        </label>
-
-        <label v-if="portControlSettings.isLoopSend" class="interval-group packet-timeout">
-          <span class="interval-label packet-label">失败停止</span>
-          <input
-            type="number"
-            :value="portControlSettings.loopFailureLimit"
-            @input="updateLoopFailureLimit($event.target.value)"
-            :min="0"
-            :step="1"
-            class="interval-input"
-            title="连续发送失败达到该次数后自动停止，0 表示不限"
-          />
-          <span class="interval-unit">{{ portControlSettings.loopFailureLimit > 0 ? '次' : '不限' }}</span>
-        </label>
-
         <label class="interval-group packet-timeout">
           <span class="interval-label packet-label">分包超时</span>
           <input
             type="number"
+            class="interval-input"
             :value="portControlSettings.packetTimeout"
-            @input="updatePacketTimeout($event.target.value)"
             :min="100"
             :step="100"
-            class="interval-input"
             title="超过该时间未收到后续数据时，将当前数据视为一个完整分包"
+            @input="updatePacketTimeout($event.target.value)"
           />
           <span class="interval-unit">ms</span>
+        </label>
+
+        <label v-if="portControlSettings.isLoopSend" class="interval-group packet-timeout">
+          <span class="interval-label packet-label">启动延时</span>
+          <input
+            type="number"
+            class="interval-input"
+            :value="portControlSettings.loopStartDelay"
+            :min="0"
+            :step="100"
+            title="开始循环发送前先等待一段时间"
+            @input="updateLoopStartDelay($event.target.value)"
+          />
+          <span class="interval-unit">ms</span>
+        </label>
+
+        <label v-if="portControlSettings.isLoopSend" class="interval-group packet-timeout">
+          <span class="interval-label packet-label">失败停发</span>
+          <input
+            type="number"
+            class="interval-input"
+            :value="portControlSettings.loopFailureLimit"
+            :min="0"
+            :step="1"
+            title="连续发送失败达到该次数后自动停止，0 表示不限"
+            @input="updateLoopFailureLimit($event.target.value)"
+          />
+          <span class="interval-unit">{{ portControlSettings.loopFailureLimit > 0 ? '次' : '不限' }}</span>
         </label>
       </div>
     </div>
@@ -769,7 +792,7 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
   color: #dce8f0;
   border-radius: 10px;
   font-size: 13px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: Consolas, "Monaco", monospace;
 }
 
 .pattern-input:focus {
@@ -815,7 +838,7 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
   color: #ffffff;
   border-radius: 10px;
   font-size: 13px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: Consolas, "Monaco", monospace;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -843,7 +866,7 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
   background: #1495e1;
   border: 1px solid rgba(87, 199, 255, 0.12);
   border-radius: 10px;
-  color: white;
+  color: #ffffff;
   font-weight: 800;
   cursor: pointer;
   font-size: 13px;
@@ -934,12 +957,6 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
   cursor: not-allowed;
 }
 
-.advanced-options {
-  margin-top: 8px;
-  display: flex;
-  justify-content: flex-end;
-}
-
 .command-select {
   padding: 9px 34px 9px 12px;
   background: rgba(255, 255, 255, 0.04);
@@ -975,7 +992,8 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
 }
 
 .option-chip-group,
-.loop-controls {
+.loop-controls,
+.advanced-options {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -999,11 +1017,6 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
   width: 12px;
   height: 12px;
   cursor: pointer;
-}
-
-.option-text {
-  font-size: 11px;
-  line-height: 1;
 }
 
 .loop-start-btn,
@@ -1036,21 +1049,27 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
   border-color: rgba(196, 43, 28, 0.18);
 }
 
-.interval-group {
+.advanced-summary {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: 10px;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 10px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(126, 161, 183, 0.08);
-  color: #dce8f0;
 }
 
-.packet-timeout {
-  background: rgba(87, 199, 255, 0.04);
-  border-color: rgba(87, 199, 255, 0.12);
-  padding-right: 6px;
+.advanced-summary-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #8ea6b8;
+}
+
+.advanced-summary-value {
+  font-size: 11px;
+  color: #c7d7e3;
+  white-space: nowrap;
 }
 
 .advanced-toggle {
@@ -1070,6 +1089,28 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
 .advanced-toggle.active {
   background: rgba(255, 255, 255, 0.06);
   color: #dce8f0;
+}
+
+.advanced-options {
+  margin-top: 8px;
+  justify-content: flex-end;
+}
+
+.interval-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(126, 161, 183, 0.08);
+  color: #dce8f0;
+}
+
+.packet-timeout {
+  background: rgba(87, 199, 255, 0.04);
+  border-color: rgba(87, 199, 255, 0.12);
+  padding-right: 6px;
 }
 
 .packet-label {
