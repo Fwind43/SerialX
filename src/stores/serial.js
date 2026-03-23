@@ -50,6 +50,7 @@ export const useSerialStore = defineStore('serial', () => {
   const portLoopSendInFlight = reactive(new Map()) // path -> whether send is in progress
   const portLoopSendCounts = reactive(new Map()) // path -> 已发送次数
   const portLoopSendPaused = reactive(new Map()) // path -> 是否暂停
+  const portManualDisconnects = reactive(new Set())
 
   // 每个串口的显示设置（独立配置）
   const portDisplaySettings = ref(new Map()) // path -> { hexReceive: boolean, showAscii: boolean }
@@ -145,6 +146,26 @@ export const useSerialStore = defineStore('serial', () => {
   const clearPortNotice = (portPath) => {
     if (!portPath) return
     portNotices.value.delete(portPath)
+  }
+
+  const normalizePortErrorMessage = (message, fallback = '操作失败') => {
+    if (!message) return fallback
+
+    const loweredMessage = String(message).toLowerCase()
+    if (loweredMessage.includes('access denied') || loweredMessage.includes('permission denied')) {
+      return '端口被占用或权限不足'
+    }
+    if (loweredMessage.includes('cannot lock port')) {
+      return '端口被其他程序占用'
+    }
+    if (loweredMessage.includes('file not found') || loweredMessage.includes('cannot open')) {
+      return '端口不存在或暂时不可用'
+    }
+    if (loweredMessage.includes('device disconnected') || loweredMessage.includes('disconnected')) {
+      return '设备已断开连接'
+    }
+
+    return message
   }
 
   // 获取串口显示设置
@@ -497,14 +518,16 @@ export const useSerialStore = defineStore('serial', () => {
         addPortLog(targetPort, `已连接，波特率：${connectionSettings.baudRate}`, 'success')
         return true
       } else {
-        setPortNotice(targetPort, 'error', result.error || '连接失败')
-        addPortLog(targetPort, `连接失败：${result.error}`, 'error')
+        const errorMessage = normalizePortErrorMessage(result.error, '连接失败')
+        setPortNotice(targetPort, 'error', errorMessage)
+        addPortLog(targetPort, `连接失败：${errorMessage}`, 'error')
         return false
       }
     } catch (error) {
       console.error('Connection error:', error)
-      setPortNotice(targetPort, 'error', error.message || '连接错误')
-      addPortLog(targetPort, `连接错误：${error.message}`, 'error')
+      const errorMessage = normalizePortErrorMessage(error.message, '连接错误')
+      setPortNotice(targetPort, 'error', errorMessage)
+      addPortLog(targetPort, `连接错误：${errorMessage}`, 'error')
       return false
     }
   }
@@ -517,6 +540,7 @@ export const useSerialStore = defineStore('serial', () => {
     }
 
     try {
+      portManualDisconnects.add(targetPort)
       const result = await window.electronAPI.closePort(targetPort)
       if (result.success) {
         openPorts.value.delete(targetPort)
@@ -527,7 +551,9 @@ export const useSerialStore = defineStore('serial', () => {
         syncSelectedPort()
         return true
       }
+      portManualDisconnects.delete(targetPort)
     } catch (error) {
+      portManualDisconnects.delete(targetPort)
       setPortNotice(targetPort, 'error', error.message || '断开连接失败')
       addPortLog(targetPort, `断开连接错误：${error.message}`, 'error')
     }
@@ -536,6 +562,7 @@ export const useSerialStore = defineStore('serial', () => {
 
   async function disconnectAll() {
     try {
+      Array.from(openPorts.value.keys()).forEach((portPath) => portManualDisconnects.add(portPath))
       const result = await window.electronAPI.closePort()
       openPorts.value.clear()
       // 保留日志数据、过滤设置、统计数据，只删除连接状态
@@ -543,6 +570,7 @@ export const useSerialStore = defineStore('serial', () => {
       syncSelectedPort()
       return result.success
     } catch (error) {
+      portManualDisconnects.clear()
       return false
     }
   }
@@ -654,13 +682,15 @@ export const useSerialStore = defineStore('serial', () => {
         addPortLog(targetPort, logData, 'tx', logData_raw)
         return { success: true }
       } else {
-        setPortNotice(targetPort, 'error', result.error || '发送失败')
-        addPortLog(targetPort, `发送失败：${result.error}`, 'error')
-        return { success: false, error: result.error }
+        const errorMessage = normalizePortErrorMessage(result.error, '发送失败')
+        setPortNotice(targetPort, 'error', errorMessage)
+        addPortLog(targetPort, `发送失败：${errorMessage}`, 'error')
+        return { success: false, error: errorMessage }
       }
     } catch (error) {
-      setPortNotice(targetPort, 'error', error.message || '发送失败')
-      return { success: false, error: error.message }
+      const errorMessage = normalizePortErrorMessage(error.message, '发送失败')
+      setPortNotice(targetPort, 'error', errorMessage)
+      return { success: false, error: errorMessage }
     }
   }
 
@@ -1007,14 +1037,21 @@ export const useSerialStore = defineStore('serial', () => {
     })
 
     window.electronAPI.onSerialError(({ port, error }) => {
-      setPortNotice(port, 'error', error)
-      addPortLog(port, `错误：${error}`, 'error')
+      const errorMessage = normalizePortErrorMessage(error, '串口错误')
+      setPortNotice(port, 'error', errorMessage)
+      addPortLog(port, `错误：${errorMessage}`, 'error')
     })
 
     window.electronAPI.onPortClosed(({ port }) => {
       openPorts.value.delete(port)
       stopLoopSendForPort(port, { resetCount: false, silent: true })
-      setPortNotice(port, 'warning', '串口连接已关闭')
+
+      if (portManualDisconnects.has(port)) {
+        portManualDisconnects.delete(port)
+      } else {
+        setPortNotice(port, 'warning', '串口连接已意外关闭')
+      }
+
       syncSelectedPort()
     })
   }
