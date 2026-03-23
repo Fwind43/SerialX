@@ -100,6 +100,13 @@ const formatImportedSettingsSummary = (result) => {
   return `已导入设置\n${result.filePath}\n版本：${versionText}\n内容：${hasLayout}`
 }
 
+const formatImportedWorkspaceSummary = (result) => {
+  const snapshot = result?.data || {}
+  const versionText = typeof snapshot.version === 'number' ? `v${snapshot.version}` : '未知版本'
+  const selectedPortText = snapshot.selectedPort || '未指定'
+  return `已导入工作区快照\n${result.filePath}\n版本：${versionText}\n当前串口：${selectedPortText}`
+}
+
 const handleGlobalKeydown = (event) => {
   const activeElement = document.activeElement
   const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
@@ -180,6 +187,37 @@ const importSettings = async () => {
     showSettingsMessage(formatImportedSettingsSummary(result), 'success', '导入成功')
   } catch (error) {
     showSettingsMessage(`应用设置失败\n${error.message}`, 'error', '应用失败')
+  }
+}
+
+const exportWorkspaceSnapshot = async () => {
+  showSettingsMenu.value = false
+  const result = await window.electronAPI?.exportWorkspaceSnapshot(serialStore.buildWorkspaceSnapshot())
+  if (!result || result.canceled) return
+
+  if (result.success) {
+    showSettingsMessage(`工作区快照已导出到\n${result.filePath}`, 'success', '导出成功')
+    return
+  }
+
+  showSettingsMessage(`导出工作区快照失败\n${result.error || '未知错误'}`, 'error', '导出失败')
+}
+
+const importWorkspaceSnapshot = async () => {
+  showSettingsMenu.value = false
+  const result = await window.electronAPI?.importWorkspaceSnapshot()
+  if (!result || result.canceled) return
+
+  if (!result.success) {
+    showSettingsMessage(`导入工作区快照失败\n${result.error || '未知错误'}`, 'error', '导入失败')
+    return
+  }
+
+  try {
+    await serialStore.applyWorkspaceSnapshot(result.data)
+    showSettingsMessage(formatImportedWorkspaceSummary(result), 'success', '导入成功')
+  } catch (error) {
+    showSettingsMessage(`应用工作区快照失败\n${error.message}`, 'error', '应用失败')
   }
 }
 
@@ -300,6 +338,23 @@ onUnmounted(() => {
                   </svg>
                 </span>
                 <span class="dropdown-text">导入设置</span>
+              </div>
+              <div class="dropdown-item" @click="exportWorkspaceSnapshot">
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M8 2v3h3v2H8v3H6V7H3V5h3V2Zm-5 9h10v2H3z" fill="currentColor" />
+                  </svg>
+                </span>
+                <span class="dropdown-text">导出工作区快照</span>
+              </div>
+              <div class="dropdown-item" @click="importWorkspaceSnapshot">
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M8 2v3h3v2H8v3H6V7H3V5h3V2Zm-5 9h10v2H3z" fill="currentColor" opacity="0.4" />
+                    <path d="M8 14V9.8l-2.1 2.1-.9-.9L8 8l3 3-.9.9L8 9.8V14Z" fill="currentColor" />
+                  </svg>
+                </span>
+                <span class="dropdown-text">导入工作区快照</span>
               </div>
               <div class="dropdown-item danger" @click="resetAllSettings">
                 <span class="dropdown-icon" aria-hidden="true">

@@ -281,6 +281,85 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  const buildWorkspaceSnapshot = () => ({
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    selectedPort: selectedPort.value,
+    workspaceLayout: JSON.parse(JSON.stringify(workspaceLayout.value)),
+    appUiState: { ...appUiState.value },
+    defaultSettings: { ...defaultSettings.value },
+    portDisplaySettings: Object.fromEntries(portDisplaySettings.value),
+    portControlSettings: Object.fromEntries(portControlSettings.value),
+    portFilters: Object.fromEntries(portFilters.value),
+    portSendingData: Object.fromEntries(portSendingData.value)
+  })
+
+  const validateWorkspaceSnapshot = (snapshot = {}) => {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+      throw new Error('工作区快照内容无效')
+    }
+
+    if (typeof snapshot.version !== 'number') {
+      throw new Error('工作区快照缺少版本信息')
+    }
+
+    if (snapshot.workspaceLayout && typeof snapshot.workspaceLayout !== 'object') {
+      throw new Error('工作区布局格式无效')
+    }
+
+    if ('selectedPort' in snapshot && snapshot.selectedPort !== null && typeof snapshot.selectedPort !== 'string') {
+      throw new Error('当前串口字段格式无效')
+    }
+
+    if (snapshot.appUiState && typeof snapshot.appUiState !== 'object') {
+      throw new Error('界面状态格式无效')
+    }
+
+    if (snapshot.defaultSettings && typeof snapshot.defaultSettings !== 'object') {
+      throw new Error('默认串口参数格式无效')
+    }
+
+    if (snapshot.portDisplaySettings && typeof snapshot.portDisplaySettings !== 'object') {
+      throw new Error('显示设置格式无效')
+    }
+
+    if (snapshot.portControlSettings && typeof snapshot.portControlSettings !== 'object') {
+      throw new Error('控制设置格式无效')
+    }
+
+    if (snapshot.portFilters && typeof snapshot.portFilters !== 'object') {
+      throw new Error('过滤设置格式无效')
+    }
+
+    if (snapshot.portSendingData && typeof snapshot.portSendingData !== 'object') {
+      throw new Error('发送草稿格式无效')
+    }
+  }
+
+  const applyWorkspaceSnapshot = async (snapshot = {}) => {
+    validateWorkspaceSnapshot(snapshot)
+
+    workspaceLayout.value = {
+      ...createDefaultWorkspaceLayout(),
+      ...(snapshot.workspaceLayout || {})
+    }
+    selectedPort.value = typeof snapshot.selectedPort === 'string' ? snapshot.selectedPort : null
+    appUiState.value = {
+      ...createDefaultAppUiState(),
+      ...(snapshot.appUiState || {})
+    }
+    defaultSettings.value = {
+      ...createDefaultSettings(),
+      ...(snapshot.defaultSettings || {})
+    }
+    portDisplaySettings.value = new Map(Object.entries(snapshot.portDisplaySettings || {}))
+    portControlSettings.value = new Map(Object.entries(snapshot.portControlSettings || {}))
+    portFilters.value = new Map(Object.entries(snapshot.portFilters || {}))
+    portSendingData.value = new Map(Object.entries(snapshot.portSendingData || {}))
+
+    await saveSessionState()
+  }
+
   const validateSettingsSnapshot = (snapshot = {}) => {
     if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
       throw new Error('设置文件内容无效')
@@ -1274,7 +1353,9 @@ export const useSerialStore = defineStore('serial', () => {
     updateAppUiState,
     buildSettingsSnapshot,
     buildPortLogExport,
+    buildWorkspaceSnapshot,
     applySettingsSnapshot,
+    applyWorkspaceSnapshot,
     resetAppSettings,
     // Hex 工具函数
     hexToBytes,

@@ -132,6 +132,56 @@ async function exportLogsFile(payload, suggestedName = '') {
   }
 }
 
+async function exportWorkspaceSnapshotFile(payload) {
+  try {
+    const defaultFileName = `serialx-workspace-${new Date().toISOString().slice(0, 10)}.json`
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: '导出 SerialX 工作区快照',
+      defaultPath: path.join(app.getPath('documents'), defaultFileName),
+      filters: [
+        { name: 'JSON Files', extensions: ['json'] }
+      ]
+    })
+
+    if (canceled || !filePath) {
+      return { success: false, canceled: true }
+    }
+
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8')
+    return { success: true, filePath }
+  } catch (error) {
+    safeErrorLog('[Workspace] Error exporting snapshot:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+async function importWorkspaceSnapshotFile() {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: '导入 SerialX 工作区快照',
+      properties: ['openFile'],
+      filters: [
+        { name: 'JSON Files', extensions: ['json'] }
+      ]
+    })
+
+    if (canceled || !filePaths?.length) {
+      return { success: false, canceled: true }
+    }
+
+    const filePath = filePaths[0]
+    const content = fs.readFileSync(filePath, 'utf8')
+    return {
+      success: true,
+      filePath,
+      data: JSON.parse(content)
+    }
+  } catch (error) {
+    safeErrorLog('[Workspace] Error importing snapshot:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 // 通过注册表获取串口列表（兼容 com0com 等虚拟串口）
 function getPortsFromRegistry() {
   try {
@@ -551,6 +601,14 @@ app.whenReady().then(() => {
 
   ipcMain.handle('logs:export', async (event, payload, suggestedName) => {
     return exportLogsFile(payload, suggestedName)
+  })
+
+  ipcMain.handle('workspace:export', async (event, payload) => {
+    return exportWorkspaceSnapshotFile(payload)
+  })
+
+  ipcMain.handle('workspace:import', async () => {
+    return importWorkspaceSnapshotFile()
   })
 })
 
