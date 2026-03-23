@@ -6,6 +6,7 @@ const serialStore = useSerialStore()
 const showSettings = ref(false)
 
 const isPortConnected = (portPath) => serialStore.getPortStatus(portPath)
+const getPortNotice = (portPath) => serialStore.getPortNotice(portPath)
 
 const selectPort = (portPath) => {
   serialStore.selectedPort = portPath
@@ -80,6 +81,13 @@ const settingsSummary = computed(() => {
           <div class="port-copy">
             <span class="port-path">{{ port.path }}</span>
             <span class="port-meta">{{ port.manufacturer || '未知设备' }}</span>
+            <span
+              v-if="getPortNotice(port.path)"
+              :class="['port-notice', getPortNotice(port.path).type]"
+              :title="getPortNotice(port.path).message"
+            >
+              {{ getPortNotice(port.path).message }}
+            </span>
           </div>
           <span v-if="isPortConnected(port.path)" class="port-status-connected">已连接</span>
           <button
@@ -335,6 +343,30 @@ const settingsSummary = computed(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.port-notice {
+  font-size: 10px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.port-notice.error {
+  color: #ffb8b1;
+}
+
+.port-notice.warning {
+  color: #ffd18a;
+}
+
+.port-notice.success {
+  color: #99f0c8;
+}
+
+.port-notice.info {
+  color: #8ccdf3;
 }
 
 .port-status-connected {

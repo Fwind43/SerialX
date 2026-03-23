@@ -87,6 +87,7 @@ export const useSerialStore = defineStore('serial', () => {
 
   // 每个串口的统计数据
   const portStats = ref(new Map()) // path -> { txBytes: number, txCount: number, rxBytes: number, rxCount: number, startTime: string, lastCommTime: string }
+  const portNotices = ref(new Map()) // path -> { type: 'info' | 'warning' | 'error' | 'success', message: string, updatedAt: number }
 
   // 获取串口统计数据
   const getPortStats = (portPath) => {
@@ -126,6 +127,24 @@ export const useSerialStore = defineStore('serial', () => {
       startTime: new Date().toLocaleString(),
       lastCommTime: null
     })
+  }
+
+  const getPortNotice = (portPath) => {
+    return portNotices.value.get(portPath) || null
+  }
+
+  const setPortNotice = (portPath, type, message) => {
+    if (!portPath || !message) return
+    portNotices.value.set(portPath, {
+      type,
+      message,
+      updatedAt: Date.now()
+    })
+  }
+
+  const clearPortNotice = (portPath) => {
+    if (!portPath) return
+    portNotices.value.delete(portPath)
   }
 
   // 获取串口显示设置
@@ -453,6 +472,7 @@ export const useSerialStore = defineStore('serial', () => {
 
       if (result.success) {
         selectedPort.value = targetPort
+        clearPortNotice(targetPort)
         openPorts.value.set(targetPort, {
           isConnected: true,
           baudRate: connectionSettings.baudRate,
@@ -477,11 +497,13 @@ export const useSerialStore = defineStore('serial', () => {
         addPortLog(targetPort, `已连接，波特率：${connectionSettings.baudRate}`, 'success')
         return true
       } else {
+        setPortNotice(targetPort, 'error', result.error || '连接失败')
         addPortLog(targetPort, `连接失败：${result.error}`, 'error')
         return false
       }
     } catch (error) {
       console.error('Connection error:', error)
+      setPortNotice(targetPort, 'error', error.message || '连接错误')
       addPortLog(targetPort, `连接错误：${error.message}`, 'error')
       return false
     }
@@ -500,11 +522,13 @@ export const useSerialStore = defineStore('serial', () => {
         openPorts.value.delete(targetPort)
         // 保留日志数据、过滤设置、统计数据，只删除连接状态
         stopLoopSendForPort(targetPort)
+        clearPortNotice(targetPort)
         addPortLog(targetPort, `已断开`, 'info')
         syncSelectedPort()
         return true
       }
     } catch (error) {
+      setPortNotice(targetPort, 'error', error.message || '断开连接失败')
       addPortLog(targetPort, `断开连接错误：${error.message}`, 'error')
     }
     return false
@@ -616,6 +640,7 @@ export const useSerialStore = defineStore('serial', () => {
     try {
       const result = await window.electronAPI.writeData(targetPort, actualData)
       if (result.success) {
+        clearPortNotice(targetPort)
         // 更新统计数据
         const byteCount = actualData instanceof Uint8Array ? actualData.length : new TextEncoder().encode(actualData).length
         updatePortStats(targetPort, 'tx', byteCount)
@@ -629,10 +654,12 @@ export const useSerialStore = defineStore('serial', () => {
         addPortLog(targetPort, logData, 'tx', logData_raw)
         return { success: true }
       } else {
+        setPortNotice(targetPort, 'error', result.error || '发送失败')
         addPortLog(targetPort, `发送失败：${result.error}`, 'error')
         return { success: false, error: result.error }
       }
     } catch (error) {
+      setPortNotice(targetPort, 'error', error.message || '发送失败')
       return { success: false, error: error.message }
     }
   }
@@ -980,12 +1007,14 @@ export const useSerialStore = defineStore('serial', () => {
     })
 
     window.electronAPI.onSerialError(({ port, error }) => {
+      setPortNotice(port, 'error', error)
       addPortLog(port, `错误：${error}`, 'error')
     })
 
     window.electronAPI.onPortClosed(({ port }) => {
       openPorts.value.delete(port)
       stopLoopSendForPort(port, { resetCount: false, silent: true })
+      setPortNotice(port, 'warning', '串口连接已关闭')
       syncSelectedPort()
     })
   }
@@ -1008,11 +1037,13 @@ export const useSerialStore = defineStore('serial', () => {
     terminalAppearance,
     portLoopSendCounts,
     portLoopSendPaused,
+    portNotices,
     // Getters
     availableBaudRates,
     getEnabledCommands,
     getPortStatus,
     syncSelectedPort,
+    getPortNotice,
     getPortSettings,
     getPortSendingData,
     setPortSendingData,
@@ -1063,6 +1094,8 @@ export const useSerialStore = defineStore('serial', () => {
     loadCommonCommands,
     saveCommonCommands,
     saveSessionState,
-    restoreSessionState
+    restoreSessionState,
+    setPortNotice,
+    clearPortNotice
   }
 })

@@ -22,6 +22,7 @@ const portSettings = computed(() => serialStore.getPortSettings(props.portPath))
 const portStats = computed(() => serialStore.getPortStats(props.portPath))
 const portFilters = computed(() => serialStore.getPortFilters(props.portPath))
 const isConnected = computed(() => serialStore.getPortStatus(props.portPath))
+const portNotice = computed(() => serialStore.getPortNotice(props.portPath))
 const enabledCommands = computed(() => serialStore.getEnabledCommands)
 const isPaused = computed(() => serialStore.portLoopSendPaused.get(props.portPath) || false)
 const loopSendCount = computed(() => serialStore.portLoopSendCounts.get(props.portPath) || 0)
@@ -91,13 +92,16 @@ const toggleLoopSend = () => {
 
 const startLoopSend = () => {
   if (!serialStore.getPortSendingData(props.portPath)) {
+    serialStore.setPortNotice(props.portPath, 'warning', '请先输入要发送的数据')
     serialStore.addPortLog(props.portPath, '请先输入要发送的数据', 'warning')
     return
   }
   if (!isConnected.value) {
+    serialStore.setPortNotice(props.portPath, 'warning', '请先连接串口')
     serialStore.addPortLog(props.portPath, '请先连接串口', 'warning')
     return
   }
+  serialStore.clearPortNotice(props.portPath)
   serialStore.startLoopSend(props.portPath)
 }
 
@@ -129,6 +133,7 @@ const updatePacketTimeout = (value) => {
 const executeCommand = (command) => {
   serialStore.setPortSendingData(props.portPath, command)
   sendErrorMessage.value = ''
+  serialStore.clearPortNotice(props.portPath)
   serialStore.addPortLog(props.portPath, `命令 "${command}" 已填入输入框，请按 Enter 发送`, 'info')
 }
 
@@ -143,6 +148,7 @@ const handlePanelFocus = () => {
 const handleSendingInput = (value) => {
   serialStore.setPortSendingData(props.portPath, value)
   sendErrorMessage.value = ''
+  serialStore.clearPortNotice(props.portPath)
 }
 
 const handleSend = async () => {
@@ -157,6 +163,7 @@ const handleSend = async () => {
   }
 
   sendErrorMessage.value = ''
+  serialStore.clearPortNotice(props.portPath)
 }
 
 const handleDisconnect = async () => {
@@ -359,6 +366,13 @@ const textPlaceholder = '输入要发送的数据，按 Enter 发送...'
 
       <div v-if="sendErrorMessage" class="send-feedback error">
         {{ sendErrorMessage }}
+      </div>
+
+      <div
+        v-else-if="portNotice"
+        :class="['send-feedback', 'notice', portNotice.type]"
+      >
+        {{ portNotice.message }}
       </div>
 
       <div class="send-options">
@@ -774,6 +788,29 @@ const textPlaceholder = '输入要发送的数据，按 Enter 发送...'
 
 .send-feedback.error {
   color: #ffb8b1;
+}
+
+.send-feedback.notice {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 1px;
+}
+
+.send-feedback.notice.error {
+  color: #ffb8b1;
+}
+
+.send-feedback.notice.warning {
+  color: #ffd18a;
+}
+
+.send-feedback.notice.success {
+  color: #99f0c8;
+}
+
+.send-feedback.notice.info {
+  color: #8ccdf3;
 }
 
 .send-options {
