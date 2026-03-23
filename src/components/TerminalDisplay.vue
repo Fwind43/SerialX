@@ -43,7 +43,6 @@ let resizeObserver = null
 
 const portDisplaySettings = computed(() => serialStore.getPortDisplaySettings(props.portPath))
 const portControlSettings = computed(() => serialStore.getPortControlSettings(props.portPath))
-const portFilters = computed(() => serialStore.getPortFilters(props.portPath))
 const terminalAppearance = computed(() => serialStore.terminalAppearance)
 const portLogs = computed(() => serialStore.getPortLogs(props.portPath))
 
@@ -575,7 +574,7 @@ watch(() => {
   syncTerminalLogs()
 })
 
-watch([portDisplaySettings, portFilters], () => {
+watch(portDisplaySettings, () => {
   clearFormattedLogCache()
   refreshDisplay()
 }, { deep: true })
