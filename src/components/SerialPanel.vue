@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useSerialStore } from '../stores/serial'
 import TerminalDisplay from './TerminalDisplay.vue'
 
@@ -13,46 +13,72 @@ const props = defineProps({
 const serialStore = useSerialStore()
 const terminalRef = ref(null)
 const showFilters = ref(false)
+const showAdvancedOptions = ref(false)
 
-// 获取当前串口的显示设置
-const portDisplaySettings = computed(() => {
-  return serialStore.getPortDisplaySettings(props.portPath)
+const portDisplaySettings = computed(() => serialStore.getPortDisplaySettings(props.portPath))
+const portControlSettings = computed(() => serialStore.getPortControlSettings(props.portPath))
+const portSettings = computed(() => serialStore.getPortSettings(props.portPath))
+const portStats = computed(() => serialStore.getPortStats(props.portPath))
+const portFilters = computed(() => serialStore.getPortFilters(props.portPath))
+const isConnected = computed(() => serialStore.getPortStatus(props.portPath))
+const enabledCommands = computed(() => serialStore.getEnabledCommands)
+const isPaused = computed(() => serialStore.portLoopSendPaused.get(props.portPath) || false)
+const loopSendCount = computed(() => serialStore.portLoopSendCounts.get(props.portPath) || 0)
+const loopHasStarted = computed(() => loopSendCount.value > 0)
+const connectionStatusText = computed(() => isConnected.value ? '已连接' : '未连接')
+
+const loopActionLabel = computed(() => {
+  if (!loopHasStarted.value) return '开始'
+  return isPaused.value ? '继续' : '暂停'
 })
 
-// 获取当前串口的控制设置
-const portControlSettings = computed(() => {
-  return serialStore.getPortControlSettings(props.portPath)
+const loopActionTitle = computed(() => {
+  if (!loopHasStarted.value) return '开始循环发送'
+  return isPaused.value ? '继续循环发送' : '暂停循环发送'
 })
 
-// Hex 接收模式切换
+const loopActionClass = computed(() => {
+  if (!loopHasStarted.value || isPaused.value) return 'loop-start-btn'
+  return 'loop-pause-btn'
+})
+
+const isHexInputValid = computed(() => {
+  const data = serialStore.getPortSendingData(props.portPath)
+  if (!portControlSettings.value.hexSend || !data) return true
+  return serialStore.isValidHex(data)
+})
+
+const isSendDisabled = computed(() => {
+  const data = serialStore.getPortSendingData(props.portPath)
+  if (!data) return true
+  if (portControlSettings.value.hexSend) return !isHexInputValid.value
+  return false
+})
+
 const toggleHexReceive = () => {
   serialStore.updatePortDisplaySettings(props.portPath, {
     hexReceive: !portDisplaySettings.value.hexReceive
   })
 }
 
-// Hex 发送模式切换
 const toggleHexSend = () => {
   serialStore.updatePortControlSettings(props.portPath, {
     hexSend: !portControlSettings.value.hexSend
   })
 }
 
-// ASCII 显示切换
 const toggleShowAscii = () => {
   serialStore.updatePortDisplaySettings(props.portPath, {
     showAscii: !portDisplaySettings.value.showAscii
   })
 }
 
-// 自动滚动切换
 const toggleAutoScroll = () => {
   serialStore.updatePortControlSettings(props.portPath, {
     isAutoScroll: !portControlSettings.value.isAutoScroll
   })
 }
 
-// 循环发送切换
 const toggleLoopSend = () => {
   if (portControlSettings.value.isLoopSend) {
     serialStore.stopLoopSendForPort(props.portPath)
@@ -74,92 +100,35 @@ const startLoopSend = () => {
   serialStore.startLoopSend(props.portPath)
 }
 
-// 暂停/恢复循环发送
 const togglePauseLoopSend = () => {
-  // 如果还未启动，先启动
   if (loopSendCount.value <= 0) {
     startLoopSend()
     return
   }
-  // 切换暂停状态
-  const isPaused = serialStore.portLoopSendPaused.get(props.portPath) || false
-  if (isPaused) {
+
+  if (isPaused.value) {
     serialStore.resumeLoopSendForPort(props.portPath)
   } else {
     serialStore.pauseLoopSendForPort(props.portPath)
   }
 }
 
-// 获取暂停状态
-const isPaused = computed(() => {
-  return serialStore.portLoopSendPaused.get(props.portPath) || false
-})
-
-// 获取当前串口的循环发送次数
-const loopSendCount = computed(() => {
-  return serialStore.portLoopSendCounts.get(props.portPath) || 0
-})
-
-const loopHasStarted = computed(() => loopSendCount.value > 0)
-
-const loopActionLabel = computed(() => {
-  if (!loopHasStarted.value) return '开始'
-  return isPaused.value ? '继续' : '暂停'
-})
-
-const loopActionTitle = computed(() => {
-  if (!loopHasStarted.value) return '开始循环发送'
-  return isPaused.value ? '继续循环发送' : '暂停循环发送'
-})
-
-const loopActionClass = computed(() => {
-  if (!loopHasStarted.value || isPaused.value) return 'loop-start-btn'
-  return 'loop-pause-btn'
-})
-
 const updateLoopInterval = (value) => {
   serialStore.updatePortControlSettings(props.portPath, { loopInterval: Number(value) })
 }
 
-// 更新循环次数
 const updateLoopMaxCount = (value) => {
   serialStore.updatePortControlSettings(props.portPath, { loopMaxCount: Number(value) })
 }
 
-// 更新分包超时
 const updatePacketTimeout = (value) => {
   serialStore.updatePortControlSettings(props.portPath, { packetTimeout: Number(value) })
 }
 
-// 执行常用命令 - 选中后填充到输入框，不立即发送
 const executeCommand = (command) => {
   serialStore.setPortSendingData(props.portPath, command)
-  serialStore.addPortLog(props.portPath, `命令 "${command}" 已填充到输入框，请按 Enter 键发送`, 'info')
+  serialStore.addPortLog(props.portPath, `命令 "${command}" 已填入输入框，请按 Enter 发送`, 'info')
 }
-
-// 获取当前串口的设置和状态
-const portSettings = computed(() => {
-  return serialStore.getPortSettings(props.portPath)
-})
-
-const isConnected = computed(() => {
-  return serialStore.getPortStatus(props.portPath)
-})
-
-// 获取当前串口的统计数据
-const portStats = computed(() => {
-  return serialStore.getPortStats(props.portPath)
-})
-
-// 获取当前串口的过滤器
-const portFilters = computed(() => {
-  return serialStore.getPortFilters(props.portPath)
-})
-
-// 获取当前串口的日志
-const portLogs = computed(() => {
-  return serialStore.getPortLogs(props.portPath)
-})
 
 const handleClearLogs = () => {
   serialStore.clearPortLogs(props.portPath)
@@ -172,30 +141,12 @@ const handlePanelFocus = () => {
 const handleSend = async () => {
   const data = serialStore.getPortSendingData(props.portPath)
   if (!data) return
+
   const result = await serialStore.sendData(props.portPath, null, portControlSettings.value.hexSend)
   if (!result.success) {
-    console.error('发送失败:', result.error)
+    console.error('发送失败', result.error)
   }
 }
-
-// Hex 发送模式下验证输入是否有效
-const isHexInputValid = computed(() => {
-  const data = serialStore.getPortSendingData(props.portPath)
-  if (!portControlSettings.value.hexSend || !data) return true
-  return serialStore.isValidHex(data)
-})
-
-// 发送按钮是否禁用
-const isSendDisabled = computed(() => {
-  const data = serialStore.getPortSendingData(props.portPath)
-  if (!data) return true
-  if (portControlSettings.value.hexSend) return !isHexInputValid.value
-  return false
-})
-
-// Hex 模式下的输入框占位符
-const hexPlaceholder = '输入十六进制数据，如：48 65 6C 6C 6F 或 48656C6C6F'
-const textPlaceholder = '输入要发送的数据，按 Enter 发送...'
 
 const handleDisconnect = async () => {
   await serialStore.disconnect(props.portPath)
@@ -224,17 +175,15 @@ const setFilterTarget = (filterTarget) => {
 const getPatternPlaceholder = () => {
   if (!portFilters.value.enabled) return '启用后输入过滤条件...'
   if (portFilters.value.matchMode === 'keyword') {
-    return '输入关键字，包含该关键字的数据将被过滤...'
+    return '输入关键字，匹配的 RX 数据将被过滤...'
   }
-  return '输入正则表达式，匹配的数据将被过滤...'
+  return '输入正则表达式，匹配的 RX 数据将被过滤...'
 }
 
-// 重置统计数据
 const resetStats = () => {
   serialStore.resetPortStats(props.portPath)
 }
 
-// 格式化字节数显示
 const formatBytes = (bytes) => {
   if (bytes === 0) return '0 B'
   if (bytes < 1024) return `${bytes} B`
@@ -242,83 +191,56 @@ const formatBytes = (bytes) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-// 获取已启用的命令
-const enabledCommands = computed(() => {
-  return serialStore.getEnabledCommands
-})
+const hexPlaceholder = '输入十六进制数据，例如：48 65 6C 6C 6F'
+const textPlaceholder = '输入要发送的数据，按 Enter 发送...'
 </script>
 
 <template>
   <div class="serial-panel" @mousedown="handlePanelFocus">
-    <!-- 面板标题栏 -->
     <div class="panel-header">
       <div class="panel-title">
-        <span class="port-icon">📡</span>
-        <span class="port-path">{{ portPath }}</span>
-        <span class="port-baud">{{ portSettings.baudRate }} baud</span>
-        <span :class="['connection-status', isConnected ? 'connected' : 'disconnected']">
-          {{ isConnected ? '● 已连接' : '● 未连接' }}
-        </span>
-        <!-- 循环发送状态指示 -->
+        <span class="port-icon"></span>
+        <div class="port-copy">
+          <span class="port-path">{{ portPath }}</span>
+          <span class="port-baud">{{ portSettings.baudRate }} baud · {{ connectionStatusText }}</span>
+        </div>
         <span v-if="portControlSettings.isLoopSend" class="loop-send-status">
-          <span class="loop-indicator" :class="{ 'paused': isPaused }">{{ isPaused ? '⏸' : '🔁' }}</span>
-          <span class="loop-count">{{ loopSendCount }}{{ portControlSettings.loopMaxCount > 0 ? '/' + portControlSettings.loopMaxCount : '' }}{{ isPaused ? ' (暂停)' : '' }}</span>
+          <span class="loop-indicator" :class="{ paused: isPaused }"></span>
+          <span class="loop-count">
+            {{ loopSendCount }}{{ portControlSettings.loopMaxCount > 0 ? ` / ${portControlSettings.loopMaxCount}` : '' }}
+            {{ isPaused ? ' · 已暂停' : '' }}
+          </span>
         </span>
       </div>
       <div class="panel-actions">
-        <!-- 统计数据 -->
         <div class="stats-display" @click="resetStats" title="点击重置统计">
-          <span class="stats-tx" title="发送">TX: {{ portStats.txCount }}/{{ formatBytes(portStats.txBytes) }}</span>
-          <span class="stats-rx" title="接收">RX: {{ portStats.rxCount }}/{{ formatBytes(portStats.rxBytes) }}</span>
+          <span class="stats-line tx">TX {{ portStats.txCount }} / {{ formatBytes(portStats.txBytes) }}</span>
+          <span class="stats-line rx">RX {{ portStats.rxCount }} / {{ formatBytes(portStats.rxBytes) }}</span>
         </div>
-        <button @click="showFilters = !showFilters" class="action-btn filter" :class="{ active: showFilters }" title="数据过滤">
-          <span>⚙️</span>
+        <button @click="showFilters = !showFilters" class="action-btn filter" :class="{ active: showFilters }">
+          {{ showFilters ? '隐藏过滤' : '显示过滤' }}
         </button>
-        <button @click="handleClearLogs" class="action-btn" title="清空日志">清空</button>
-        <button @click="handleDisconnect" class="action-btn disconnect" title="断开连接">断开</button>
+        <button @click="handleClearLogs" class="action-btn">清空日志</button>
+        <button @click="handleDisconnect" class="action-btn disconnect">断开</button>
       </div>
     </div>
 
-    <!-- 过滤器面板 -->
     <div v-if="showFilters" class="filter-panel">
-      <div class="filter-row">
+      <div class="filter-toolbar">
         <label class="option-checkbox">
           <input
             type="checkbox"
             :checked="portFilters.enabled"
             @change="setFilterEnabled($event.target.checked)"
           />
-          <span class="option-text">启用</span>
+          <span class="option-text">启用过滤</span>
         </label>
 
-        <!-- 模式选择 -->
-        <div class="mode-group" :class="{ disabled: !portFilters.enabled }">
-          <label class="mode-radio">
-            <input
-              type="radio"
-              name="filter-mode"
-              value="discard"
-              :checked="portFilters.mode === 'discard'"
-              @change="setFilterMode('discard')"
-              :disabled="!portFilters.enabled"
-            />
-            <span class="mode-text" title="匹配的数据在接收时直接丢弃">丢弃</span>
-          </label>
-          <label class="mode-radio">
-            <input
-              type="radio"
-              name="filter-mode"
-              value="hide"
-              :checked="portFilters.mode === 'hide'"
-              @change="setFilterMode('hide')"
-              :disabled="!portFilters.enabled"
-            />
-            <span class="mode-text" title="匹配的数据已接收但隐藏显示">隐藏</span>
-          </label>
+        <div class="inline-group mode-summary" :class="{ disabled: !portFilters.enabled }">
+          <span class="mode-text">过滤方式：丢弃匹配的 RX 数据</span>
         </div>
 
-        <!-- 匹配模式 -->
-        <div class="match-mode-group" :class="{ disabled: !portFilters.enabled }">
+        <div class="inline-group" :class="{ disabled: !portFilters.enabled }">
           <label class="mode-radio">
             <input
               type="radio"
@@ -343,9 +265,12 @@ const enabledCommands = computed(() => {
           </label>
         </div>
 
-        <!-- HEX 模式下的过滤目标 -->
-        <div class="filter-target-group" v-if="portDisplaySettings.hexReceive" :class="{ disabled: !portFilters.enabled }">
-          <span class="target-label">过滤目标:</span>
+        <div
+          v-if="portDisplaySettings.hexReceive"
+          class="inline-group"
+          :class="{ disabled: !portFilters.enabled }"
+        >
+          <span class="target-label">过滤目标</span>
           <label class="mode-radio">
             <input
               type="radio"
@@ -355,7 +280,7 @@ const enabledCommands = computed(() => {
               @change="setFilterTarget('hexData')"
               :disabled="!portFilters.enabled"
             />
-            <span class="mode-text">Hex 数据</span>
+            <span class="mode-text">Hex</span>
           </label>
           <label class="mode-radio">
             <input
@@ -380,7 +305,9 @@ const enabledCommands = computed(() => {
             <span class="mode-text">两者</span>
           </label>
         </div>
+      </div>
 
+      <div class="filter-search-row">
         <input
           type="text"
           class="pattern-input"
@@ -390,26 +317,21 @@ const enabledCommands = computed(() => {
           :disabled="!portFilters.enabled"
         />
       </div>
+
       <div class="filter-hint">
-        <span v-if="portFilters.enabled && portFilters.mode === 'discard'">
-          🔴 丢弃模式：匹配的数据会在接收时直接丢弃
-        </span>
-        <span v-else-if="portFilters.enabled && portFilters.mode === 'hide'">
-          🟡 隐藏模式：匹配的数据已接收但隐藏显示
+        <span v-if="portFilters.enabled">
+          丢弃模式：匹配的 RX 数据会在接收时直接丢弃。
         </span>
         <span v-else>
-          ℹ️ 启用过滤后，RX 数据会根据匹配规则进行过滤
+          启用过滤后，接收数据会根据关键字或正则表达式进行筛选。
         </span>
       </div>
     </div>
 
-    <!-- 终端显示区 (xterm.js) -->
     <TerminalDisplay ref="terminalRef" :port-path="portPath" />
 
-    <!-- 发送控制台 -->
     <div class="send-console">
       <div class="send-row">
-        <span class="send-prefix">TX:</span>
         <input
           :value="serialStore.getPortSendingData(props.portPath)"
           @input="serialStore.setPortSendingData(props.portPath, $event.target.value)"
@@ -425,104 +347,94 @@ const enabledCommands = computed(() => {
       </div>
 
       <div class="send-options">
-        <!-- 常用命令下拉列表 -->
         <select
           v-if="enabledCommands.length > 0"
           @change="executeCommand($event.target.value); $event.target.value = ''"
           class="command-select"
           :disabled="!isConnected"
         >
-          <option value="" disabled>⚡ 常用命令</option>
-          <option
-            v-for="cmd in enabledCommands"
-            :key="cmd.id"
-            :value="cmd.command"
-          >
+          <option value="" disabled>快捷命令</option>
+          <option v-for="cmd in enabledCommands" :key="cmd.id" :value="cmd.command">
             {{ cmd.name }} ({{ cmd.command }})
           </option>
         </select>
-        <div class="options-divider"></div>
-        <label class="checkbox-label">
-          <input type="checkbox" :checked="portControlSettings.isAutoScroll" @change="toggleAutoScroll" />
-          <span class="option-text">自动滚动</span>
-        </label>
-        <!-- HEX 发送 -->
-        <label class="checkbox-label">
-          <input
-            type="checkbox"
-            :checked="portControlSettings.hexSend"
-            @change="toggleHexSend"
-          />
-          <span class="option-text" title="发送数据时使用 Hex 格式">HEX 发送</span>
-        </label>
-        <!-- HEX 接收 -->
-        <label class="checkbox-label">
-          <input
-            type="checkbox"
-            :checked="portDisplaySettings.hexReceive"
-            @change="toggleHexReceive"
-          />
-          <span class="option-text" title="接收数据时使用 Hex 格式显示">HEX 接收</span>
-        </label>
-        <!-- ASCII 转换显示 -->
-        <label class="checkbox-label" v-if="portDisplaySettings.hexReceive">
-          <input
-            type="checkbox"
-            :checked="portDisplaySettings.showAscii"
-            @change="toggleShowAscii"
-          />
-          <span class="option-text">ASCII</span>
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" :checked="portControlSettings.isLoopSend" @change="toggleLoopSend" />
-          <span class="option-text">循环发送</span>
-        </label>
-        <!-- 循环发送开始/暂停按钮 -->
+
+        <div class="option-chip-group">
+          <label class="checkbox-label">
+            <input type="checkbox" :checked="portControlSettings.isAutoScroll" @change="toggleAutoScroll" />
+            <span class="option-text">自动滚动</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" :checked="portControlSettings.hexSend" @change="toggleHexSend" />
+            <span class="option-text">HEX 发送</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" :checked="portDisplaySettings.hexReceive" @change="toggleHexReceive" />
+            <span class="option-text">HEX 接收</span>
+          </label>
+          <label v-if="portDisplaySettings.hexReceive" class="checkbox-label">
+            <input type="checkbox" :checked="portDisplaySettings.showAscii" @change="toggleShowAscii" />
+            <span class="option-text">ASCII</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" :checked="portControlSettings.isLoopSend" @change="toggleLoopSend" />
+            <span class="option-text">循环发送</span>
+          </label>
+        </div>
+
+        <div v-if="portControlSettings.isLoopSend" class="loop-controls">
+          <button @click="togglePauseLoopSend" :class="loopActionClass" :title="loopActionTitle">
+            {{ loopActionLabel }}
+          </button>
+          <button
+            v-if="loopSendCount > 0"
+            @click="toggleLoopSend"
+            class="loop-stop-btn"
+            title="停止循环发送"
+          >
+            停止
+          </button>
+
+          <label class="interval-group">
+            <span class="interval-label">间隔</span>
+            <input
+              type="number"
+              :value="portControlSettings.loopInterval"
+              @input="updateLoopInterval($event.target.value)"
+              :min="100"
+              :step="100"
+              class="interval-input"
+            />
+            <span class="interval-unit">ms</span>
+          </label>
+
+          <label class="interval-group">
+            <span class="interval-label">次数</span>
+            <input
+              type="number"
+              :value="portControlSettings.loopMaxCount"
+              @input="updateLoopMaxCount($event.target.value)"
+              :min="0"
+              :step="1"
+              class="interval-input"
+            />
+            <span class="interval-unit">{{ portControlSettings.loopMaxCount > 0 ? '次' : '不限' }}</span>
+          </label>
+        </div>
+
         <button
-          v-if="portControlSettings.isLoopSend"
-          @click="togglePauseLoopSend"
-          :class="loopActionClass"
-          :title="loopActionTitle"
+          class="advanced-toggle"
+          :class="{ active: showAdvancedOptions }"
+          @click="showAdvancedOptions = !showAdvancedOptions"
+          :title="showAdvancedOptions ? '收起更多参数' : '展开更多参数'"
         >
-          {{ loopActionLabel }}
+          {{ showAdvancedOptions ? '收起参数' : '更多参数' }}
         </button>
-        <!-- 停止按钮 -->
-        <button
-          v-if="portControlSettings.isLoopSend && loopSendCount > 0"
-          @click="toggleLoopSend"
-          class="loop-stop-btn"
-          title="停止循环发送"
-        >
-          ⏹ 停止
-        </button>
-        <label v-if="portControlSettings.isLoopSend" class="interval-group">
-          <span class="interval-label">间隔:</span>
-          <input
-            type="number"
-            :value="portControlSettings.loopInterval"
-            @input="updateLoopInterval($event.target.value)"
-            :min="100"
-            :step="100"
-            class="interval-input"
-          />
-          <span class="interval-unit">ms</span>
-        </label>
-        <label v-if="portControlSettings.isLoopSend" class="interval-group">
-          <span class="interval-label">次数:</span>
-          <input
-            type="number"
-            :value="portControlSettings.loopMaxCount"
-            @input="updateLoopMaxCount($event.target.value)"
-            :min="0"
-            :step="1"
-            class="interval-input"
-            title="设置发送次数上限，0=无限"
-          />
-          <span class="interval-unit">{{ portControlSettings.loopMaxCount > 0 ? '次' : '∞' }}</span>
-        </label>
-        <!-- 分包超时配置 -->
-        <label class="interval-group">
-          <span class="interval-label" title="数据包接收超时时间，超过该时间未收到完整数据包则自动分包">分包超时:</span>
+      </div>
+
+      <div v-if="showAdvancedOptions" class="advanced-options">
+        <label class="interval-group packet-timeout">
+          <span class="interval-label packet-label">分包超时</span>
           <input
             type="number"
             :value="portControlSettings.packetTimeout"
@@ -530,7 +442,7 @@ const enabledCommands = computed(() => {
             :min="100"
             :step="100"
             class="interval-input"
-            title="设置数据包接收超时时间（毫秒）"
+            title="超过该时间未收到后续数据时，将当前数据视为一个完整分包"
           />
           <span class="interval-unit">ms</span>
         </label>
@@ -545,18 +457,18 @@ const enabledCommands = computed(() => {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background-color: #1e1e1e;
+  background: rgba(7, 13, 18, 0.86);
   overflow: hidden;
 }
 
-/* 面板标题栏 */
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
-  background-color: #2d2d30;
-  border-bottom: 1px solid #3e3e42;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(10, 19, 27, 0.52);
+  border-bottom: 1px solid rgba(126, 161, 183, 0.12);
   flex-shrink: 0;
 }
 
@@ -564,328 +476,217 @@ const enabledCommands = computed(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 13px;
-  color: #cccccc;
+  min-width: 0;
 }
 
 .port-icon {
-  font-size: 16px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #57c7ff;
+  box-shadow: 0 0 0 5px rgba(87, 199, 255, 0.14);
+  flex-shrink: 0;
+}
+
+.port-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 .port-path {
-  font-weight: 600;
-  color: #4ec9b0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f4fbff;
 }
 
 .port-baud {
-  color: #858585;
-  font-size: 12px;
+  font-size: 11px;
+  color: #94adbf;
 }
 
-.connection-status {
-  font-size: 12px;
+.loop-send-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 9px;
+  background: rgba(255, 183, 77, 0.08);
+  border: 1px solid rgba(255, 183, 77, 0.18);
+  border-radius: 999px;
 }
 
-.connection-status.connected {
-  color: #4ec9b0;
+.loop-indicator {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ffc266;
+  box-shadow: 0 0 0 4px rgba(255, 194, 102, 0.16);
 }
 
-.connection-status.disconnected {
-  color: #555;
+.loop-indicator.paused {
+  background: #8c9eae;
+  box-shadow: 0 0 0 4px rgba(140, 158, 174, 0.16);
+}
+
+.loop-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffdca8;
 }
 
 .panel-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
-/* 统计数据显示 */
 .stats-display {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 10px;
-  background-color: rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.15s;
-  user-select: none;
-}
-
-.stats-display:hover {
-  background-color: rgba(0, 0, 0, 0.3);
-}
-
-.stats-tx {
-  font-size: 11px;
-  color: #4ec9b0;
-  font-weight: 600;
-}
-
-.stats-rx {
-  font-size: 11px;
-  color: #dcdcaa;
-  font-weight: 600;
-}
-
-/* 循环发送状态指示 */
-.loop-send-status {
-  display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 4px;
-  padding: 4px 10px;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
-  border: 1px solid rgba(102, 126, 234, 0.4);
-  border-radius: 4px;
-  animation: pulse 2s infinite;
-}
-
-.loop-indicator {
-  font-size: 14px;
-  animation: spin 1s linear infinite;
-}
-
-.loop-indicator.paused {
-  animation: none;
-  color: #d97706;
-}
-
-.loop-count {
-  font-size: 11px;
-  color: #667eea;
-  font-weight: 600;
-  font-family: 'Consolas', monospace;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #cccccc;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(126, 161, 183, 0.12);
   cursor: pointer;
   user-select: none;
 }
 
-.checkbox-label input[type="checkbox"] {
-  accent-color: #007acc;
-  width: 14px;
-  height: 14px;
-  cursor: pointer;
+.stats-line {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.stats-line.tx {
+  color: #83ddff;
+}
+
+.stats-line.rx {
+  color: #bce8a4;
 }
 
 .action-btn {
-  padding: 4px 12px;
-  background-color: #3c3c3c;
-  border: 1px solid #555;
-  color: #cccccc;
-  border-radius: 3px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(126, 161, 183, 0.12);
+  color: #d3e2ec;
+  border-radius: 10px;
   cursor: pointer;
-  font-size: 12px;
-  transition: all 0.15s;
+  font-size: 11px;
+  font-weight: 600;
+  transition: all 0.18s ease;
 }
 
 .action-btn:hover {
-  background-color: #4a4a4a;
-  border-color: #007acc;
+  background: rgba(87, 199, 255, 0.12);
+  border-color: rgba(87, 199, 255, 0.18);
 }
 
 .action-btn.disconnect:hover {
-  background-color: #c42b1c;
-  border-color: #a02015;
-}
-
-.action-btn.filter {
-  padding: 4px 10px;
+  background: rgba(196, 43, 28, 0.18);
+  border-color: rgba(196, 43, 28, 0.22);
 }
 
 .action-btn.filter.active {
-  background-color: #007acc;
-  border-color: #007acc;
-  color: #ffffff;
+  background: rgba(87, 199, 255, 0.18);
+  border-color: rgba(87, 199, 255, 0.22);
+  color: #f4fbff;
 }
 
-/* 过滤器面板 */
 .filter-panel {
-  padding: 8px 16px;
-  background-color: #2d2d30;
-  border-bottom: 1px solid #3e3e42;
+  padding: 10px 12px 12px;
+  background: rgba(10, 19, 27, 0.4);
+  border-bottom: 1px solid rgba(126, 161, 183, 0.12);
 }
 
-.filter-row {
+.filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+}
+
+.filter-search-row {
+  margin-top: 12px;
+}
+
+.inline-group {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(126, 161, 183, 0.08);
 }
 
-.mode-group {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.mode-group.disabled {
+.inline-group.disabled {
   opacity: 0.5;
 }
 
+.option-checkbox,
 .mode-radio {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   cursor: pointer;
+  color: #dce8f0;
 }
 
-.mode-radio input[type="radio"] {
-  accent-color: #007acc;
-  width: 14px;
-  height: 14px;
-  cursor: pointer;
+.option-checkbox input,
+.mode-radio input {
+  accent-color: #57c7ff;
 }
 
-.mode-radio input[type="radio"]:disabled {
-  cursor: not-allowed;
-}
-
-.mode-text {
+.option-text,
+.mode-text,
+.target-label {
   font-size: 12px;
-  color: #cccccc;
-  white-space: nowrap;
+  color: #dce8f0;
 }
 
 .pattern-input {
-  flex: 1;
-  padding: 4px 8px;
-  background-color: #1e1e1e;
-  border: 1px solid #3e3e42;
-  color: #cccccc;
-  border-radius: 3px;
-  font-size: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(126, 161, 183, 0.12);
+  color: #dce8f0;
+  border-radius: 10px;
+  font-size: 13px;
   font-family: 'Consolas', 'Monaco', monospace;
 }
 
 .pattern-input:focus {
   outline: none;
-  border-color: #007acc;
+  border-color: rgba(87, 199, 255, 0.22);
+  box-shadow: 0 0 0 3px rgba(87, 199, 255, 0.1);
 }
 
 .pattern-input:disabled {
-  background-color: #1e1e1e;
-  border-color: #3e3e42;
-  color: #555;
+  opacity: 0.5;
   cursor: not-allowed;
-}
-
-.match-mode-group {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.match-mode-group.disabled {
-  opacity: 0.5;
-}
-
-/* HEX 模式下的过滤目标选择 */
-.filter-target-group {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.filter-target-group.disabled {
-  opacity: 0.5;
-}
-
-.target-label {
-  font-size: 12px;
-  color: #858585;
-  white-space: nowrap;
 }
 
 .filter-hint {
-  font-size: 11px;
-  color: #858585;
-  padding-top: 4px;
-  border-top: 1px solid #3e3e42;
-}
-
-/* 发送控制台 */
-.send-console {
-  padding: 10px 16px;
-  background-color: #252526;
-  border-top: 1px solid #3e3e42;
-  flex-shrink: 0;
-}
-
-.send-options {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  padding-top: 10px;
-  border-top: 1px solid #3e3e42;
-}
-
-.options-divider {
-  width: 1px;
-  height: 20px;
-  background-color: #3e3e42;
-  margin: 0 4px;
-}
-
-/* 常用命令下拉列表 */
-.command-select {
-  padding: 6px 28px 6px 10px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  color: #ffffff;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #93acbf;
   font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  font-family: inherit;
-  min-width: 180px;
+  line-height: 1.5;
 }
 
-.command-select:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.4);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-}
-
-.command-select:focus {
-  outline: none;
-  border-color: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
-}
-
-.command-select:disabled {
-  background: #3e3e42;
-  border-color: #555;
-  color: #666;
-  cursor: not-allowed;
-}
-
-.command-select option {
-  background: #2d2d30;
-  color: #ffffff;
+.send-console {
+  padding: 10px 12px 12px;
+  background: rgba(10, 18, 25, 0.48);
+  border-top: 1px solid rgba(126, 161, 183, 0.12);
+  flex-shrink: 0;
 }
 
 .send-row {
@@ -895,153 +696,225 @@ const enabledCommands = computed(() => {
   margin-bottom: 10px;
 }
 
-.send-prefix {
-  font-size: 13px;
-  font-weight: 600;
-  color: #4ec9b0;
-  min-width: 30px;
-}
-
 .send-input {
   flex: 1;
-  padding: 8px 12px;
-  background-color: #1e1e1e;
-  border: 1px solid #3e3e42;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(126, 161, 183, 0.12);
   color: #ffffff;
-  border-radius: 3px;
+  border-radius: 10px;
   font-size: 13px;
   font-family: 'Consolas', 'Monaco', monospace;
-  transition: border-color 0.2s;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .send-input.hex-invalid {
-  border-color: #c42b1c;
-  animation: shake 0.3s;
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-5px); }
-  75% { transform: translateX(5px); }
+  border-color: rgba(196, 43, 28, 0.38);
+  box-shadow: 0 0 0 3px rgba(196, 43, 28, 0.1);
 }
 
 .send-input::placeholder {
-  color: #6a6a6a;
+  color: #698193;
 }
 
 .send-input:focus {
   outline: none;
-  border-color: #007acc;
+  border-color: rgba(87, 199, 255, 0.24);
+  box-shadow: 0 0 0 4px rgba(87, 199, 255, 0.1);
 }
 
 .send-button {
-  padding: 8px 24px;
-  background-color: #0e639c;
-  border: 1px solid #0b4f7a;
-  border-radius: 3px;
+  padding: 10px 18px;
+  background: #1495e1;
+  border: 1px solid rgba(87, 199, 255, 0.12);
+  border-radius: 10px;
   color: white;
-  font-weight: 500;
+  font-weight: 800;
   cursor: pointer;
   font-size: 13px;
-  transition: background-color 0.15s;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: none;
 }
 
 .send-button:hover:not(:disabled) {
-  background-color: #1177bb;
+  transform: translateY(-1px);
 }
 
 .send-button:disabled {
-  background-color: #3e3e42;
-  color: #555;
+  background: rgba(255, 255, 255, 0.06);
+  color: #688093;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.send-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.advanced-options {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.command-select {
+  padding: 9px 34px 9px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(126, 161, 183, 0.12);
+  border-radius: 10px;
+  color-scheme: dark;
+  color: #f4fbff;
+  font-size: 12px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23d9ecff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  min-width: 190px;
+}
+
+.command-select option {
+  background-color: #0f1922;
+  color: #e7f3fb;
+}
+
+.command-select option:checked,
+.command-select option:hover {
+  background-color: #173449;
+  color: #ffffff;
+}
+
+.command-select:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-.checkbox-label {
+.option-chip-group,
+.loop-controls {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-label {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(126, 161, 183, 0.12);
   cursor: pointer;
   user-select: none;
-  white-space: nowrap;
 }
 
-.checkbox-label input[type="checkbox"] {
-  accent-color: #007acc;
-  width: 14px;
-  height: 14px;
+.checkbox-label input[type='checkbox'] {
+  accent-color: #57c7ff;
+  width: 12px;
+  height: 12px;
   cursor: pointer;
-}
-
-/* 循环发送开始/暂停/停止按钮 */
-.loop-start-btn, .loop-pause-btn, .loop-stop-btn {
-  padding: 4px 12px;
-  font-size: 12px;
-  border-radius: 3px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: all 0.15s;
-  font-weight: 500;
-}
-
-.loop-start-btn {
-  background-color: #0e639c;
-  color: white;
-  border-color: #0b4f7a;
-}
-
-.loop-start-btn:hover {
-  background-color: #1177bb;
-}
-
-.loop-pause-btn {
-  background-color: #d97706;
-  color: white;
-  border-color: #b45309;
-}
-
-.loop-pause-btn:hover {
-  background-color: #f59e0b;
-}
-
-.loop-stop-btn {
-  background-color: #c42b1c;
-  color: white;
-  border-color: #a02015;
-}
-
-.loop-stop-btn:hover {
-  background-color: #d63a2a;
 }
 
 .option-text {
-  font-size: 12px;
-  color: #cccccc;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.loop-start-btn,
+.loop-pause-btn,
+.loop-stop-btn {
+  padding: 8px 12px;
+  font-size: 11px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  font-weight: 600;
+}
+
+.loop-start-btn {
+  background: rgba(87, 199, 255, 0.14);
+  color: #bfe9ff;
+  border-color: rgba(87, 199, 255, 0.18);
+}
+
+.loop-pause-btn {
+  background: rgba(255, 183, 77, 0.14);
+  color: #ffe1af;
+  border-color: rgba(255, 183, 77, 0.18);
+}
+
+.loop-stop-btn {
+  background: rgba(196, 43, 28, 0.14);
+  color: #ffd5d1;
+  border-color: rgba(196, 43, 28, 0.18);
 }
 
 .interval-group {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
-  color: #cccccc;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(126, 161, 183, 0.08);
+  color: #dce8f0;
+}
+
+.packet-timeout {
+  background: rgba(87, 199, 255, 0.04);
+  border-color: rgba(87, 199, 255, 0.12);
+  padding-right: 6px;
+}
+
+.advanced-toggle {
+  margin-left: auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(126, 161, 183, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: #9fb6c7;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  transition: all 0.18s ease;
+}
+
+.advanced-toggle:hover,
+.advanced-toggle.active {
+  background: rgba(255, 255, 255, 0.06);
+  color: #dce8f0;
+}
+
+.packet-label {
+  color: #a9c3d5;
+  font-weight: 600;
 }
 
 .interval-label {
-  color: #858585;
-}
-
-.interval-input {
-  width: 60px;
-  padding: 4px 8px;
-  background-color: #3c3c3c;
-  border: 1px solid #555;
-  color: #cccccc;
-  border-radius: 3px;
+  color: #94adbf;
   font-size: 12px;
 }
 
+.interval-input {
+  width: 62px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(126, 161, 183, 0.12);
+  color: #dce8f0;
+  border-radius: 10px;
+  font-size: 12px;
+  text-align: center;
+}
+
 .interval-unit {
-  color: #858585;
+  color: #94adbf;
   font-size: 12px;
 }
 </style>

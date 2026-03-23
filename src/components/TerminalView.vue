@@ -1,42 +1,64 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useSerialStore } from '../stores/serial'
 import SerialPanel from './SerialPanel.vue'
 
 const serialStore = useSerialStore()
 
-// 分屏区域数组 - 每个区域包含多个标签
 const splitPanes = ref([{ tabs: [], activeTab: '' }])
+const paneRefs = ref([])
 
-// 拖拽相关
 const draggedData = ref(null)
 const dropZoneIndex = ref(-1)
-const dropPosition = ref('') // 'left', 'right'
+const dropPosition = ref('')
 const isDraggingSeparator = ref(false)
 const draggingSeparatorIndex = ref(-1)
 const separatorStartX = ref(0)
 const initialLeftWidth = ref(0)
 const initialRightWidth = ref(0)
 
-// 获取所有已连接的串口
 const connectedPorts = computed(() => {
   return Array.from(serialStore.openPorts.entries())
-    .filter(([_, data]) => data.isConnected)
-    .map(([path, _]) => path)
+    .filter(([, data]) => data.isConnected)
+    .map(([path]) => path)
 })
 
-// 所有分屏中的所有标签
-const allTabs = computed(() => {
-  return splitPanes.value.flatMap(pane => pane.tabs)
-})
+const allTabs = computed(() => splitPanes.value.flatMap((pane) => pane.tabs))
+const setPaneRef = (element, paneIndex) => {
+  if (element) {
+    paneRefs.value[paneIndex] = element
+  }
+}
 
-// 监听串口连接
+const clearPaneWidths = () => {
+  paneRefs.value.forEach((pane) => {
+    if (pane) {
+      pane.style.flex = ''
+    }
+  })
+}
+
+const rebalancePaneWidths = (widths = null) => {
+  nextTick(() => {
+    const paneElements = paneRefs.value.filter(Boolean)
+    if (!paneElements.length) return
+
+    if (!widths || widths.length !== paneElements.length) {
+      clearPaneWidths()
+      return
+    }
+
+    paneElements.forEach((pane, index) => {
+      pane.style.flex = `0 0 ${Math.max(240, Math.floor(widths[index]))}px`
+    })
+  })
+}
+
 watch(() => connectedPorts.value, (newPorts) => {
   const currentTabs = allTabs.value
 
-  newPorts.forEach(port => {
+  newPorts.forEach((port) => {
     if (!currentTabs.includes(port)) {
-      // 新端口添加到第一个分屏区域
       if (splitPanes.value.length === 0) {
         splitPanes.value.push({ tabs: [], activeTab: '' })
       }
@@ -47,44 +69,55 @@ watch(() => connectedPorts.value, (newPorts) => {
     }
   })
 
-  // 移除已断开的端口
-  splitPanes.value.forEach(pane => {
-    pane.tabs = pane.tabs.filter(p => newPorts.includes(p))
+  splitPanes.value.forEach((pane) => {
+    pane.tabs = pane.tabs.filter((port) => newPorts.includes(port))
     if (!newPorts.includes(pane.activeTab)) {
       pane.activeTab = pane.tabs[0] || ''
     }
   })
 
-  // 移除空的分屏区域（至少保留一个）
-  while (splitPanes.value.length > 1 && splitPanes.value.some(p => p.tabs.length === 0)) {
-    const emptyIndex = splitPanes.value.findIndex(p => p.tabs.length === 0)
+  while (splitPanes.value.length > 1 && splitPanes.value.some((pane) => pane.tabs.length === 0)) {
+    const emptyIndex = splitPanes.value.findIndex((pane) => pane.tabs.length === 0)
     if (emptyIndex !== -1) {
       splitPanes.value.splice(emptyIndex, 1)
     }
   }
 
+  nextTick(() => {
+    paneRefs.value = paneRefs.value.slice(0, splitPanes.value.length)
+  })
+
   if (!newPorts.includes(serialStore.selectedPort)) {
-    serialStore.selectedPort = splitPanes.value.find(pane => pane.activeTab)?.activeTab || newPorts[0] || null
+    serialStore.selectedPort = splitPanes.value.find((pane) => pane.activeTab)?.activeTab || newPorts[0] || null
   }
 }, { deep: true })
 
-// 选择标签
+watch(() => serialStore.selectedPort, (selectedPort) => {
+  if (!selectedPort) return
+
+  const targetPaneIndex = splitPanes.value.findIndex((pane) => pane.tabs.includes(selectedPort))
+  if (targetPaneIndex === -1) return
+
+  if (splitPanes.value[targetPaneIndex].activeTab !== selectedPort) {
+    splitPanes.value[targetPaneIndex].activeTab = selectedPort
+  }
+})
+
 const selectTab = (paneIndex, port) => {
   splitPanes.value[paneIndex].activeTab = port
   serialStore.selectedPort = port
 }
 
-// 断开连接
 const disconnectPort = (port) => {
   serialStore.disconnect(port)
 }
 
-// 在指定分屏后添加新分屏，将最后一个标签移动到新分屏
 const splitPane = (paneIndex) => {
   const pane = splitPanes.value[paneIndex]
   if (!pane.tabs.length) return
 
-  // 将最后一个标签移到新分屏
+  const sourcePaneElement = paneRefs.value[paneIndex]
+  const sourcePaneWidth = sourcePaneElement?.offsetWidth || 0
   const lastTab = pane.tabs.pop()
   if (pane.activeTab === lastTab) {
     pane.activeTab = pane.tabs[0] || ''
@@ -94,37 +127,49 @@ const splitPane = (paneIndex) => {
     tabs: [lastTab],
     activeTab: lastTab
   })
+
+  if (!sourcePaneWidth) return
+
+  const minWidth = 240
+  const nextWidths = paneRefs.value
+    .slice(0, splitPanes.value.length - 1)
+    .map((paneElement, index) => {
+      if (!paneElement) return null
+      if (index !== paneIndex) return paneElement.offsetWidth
+      return Math.max(minWidth, Math.floor(sourcePaneWidth / 2))
+    })
+
+  const splitWidth = Math.max(minWidth, sourcePaneWidth - nextWidths[paneIndex])
+  nextWidths.splice(paneIndex + 1, 0, splitWidth)
+  rebalancePaneWidths(nextWidths)
 }
 
-// 删除空分区
 const removeEmptyPane = (paneIndex) => {
-  // 至少保留一个分区
   if (splitPanes.value.length <= 1) return
-  const pane = splitPanes.value[paneIndex]
-  if (pane.tabs.length > 0) return
-
+  if (splitPanes.value[paneIndex].tabs.length > 0) return
   splitPanes.value.splice(paneIndex, 1)
+  nextTick(() => {
+    paneRefs.value = paneRefs.value.slice(0, splitPanes.value.length)
+    clearPaneWidths()
+    handleResize()
+  })
 }
 
-// 内容区域拖拽
-const handleContentDragOver = (e, paneIndex) => {
-  e.preventDefault()
-  if (draggedData.value) {
-    dropZoneIndex.value = paneIndex
-    const rect = e.currentTarget.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const isLeft = x < rect.width / 2
-    dropPosition.value = isLeft ? 'left' : 'right'
-  }
+const handleContentDragOver = (event, paneIndex) => {
+  event.preventDefault()
+  if (!draggedData.value) return
+
+  dropZoneIndex.value = paneIndex
+  const rect = event.currentTarget.getBoundingClientRect()
+  dropPosition.value = event.clientX - rect.left < rect.width / 2 ? 'left' : 'right'
 }
 
-const handleContentDrop = (e, targetPaneIndex) => {
-  e.preventDefault()
+const handleContentDrop = (event, targetPaneIndex) => {
+  event.preventDefault()
   const data = draggedData.value
   if (!data) return
 
   const { paneIndex: sourcePaneIndex, port } = data
-
   if (sourcePaneIndex === targetPaneIndex) {
     dropZoneIndex.value = -1
     dropPosition.value = ''
@@ -132,9 +177,9 @@ const handleContentDrop = (e, targetPaneIndex) => {
   }
 
   const sourcePane = splitPanes.value[sourcePaneIndex]
-  const tabIndex = sourcePane.tabs.indexOf(port)
-  if (tabIndex !== -1) {
-    sourcePane.tabs.splice(tabIndex, 1)
+  const sourceTabIndex = sourcePane.tabs.indexOf(port)
+  if (sourceTabIndex !== -1) {
+    sourcePane.tabs.splice(sourceTabIndex, 1)
     if (sourcePane.activeTab === port) {
       sourcePane.activeTab = sourcePane.tabs[0] || ''
     }
@@ -146,12 +191,18 @@ const handleContentDrop = (e, targetPaneIndex) => {
   } else {
     targetPane.tabs.unshift(port)
   }
+
   if (!targetPane.activeTab) {
     targetPane.activeTab = port
   }
 
   if (sourcePane.tabs.length === 0 && splitPanes.value.length > 1) {
     splitPanes.value.splice(sourcePaneIndex, 1)
+    nextTick(() => {
+      paneRefs.value = paneRefs.value.slice(0, splitPanes.value.length)
+      clearPaneWidths()
+      handleResize()
+    })
   }
 
   dropZoneIndex.value = -1
@@ -164,31 +215,29 @@ const handleContentDragLeave = () => {
   dropPosition.value = ''
 }
 
-// 拖拽开始
-const handleDragStart = (e, paneIndex, port) => {
+const handleDragStart = (event, paneIndex, port) => {
   draggedData.value = { paneIndex, port }
-  e.dataTransfer.setData('text', JSON.stringify({ paneIndex, port }))
-  e.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text', JSON.stringify({ paneIndex, port }))
+  event.dataTransfer.effectAllowed = 'move'
 }
 
-// 拖拽到标签列表
-const handleTabListDragOver = (e) => {
-  e.preventDefault()
-  e.dataTransfer.dropEffect = 'move'
+const handleTabListDragOver = (event) => {
+  event.preventDefault()
+  event.dataTransfer.dropEffect = 'move'
 }
 
-const handleTabListDrop = (e, targetPaneIndex) => {
-  e.preventDefault()
-  const data = JSON.parse(e.dataTransfer.getData('text'))
+const handleTabListDrop = (event, targetPaneIndex) => {
+  event.preventDefault()
+  const data = JSON.parse(event.dataTransfer.getData('text'))
   if (!data) return
 
   const { paneIndex: sourcePaneIndex, port } = data
   if (sourcePaneIndex === targetPaneIndex) return
 
   const sourcePane = splitPanes.value[sourcePaneIndex]
-  const tabIndex = sourcePane.tabs.indexOf(port)
-  if (tabIndex !== -1) {
-    sourcePane.tabs.splice(tabIndex, 1)
+  const sourceTabIndex = sourcePane.tabs.indexOf(port)
+  if (sourceTabIndex !== -1) {
+    sourcePane.tabs.splice(sourceTabIndex, 1)
     if (sourcePane.activeTab === port) {
       sourcePane.activeTab = sourcePane.tabs[0] || ''
     }
@@ -202,24 +251,27 @@ const handleTabListDrop = (e, targetPaneIndex) => {
 
   if (sourcePane.tabs.length === 0 && splitPanes.value.length > 1) {
     splitPanes.value.splice(sourcePaneIndex, 1)
+    nextTick(() => {
+      paneRefs.value = paneRefs.value.slice(0, splitPanes.value.length)
+      clearPaneWidths()
+      handleResize()
+    })
   }
 
   draggedData.value = null
   dropZoneIndex.value = -1
 }
 
-// 拖拽结束
 const handleDragEnd = () => {
   draggedData.value = null
   dropZoneIndex.value = -1
   dropPosition.value = ''
 }
 
-// 分隔线拖拽调整宽度
-const handleSeparatorMouseDown = (e, index) => {
+const handleSeparatorMouseDown = (event, index) => {
   isDraggingSeparator.value = true
   draggingSeparatorIndex.value = index
-  separatorStartX.value = e.clientX
+  separatorStartX.value = event.clientX
 
   const paneGroups = document.querySelectorAll('.split-pane-group')
   const leftPane = paneGroups[index - 1]
@@ -231,32 +283,24 @@ const handleSeparatorMouseDown = (e, index) => {
   }
 
   document.body.style.cursor = 'col-resize'
-  e.preventDefault()
+  event.preventDefault()
 }
 
-const handleSeparatorMouseMove = (e) => {
+const handleSeparatorMouseMove = (event) => {
   if (!isDraggingSeparator.value || draggingSeparatorIndex.value === -1) return
 
-  const delta = e.clientX - separatorStartX.value
-  const index = draggingSeparatorIndex.value
-
-  // 最小宽度限制（像素）
-  const MIN_WIDTH = 200
-
+  const delta = event.clientX - separatorStartX.value
   const paneGroups = document.querySelectorAll('.split-pane-group')
-  const leftPane = paneGroups[index - 1]
-  const rightPane = paneGroups[index]
-
+  const leftPane = paneGroups[draggingSeparatorIndex.value - 1]
+  const rightPane = paneGroups[draggingSeparatorIndex.value]
   if (!leftPane || !rightPane) return
 
-  // 计算新宽度（基于初始宽度）
+  const minWidth = 240
   const newLeftWidth = initialLeftWidth.value + delta
   const newRightWidth = initialRightWidth.value - delta
 
-  // 检查是否满足最小宽度限制
-  if (newLeftWidth < MIN_WIDTH || newRightWidth < MIN_WIDTH) return
+  if (newLeftWidth < minWidth || newRightWidth < minWidth) return
 
-  // 更新宽度
   leftPane.style.flex = `0 0 ${newLeftWidth}px`
   rightPane.style.flex = `0 0 ${newRightWidth}px`
 }
@@ -267,41 +311,28 @@ const handleSeparatorMouseUp = () => {
   document.body.style.cursor = ''
 }
 
-// 窗口大小改变时，调整分区宽度比例
 const handleResize = () => {
   if (isDraggingSeparator.value) return
 
   const paneGroups = document.querySelectorAll('.split-pane-group')
   const separators = document.querySelectorAll('.split-separator')
+  const container = document.querySelector('.content-container')
 
-  if (paneGroups.length === 0) return
+  if (!paneGroups.length || !container) return
 
-  // 计算当前总宽度
-  let totalWidth = 0
+  let totalWidth = separators.length * 10
   const widths = []
-  paneGroups.forEach(pane => {
-    const width = pane.offsetWidth
-    widths.push(width)
-    totalWidth += width
+  paneGroups.forEach((pane) => {
+    widths.push(pane.offsetWidth)
+    totalWidth += pane.offsetWidth
   })
 
-  // 添加分隔线宽度
-  totalWidth += separators.length * 4
-
-  // 获取容器宽度
-  const container = document.querySelector('.content-container')
-  if (!container) return
-
   const containerWidth = container.offsetWidth
-
-  // 如果总宽度与容器宽度差异不大，不调整
   if (Math.abs(totalWidth - containerWidth) < 10) return
 
-  // 按比例调整每个分区宽度
   const scale = containerWidth / totalWidth
   paneGroups.forEach((pane, index) => {
-    const newWidth = Math.max(200, Math.floor(widths[index] * scale))
-    pane.style.flex = `0 0 ${newWidth}px`
+    pane.style.flex = `0 0 ${Math.max(240, Math.floor(widths[index] * scale))}px`
   })
 }
 
@@ -319,11 +350,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="terminal-container">
-    <!-- 内容区域 -->
+  <div class="terminal-shell">
     <div class="content-container">
       <template v-for="(pane, paneIndex) in splitPanes" :key="paneIndex">
-        <!-- 分隔线 -->
         <div
           v-if="paneIndex > 0"
           class="split-separator"
@@ -332,8 +361,7 @@ onUnmounted(() => {
           @drop="handleTabListDrop($event, paneIndex)"
         ></div>
 
-        <div class="split-pane-group">
-          <!-- 标签页标题栏 -->
+        <div :ref="(element) => setPaneRef(element, paneIndex)" class="split-pane-group">
           <div class="tab-header-section">
             <div class="tab-list">
               <div
@@ -345,22 +373,16 @@ onUnmounted(() => {
                 @dragstart="handleDragStart($event, paneIndex, port)"
                 @dragend="handleDragEnd"
               >
-                <span class="tab-icon">📡</span>
+                <span class="tab-icon"></span>
                 <span class="tab-label">{{ port }}</span>
-                <span class="tab-close" @click.stop="disconnectPort(port)">✕</span>
+                <span class="tab-close" @click.stop="disconnectPort(port)">×</span>
               </div>
             </div>
-            <!-- 拆分按钮 -->
-            <button
-              class="pane-split-btn"
-              :title="'向右拆分'"
-              @click.stop="splitPane(paneIndex)"
-            >
-              <span>◫</span>
+            <button class="pane-split-btn" title="向右拆分" @click.stop="splitPane(paneIndex)">
+              拆分
             </button>
           </div>
 
-          <!-- 内容区域 -->
           <div
             class="split-pane"
             @dragover="handleContentDragOver($event, paneIndex)"
@@ -373,10 +395,11 @@ onUnmounted(() => {
           >
             <SerialPanel v-if="pane.activeTab" :port-path="pane.activeTab" class="panel-full" />
             <div v-else class="empty-state">
-              <span class="empty-icon">📡</span>
-              <p>暂无串口</p>
-              <button class="delete-empty-btn" @click="removeEmptyPane(paneIndex)" title="删除此分区">
-                删除分区
+              <span class="empty-icon">◎</span>
+              <p>这个面板还没有串口</p>
+              <span class="empty-hint">连接设备后会自动出现在这里，也可以拖拽标签重新排布。</span>
+              <button class="delete-empty-btn" @click="removeEmptyPane(paneIndex)">
+                删除空面板
               </button>
             </div>
           </div>
@@ -387,21 +410,22 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.terminal-container {
+.terminal-shell {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background-color: #1e1e1e;
-  position: relative;
+  min-height: 0;
+  background: rgba(7, 13, 19, 0.82);
 }
 
-/* 内容区域 */
 .content-container {
   flex: 1;
   display: flex;
   overflow: hidden;
   position: relative;
+  padding: 6px;
+  gap: 6px;
 }
 
 .split-pane-group {
@@ -410,29 +434,41 @@ onUnmounted(() => {
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  border-radius: 14px;
+  background: rgba(8, 14, 20, 0.58);
+  border: 1px solid rgba(126, 161, 183, 0.12);
 }
 
-/* 分隔线 */
 .split-separator {
-  width: 4px;
-  background-color: #3e3e42;
+  width: 6px;
   flex-shrink: 0;
   cursor: col-resize;
-  transition: background-color 0.15s;
+  position: relative;
 }
 
-.split-separator:hover {
-  background-color: #007acc;
+.split-separator::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 2px;
+  width: 2px;
+  border-radius: 999px;
+  background: rgba(98, 130, 151, 0.18);
+  transition: all 0.18s ease;
 }
 
-/* 标签栏区域 */
+.split-separator:hover::before {
+  background: rgba(87, 199, 255, 0.4);
+}
+
 .tab-header-section {
   display: flex;
   align-items: center;
-  background-color: #252526;
-  border-bottom: 1px solid #3e3e42;
+  background: rgba(10, 19, 27, 0.56);
+  border-bottom: 1px solid rgba(126, 161, 183, 0.12);
   flex-shrink: 0;
-  height: 36px;
+  height: 40px;
 }
 
 .tab-list {
@@ -440,104 +476,94 @@ onUnmounted(() => {
   flex: 1;
   overflow-x: auto;
   align-items: center;
+  padding-left: 6px;
 }
 
 .tab-list::-webkit-scrollbar {
-  height: 3px;
-}
-
-.tab-list::-webkit-scrollbar-track {
-  background: #252526;
+  height: 4px;
 }
 
 .tab-list::-webkit-scrollbar-thumb {
-  background: #424242;
+  background: rgba(126, 161, 183, 0.3);
+  border-radius: 999px;
 }
 
-/* 标签项 */
 .tab-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  min-width: 120px;
-  max-width: 200px;
-  background-color: #2d2d30;
-  border-right: 1px solid #3e3e42;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-right: 6px;
+  min-width: 112px;
+  max-width: 220px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.18s ease;
   user-select: none;
-  height: 36px;
-  box-sizing: border-box;
+  border: 1px solid transparent;
+  color: #b7cbd9;
 }
 
 .tab-item:hover {
-  background-color: #323233;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .tab-item.active {
-  background-color: #1e1e1e;
-  border-bottom: 2px solid #007acc;
+  background: rgba(87, 199, 255, 0.08);
+  border-color: rgba(87, 199, 255, 0.16);
+  color: #f4fbff;
 }
 
 .tab-icon {
-  font-size: 14px;
-  cursor: grab;
-}
-
-.tab-item:active .tab-icon {
-  cursor: grabbing;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #57c7ff;
+  box-shadow: 0 0 0 4px rgba(87, 199, 255, 0.08);
+  flex-shrink: 0;
 }
 
 .tab-label {
   flex: 1;
   font-size: 13px;
-  color: #cccccc;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .tab-close {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 3px;
-  font-size: 12px;
-  color: #858585;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 14px;
+  color: #8ca4b6;
 }
 
 .tab-close:hover {
-  background-color: #c42b1c;
-  color: #ffffff;
+  background: rgba(196, 43, 28, 0.18);
+  color: #fff;
 }
 
-/* 拆分按钮 */
 .pane-split-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 36px;
-  background: none;
-  border: none;
-  border-left: 1px solid #3e3e42;
-  color: #cccccc;
+  margin-right: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(126, 161, 183, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: #a8bfce;
   cursor: pointer;
-  font-size: 16px;
-  padding: 0;
-  transition: all 0.15s;
-  flex-shrink: 0;
+  font-weight: 600;
+  transition: all 0.18s ease;
 }
 
 .pane-split-btn:hover {
-  background-color: #3e3e42;
-  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
 }
 
-/* 分屏内容 */
 .split-pane {
   flex: 1;
   display: flex;
@@ -549,13 +575,13 @@ onUnmounted(() => {
 }
 
 .split-pane.drop-zone-left {
-  background: linear-gradient(to right, rgba(0, 122, 204, 0.2) 0%, transparent 30%);
-  box-shadow: inset 2px 0 0 0 rgba(0, 122, 204, 0.5);
+  background: linear-gradient(to right, rgba(87, 199, 255, 0.18) 0%, transparent 28%);
+  box-shadow: inset 3px 0 0 rgba(87, 199, 255, 0.54);
 }
 
 .split-pane.drop-zone-right {
-  background: linear-gradient(to left, rgba(0, 122, 204, 0.2) 0%, transparent 30%);
-  box-shadow: inset -2px 0 0 0 rgba(0, 122, 204, 0.5);
+  background: linear-gradient(to left, rgba(87, 199, 255, 0.18) 0%, transparent 28%);
+  box-shadow: inset -3px 0 0 rgba(87, 199, 255, 0.54);
 }
 
 .panel-full {
@@ -571,40 +597,49 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #555;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  color: #8ea5b7;
 }
 
 .empty-icon {
-  font-size: 48px;
-  margin-bottom: 10px;
+  width: 72px;
+  height: 72px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #dceaf4;
+  font-size: 28px;
 }
 
 .empty-state p {
-  font-size: 13px;
-  margin: 4px 0;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #eef8ff;
 }
 
-.empty-state .hint {
-  color: #858585;
-  font-size: 12px;
+.empty-hint {
+  max-width: 340px;
+  line-height: 1.6;
 }
 
 .delete-empty-btn {
-  margin-top: 12px;
-  padding: 6px 16px;
-  background-color: #c42b1c;
-  border: 1px solid #a02015;
-  color: #ffffff;
-  border-radius: 4px;
-  font-size: 12px;
+  margin-top: 6px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(196, 43, 28, 0.22);
+  background: rgba(196, 43, 28, 0.14);
+  color: #ffd5d1;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.18s ease;
 }
 
 .delete-empty-btn:hover {
-  background-color: #d63a2a;
-  border-color: #b4281a;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(196, 43, 28, 0.3);
+  background: rgba(196, 43, 28, 0.22);
 }
 </style>

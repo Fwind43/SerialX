@@ -276,9 +276,14 @@ document.addEventListener('click', handleClickOutside)
         </div>
       </div>
       <div class="header-center">
-        <img src="../logo/icon.png" alt="SerialX" class="app-icon" />
-        <span class="app-title">SerialX</span>
-        <span class="app-subtitle">串口调试工具</span>
+        <div class="brand-mark">
+          <img src="../logo/icon.png" alt="SerialX" class="app-icon" />
+        </div>
+        <div class="brand-copy">
+          <span class="app-title">SerialX</span>
+          <span class="app-subtitle">串口调试工作台</span>
+        </div>
+        <span class="app-version-chip">v0.0.4-dev</span>
       </div>
       <div class="header-right window-controls">
         <button class="window-btn minimize-btn" @click="minimizeWindow" title="最小化">
@@ -317,16 +322,17 @@ document.addEventListener('click', handleClickOutside)
 
     <!-- 底部状态栏 -->
     <footer class="status-bar">
-      <span class="status-item">
-        <span class="status-label">串口：</span>
+      <span class="status-item primary">
+        <span class="status-dot" :class="{ online: serialStore.openPorts.size > 0 }"></span>
+        <span class="status-label">当前串口</span>
         <span class="status-value">{{ serialStore.selectedPort || '未选择' }}</span>
       </span>
       <span class="status-item">
-        <span class="status-label">状态：</span>
+        <span class="status-label">连接状态</span>
         <span class="status-value">{{ serialStore.openPorts.size > 0 ? '已连接' : '未连接' }}</span>
       </span>
       <span class="status-item">
-        <span class="status-label">打开的串口：</span>
+        <span class="status-label">活跃连接</span>
         <span class="status-value">{{ serialStore.openPorts.size }}</span>
       </span>
     </footer>
@@ -354,12 +360,31 @@ document.addEventListener('click', handleClickOutside)
 
 <style scoped>
 .app-container {
+  --app-bg: #08131b;
+  --app-panel: rgba(10, 18, 25, 0.62);
+  --app-panel-strong: rgba(10, 19, 27, 0.82);
+  --app-border: rgba(125, 162, 186, 0.1);
+  --app-border-strong: rgba(141, 189, 219, 0.3);
+  --app-text: #d9e6f2;
+  --app-text-soft: #8fa5b6;
+  --app-accent: #57c7ff;
+  --app-accent-strong: #17a7f2;
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: #1e1e1e;
-  color: #cccccc;
+  background: linear-gradient(180deg, #09131b 0%, var(--app-bg) 100%);
+  color: var(--app-text);
   overflow: hidden;
+  position: relative;
+}
+
+.app-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 0%, rgba(87, 199, 255, 0.08), transparent 42%);
+  opacity: 0.8;
+  pointer-events: none;
 }
 
 /* 顶部标题栏 */
@@ -367,12 +392,15 @@ document.addEventListener('click', handleClickOutside)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 40px;
-  padding: 0 16px;
-  background-color: #323233;
-  border-bottom: 1px solid #3e3e42;
+  min-height: 48px;
+  padding: 0 14px;
+  background: rgba(8, 15, 22, 0.72);
+  border-bottom: 1px solid var(--app-border);
   flex-shrink: 0;
   -webkit-app-region: drag;
+  backdrop-filter: blur(14px);
+  position: relative;
+  z-index: 2;
 }
 
 .header-left {
@@ -383,7 +411,7 @@ document.addEventListener('click', handleClickOutside)
 .header-center {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -394,6 +422,23 @@ document.addEventListener('click', handleClickOutside)
   align-items: center;
 }
 
+.brand-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(87, 199, 255, 0.12);
+  border: 1px solid rgba(124, 193, 228, 0.18);
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .menubar-items {
   display: flex;
   align-items: center;
@@ -402,51 +447,56 @@ document.addEventListener('click', handleClickOutside)
 
 .menubar-item {
   position: relative;
-  padding: 4px 12px;
-  border-radius: 4px;
+  padding: 6px 10px;
+  border-radius: 999px;
   cursor: pointer;
   -webkit-app-region: no-drag;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
 }
 
 .menubar-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.05);
 }
 
 .menubar-label {
   font-size: 13px;
-  color: #cccccc;
+  color: var(--app-text);
+  letter-spacing: 0.02em;
 }
 
 .menubar-dropdown {
   position: absolute;
   top: 100%;
   left: 0;
-  min-width: 180px;
-  background-color: #2d2d30;
-  border: 1px solid #3e3e42;
-  border-radius: 6px;
-  padding: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  min-width: 208px;
+  background: rgba(8, 15, 22, 0.96);
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.28);
   z-index: 1000;
-  margin-top: 2px;
+  margin-top: 6px;
+  backdrop-filter: blur(14px);
 }
 
 .dropdown-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
-  border-radius: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.18s ease;
 }
 
 .dropdown-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 .dropdown-item.danger:hover {
-  background-color: rgba(196, 43, 28, 0.2);
+  background-color: rgba(196, 43, 28, 0.18);
 }
 
 .dropdown-icon {
@@ -455,7 +505,7 @@ document.addEventListener('click', handleClickOutside)
 
 .dropdown-text {
   font-size: 13px;
-  color: #cccccc;
+  color: var(--app-text);
 }
 
 .app-icon {
@@ -466,13 +516,29 @@ document.addEventListener('click', handleClickOutside)
 
 .app-title {
   font-size: 14px;
-  font-weight: 600;
-  color: #ffffff;
+  font-weight: 700;
+  color: #f4fbff;
+  letter-spacing: 0.06em;
 }
 
 .app-subtitle {
-  font-size: 12px;
-  color: #858585;
+  font-size: 10px;
+  color: var(--app-text-soft);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.app-version-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(87, 199, 255, 0.22);
+  background: rgba(87, 199, 255, 0.08);
+  color: #bfe9ff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 /* 窗口控制按钮 */
@@ -487,19 +553,19 @@ document.addEventListener('click', handleClickOutside)
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   border: none;
   outline: none;
-  background: transparent;
-  color: #cccccc;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--app-text);
   cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.15s ease;
+  border-radius: 8px;
+  transition: all 0.18s ease;
 }
 
 .window-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(87, 199, 255, 0.12);
   color: #ffffff;
 }
 
@@ -526,18 +592,24 @@ document.addEventListener('click', handleClickOutside)
   display: flex;
   flex: 1;
   overflow: hidden;
+  padding: 10px 10px 6px;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
 }
 
 /* 左侧边栏 */
 .sidebar {
-  width: 260px;
+  width: 272px;
   min-width: 200px;
-  max-width: 400px;
-  background-color: #252526;
-  border-right: 1px solid #3e3e42;
+  max-width: 420px;
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  backdrop-filter: blur(12px);
 }
 
 /* 中间内容区 */
@@ -547,33 +619,65 @@ document.addEventListener('click', handleClickOutside)
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  background: rgba(7, 15, 22, 0.22);
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  backdrop-filter: blur(8px);
 }
 
 /* 底部状态栏 */
 .status-bar {
   display: flex;
   align-items: center;
-  height: 24px;
-  padding: 0 12px;
-  background-color: #007acc;
+  min-height: 34px;
+  padding: 0 10px 8px;
+  background: transparent;
   color: #ffffff;
   font-size: 12px;
-  gap: 20px;
+  gap: 8px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  flex-wrap: wrap;
 }
 
 .status-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(10, 21, 30, 0.72);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
+  backdrop-filter: blur(8px);
 }
 
 .status-label {
-  opacity: 0.8;
+  opacity: 0.72;
+}
+
+.status-item.primary {
+  border-color: rgba(87, 199, 255, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5e7484;
+  box-shadow: 0 0 0 4px rgba(94, 116, 132, 0.16);
+}
+
+.status-dot.online {
+  background: #52d7a6;
+  box-shadow: 0 0 0 4px rgba(82, 215, 166, 0.12);
 }
 
 .status-value {
-  font-weight: 500;
+  font-weight: 700;
+  color: #f4fbff;
 }
 
 /* 转换器独立模式 */

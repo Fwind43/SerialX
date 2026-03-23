@@ -101,50 +101,6 @@ const portLogs = computed(() => {
   return serialStore.getPortLogs(props.portPath)
 })
 
-// 检查日志是否应该被过滤（hide 模式）
-const shouldHideLog = (log) => {
-  const filters = portFilters.value
-  if (!filters.enabled || filters.mode !== 'hide' || !filters.pattern) return false
-  if (log.type !== 'rx') return true // 只过滤 RX 数据
-
-  const filterTarget = filters.filterTarget || 'both'
-  let dataToCheck = []
-
-  if (portDisplaySettings.value.hexReceive && log.hexData) {
-    if (filterTarget === 'hexData' || filterTarget === 'both') {
-      dataToCheck.push(log.hexData)
-    }
-    if (filterTarget === 'asciiData' || filterTarget === 'both') {
-      const ascii = log.hexData.split(' ').map(h => {
-        const code = parseInt(h, 16)
-        return (code >= 32 && code <= 126) ? String.fromCharCode(code) : '.'
-      }).join('')
-      dataToCheck.push(ascii)
-    }
-  } else {
-    dataToCheck.push(log.message)
-  }
-
-  if (dataToCheck.length === 0) return false
-
-  // 关键字匹配
-  if (filters.matchMode === 'keyword') {
-    return dataToCheck.some(data => data.includes(filters.pattern))
-  }
-
-  // 正则表达式匹配
-  if (filters.matchMode === 'regex') {
-    try {
-      const regex = new RegExp(filters.pattern)
-      return dataToCheck.some(data => regex.test(data))
-    } catch {
-      return false
-    }
-  }
-
-  return false
-}
-
 // 格式化日志行 - 使用 ANSI 转义码添加颜色
 const getHexLengthPerLine = () => {
   // 根据终端实际列数动态计算（减去时间戳和前缀占用的空间）
@@ -338,9 +294,6 @@ const loadHistoryLogs = () => {
   const startIdx = Math.max(0, logs.length - MAX_LOG_COUNT)
   for (let i = startIdx; i < logs.length; i++) {
     const log = logs[i]
-    // 跳过被隐藏的日志
-    if (shouldHideLog(log)) continue
-
     const line = formatLogLine(log)
     terminal.writeln(line)
     logEntries.push({
@@ -360,9 +313,6 @@ const loadHistoryLogs = () => {
 // 添加新日志
 const addLogEntry = (log) => {
   if (!terminal) return
-
-  // 跳过被隐藏的日志
-  if (shouldHideLog(log)) return
 
   const line = formatLogLine(log)
   terminal.writeln(line)
@@ -805,13 +755,15 @@ defineExpose({
   width: 100%;
   display: flex;
   flex-direction: column;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .terminal-container {
   flex: 1;
   width: 100%;
   position: relative;
-  padding: 4px 8px;
+  padding: 2px 6px;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -912,16 +864,17 @@ defineExpose({
 .search-widget {
   position: absolute;
   top: 8px;
-  right: 16px;
+  right: 10px;
   z-index: 100;
-  background-color: #252526;
-  border: 1px solid #3e3e42;
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  padding: 6px 8px;
+  background-color: rgba(17, 26, 34, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  padding: 4px 6px;
   display: flex;
   align-items: center;
   gap: 6px;
+  backdrop-filter: blur(10px);
 }
 
 .search-input-wrapper {
@@ -931,12 +884,12 @@ defineExpose({
 }
 
 .search-input {
-  padding: 6px 10px;
-  background-color: #1e1e1e;
-  border: 1px solid #3e3e42;
-  border-radius: 3px;
+  padding: 6px 8px;
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
   color: #cccccc;
-  font-size: 13px;
+  font-size: 12px;
   font-family: 'Consolas', 'Monaco', monospace;
   width: 250px;
   outline: none;
@@ -968,11 +921,11 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  background-color: #3c3c3c;
-  border: 1px solid #555;
-  border-radius: 3px;
+  width: 22px;
+  height: 22px;
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 7px;
   color: #cccccc;
   cursor: pointer;
   font-size: 12px;

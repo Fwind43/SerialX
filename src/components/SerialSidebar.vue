@@ -4,12 +4,18 @@ import { useSerialStore } from '../stores/serial'
 
 const serialStore = useSerialStore()
 
-// 获取已打开的串口列表
 const openedPorts = computed(() => {
   return Array.from(serialStore.openPorts.entries())
-    .filter(([_, data]) => data.isConnected)
+    .filter(([, data]) => data.isConnected)
     .map(([path, data]) => ({ path, ...data }))
 })
+
+const selectedPortConnected = computed(() => serialStore.getPortStatus(serialStore.selectedPort))
+const isPortConnected = (portPath) => serialStore.getPortStatus(portPath)
+
+const selectPort = (portPath) => {
+  serialStore.selectedPort = portPath
+}
 
 const handleConnect = async (portPath = null) => {
   const targetPort = portPath || serialStore.selectedPort
@@ -19,18 +25,15 @@ const handleConnect = async (portPath = null) => {
     return
   }
 
-  // 检查是否已连接
-  const isConnected = serialStore.getPortStatus(targetPort)
-  if (isConnected) {
+  if (serialStore.getPortStatus(targetPort)) {
     await serialStore.disconnect(targetPort)
     return
   }
 
-  const settings = {
+  await serialStore.connect(targetPort, {
     ...serialStore.defaultSettings,
     path: targetPort
-  }
-  await serialStore.connect(targetPort, settings)
+  })
 }
 
 const handleRefresh = async () => {
@@ -40,68 +43,64 @@ const handleRefresh = async () => {
 
 <template>
   <div class="sidebar-container">
-    <!-- 侧边栏标题 -->
     <div class="sidebar-title">
-      <span class="title-icon">🔌</span>
-      <span class="title-text">串口设备</span>
-    </div>
-
-    <!-- 已连接的串口列表 -->
-    <div v-if="openedPorts.length > 0" class="connected-section">
-      <div class="section-header">已打开的串口</div>
-      <div class="connected-list">
-        <div v-for="port in openedPorts" :key="port.path" class="connected-item">
-          <div class="item-info">
-            <span class="item-path">{{ port.path }}</span>
-            <span class="item-baud">{{ port.baudRate }} baud</span>
-          </div>
-          <button @click="handleConnect(port.path)" class="item-close" title="断开">
-            ✕
-          </button>
-        </div>
+      <div class="title-copy">
+        <span class="title-kicker">Serial Workspace</span>
+        <span class="title-text">串口设备</span>
       </div>
     </div>
 
-    <!-- 可用串口列表 -->
     <div class="ports-section">
       <div class="section-header">
         <span>可用串口</span>
+        <span class="section-meta">{{ serialStore.ports.length }} 个</span>
         <button @click="handleRefresh" class="refresh-btn" title="刷新">
-          ↻
+          刷新
         </button>
       </div>
       <div class="ports-list">
         <div v-if="serialStore.ports.length === 0" class="no-ports">
-          未找到串口设备
+          <span class="no-ports-icon">◎</span>
+          <span>未找到串口设备</span>
         </div>
         <div
           v-for="port in serialStore.ports"
           :key="port.path"
           :class="['port-item', { selected: serialStore.selectedPort === port.path }]"
-          @click="serialStore.selectedPort = port.path"
-          @dblclick="handleConnect(port.path)"
+          @click="selectPort(port.path)"
         >
-          <span class="port-icon">🔌</span>
-          <span class="port-path">{{ port.path }}</span>
-          <span v-if="serialStore.getPortStatus(port.path)" class="port-status-connected">●</span>
+          <span class="port-icon" :class="{ active: isPortConnected(port.path) }"></span>
+          <div class="port-copy">
+            <span class="port-path">{{ port.path }}</span>
+            <span class="port-meta">{{ port.manufacturer || '未知设备' }}</span>
+          </div>
+          <span v-if="isPortConnected(port.path)" class="port-status-connected">已连接</span>
+          <button
+            class="port-action-btn"
+            :class="{ disconnect: isPortConnected(port.path) }"
+            @click.stop="handleConnect(port.path)"
+            :title="isPortConnected(port.path) ? '断开该串口' : '连接该串口'"
+          >
+            {{ isPortConnected(port.path) ? '断开' : '连接' }}
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- 连接按钮 -->
     <div class="connect-section">
       <button
         @click="handleConnect()"
-        :class="['connect-btn', serialStore.getPortStatus(serialStore.selectedPort) ? 'connected' : 'disconnected']"
-        :disabled="!serialStore.selectedPort && !isSimulationMode"
+        :class="['connect-btn', selectedPortConnected ? 'connected' : 'disconnected']"
+        :disabled="!serialStore.selectedPort"
       >
-        {{ serialStore.getPortStatus(serialStore.selectedPort) ? '断开连接' : '连接串口' }}
+        {{ selectedPortConnected ? '断开当前串口' : '连接当前串口' }}
       </button>
     </div>
 
-    <!-- 串口设置 -->
     <div class="settings-section">
-      <div class="section-header">串口设置</div>
+      <div class="section-header settings-header">
+        <span>默认串口参数</span>
+      </div>
       <div class="settings-grid">
         <div class="setting-item">
           <label>波特率</label>
@@ -128,7 +127,7 @@ const handleRefresh = async () => {
           </select>
         </div>
         <div class="setting-item">
-          <label>校验</label>
+          <label>校验位</label>
           <select v-model="serialStore.defaultSettings.parity" class="setting-select">
             <option value="none">无</option>
             <option value="even">偶</option>
@@ -146,309 +145,284 @@ const handleRefresh = async () => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  background:
+    radial-gradient(circle at top right, rgba(87, 199, 255, 0.12), transparent 26%),
+    linear-gradient(180deg, rgba(14, 25, 35, 0.96), rgba(9, 18, 25, 0.98));
 }
 
-/* 侧边栏标题 */
 .sidebar-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
-  background-color: #2d2d30;
-  border-bottom: 1px solid #3e3e42;
-}
-
-.title-icon {
-  font-size: 16px;
-}
-
-.title-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: #ffffff;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* 工具按钮 */
-.tool-btn {
-  background: none;
-  border: 1px solid #555;
-  color: #cccccc;
-  cursor: pointer;
-  font-size: 16px;
-  padding: 4px 8px;
-  border-radius: 3px;
-  transition: all 0.15s;
-}
-
-.tool-btn:hover {
-  background-color: #3e3e42;
-  border-color: #007acc;
-  color: #ffffff;
-}
-
-.tool-btn.active {
-  background-color: #007acc;
-  border-color: #007acc;
-  color: #ffffff;
-}
-
-.title-actions {
-  margin-left: auto;
-  display: flex;
-  gap: 4px;
-}
-
-/* 模拟模式开关 */
-.simulation-toggle {
-  padding: 10px 14px;
-  border-bottom: 1px solid #3e3e42;
-}
-
-.toggle-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.toggle-label input[type="checkbox"] {
-  accent-color: #4ec9b0;
-  width: 16px;
-  height: 16px;
-}
-
-.toggle-text {
-  font-size: 13px;
-  color: #4ec9b0;
-}
-
-/* 已连接的串口 */
-.connected-section {
-  border-bottom: 1px solid #3e3e42;
-}
-
-.section-header {
-  display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #858585;
-  text-transform: uppercase;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(132, 169, 193, 0.12);
 }
 
-.refresh-btn {
-  background: none;
-  border: none;
-  color: #858585;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-.refresh-btn:hover {
-  background-color: #3e3e42;
-  color: #ffffff;
-}
-
-.connected-list {
-  padding: 6px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.connected-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 10px;
-  background-color: #1e1e1e;
-  border-radius: 3px;
-  border-left: 3px solid #4ec9b0;
-}
-
-.item-info {
+.title-copy {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.item-path {
-  font-size: 13px;
+.title-kicker {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #88a8bd;
+}
+
+.title-text {
+  font-size: 15px;
   font-weight: 600;
-  color: #ffffff;
+  color: #f4fbff;
 }
 
-.item-baud {
-  font-size: 11px;
-  color: #858585;
-}
-
-.item-actions {
+.section-header {
   display: flex;
-  gap: 4px;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #93acbf;
+  letter-spacing: 0.08em;
 }
 
-.item-send {
-  background: none;
-  border: none;
-  color: #4ec9b0;
-  cursor: pointer;
-  font-size: 16px;
-  padding: 4px;
-  border-radius: 3px;
-  line-height: 1;
+.section-meta {
+  color: #6f889a;
 }
 
-.item-send:hover:not(:disabled) {
-  background-color: #0e639c;
-  color: #ffffff;
-}
-
-.item-send:disabled {
-  color: #555;
-  cursor: not-allowed;
-}
-
-.item-close {
-  background: none;
-  border: none;
-  color: #858585;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 4px;
-  border-radius: 3px;
-  line-height: 1;
-}
-
-.item-close:hover {
-  background-color: #c42b1c;
-  color: #ffffff;
-}
-
-/* 可用串口列表 */
 .ports-section {
   flex: 1;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid #3e3e42;
+  margin: 8px 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(132, 169, 193, 0.08);
+  background: rgba(8, 17, 24, 0.42);
+}
+
+.refresh-btn {
+  margin-left: auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(126, 161, 183, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: #a9c0d0;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  font-size: 11px;
+}
+
+.refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .ports-list {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 10px;
+  padding: 2px 8px 8px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+}
+
+.ports-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ports-list::-webkit-scrollbar-thumb {
+  background: rgba(126, 161, 183, 0.22);
+  border-radius: 999px;
 }
 
 .no-ports {
-  padding: 20px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 12px;
   text-align: center;
-  color: #858585;
+  color: #7f99ac;
   font-size: 13px;
+}
+
+.no-ports-icon {
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #b5c8d5;
 }
 
 .port-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
-  border-radius: 3px;
+  padding: 9px 10px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: background-color 0.15s;
+  transition: all 0.18s ease;
+  border: 1px solid transparent;
+  position: relative;
 }
 
 .port-item:hover {
-  background-color: #2a2d2e;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.04);
 }
 
 .port-item.selected {
-  background-color: #37373d;
+  background: rgba(87, 199, 255, 0.08);
+  border-color: rgba(87, 199, 255, 0.18);
+}
+
+.port-item.selected::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 999px;
+  background: #57c7ff;
 }
 
 .port-icon {
-  font-size: 14px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #5d7586;
+  box-shadow: 0 0 0 5px rgba(93, 117, 134, 0.14);
+  flex-shrink: 0;
+}
+
+.port-icon.active {
+  background: #52d7a6;
+  box-shadow: 0 0 0 5px rgba(82, 215, 166, 0.14);
+}
+
+.port-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .port-path {
-  flex: 1;
   font-size: 13px;
-  color: #cccccc;
+  font-weight: 700;
+  color: #dfeaf2;
 }
 
-.port-status {
+.port-meta {
   font-size: 11px;
-  color: #4ec9b0;
-  padding: 2px 6px;
-  background-color: #4ec9b033;
-  border-radius: 3px;
+  color: #8099ab;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .port-status-connected {
-  font-size: 12px;
-  color: #4ec9b0;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(82, 215, 166, 0.12);
+  color: #8df4ca;
+  font-size: 10px;
+  font-weight: 600;
 }
 
-/* 连接按钮 */
+.port-action-btn {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(87, 199, 255, 0.16);
+  background: rgba(87, 199, 255, 0.08);
+  color: #bfe9ff;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.port-action-btn:hover {
+  background: rgba(87, 199, 255, 0.16);
+}
+
+.port-action-btn.disconnect {
+  border-color: rgba(196, 43, 28, 0.16);
+  background: rgba(196, 43, 28, 0.08);
+  color: #ffccc6;
+}
+
+.port-action-btn.disconnect:hover {
+  background: rgba(196, 43, 28, 0.16);
+}
+
 .connect-section {
-  padding: 10px 14px;
-  border-bottom: 1px solid #3e3e42;
+  padding: 0 12px 12px;
 }
 
 .connect-btn {
   width: 100%;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 3px;
-  color: white;
-  font-weight: 500;
-  font-size: 13px;
+  padding: 14px 18px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
   cursor: pointer;
-  transition: background-color 0.15s;
+  transition: all 0.2s ease;
 }
 
 .connect-btn.connected {
-  background-color: #c42b1c;
+  background: linear-gradient(135deg, #cf564c, #a8291f);
+  box-shadow: 0 12px 22px rgba(168, 41, 31, 0.24);
 }
 
 .connect-btn.connected:hover {
-  background-color: #d43b2c;
+  transform: translateY(-1px);
 }
 
 .connect-btn.disconnected {
-  background-color: #0e639c;
+  background: linear-gradient(135deg, #57c7ff, #1190dc);
+  box-shadow: 0 14px 24px rgba(17, 144, 220, 0.26);
 }
 
 .connect-btn.disconnected:hover {
-  background-color: #1177bb;
+  transform: translateY(-1px);
 }
 
 .connect-btn:disabled {
-  background-color: #3e3e42;
-  color: #555;
+  background: rgba(255, 255, 255, 0.06);
+  color: #688093;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
-/* 串口设置 */
 .settings-section {
-  padding: 10px 14px;
-  background-color: #252526;
+  margin: 0 10px 10px;
+  padding: 2px 0 0;
+  border-radius: 12px;
+  border: 1px solid rgba(132, 169, 193, 0.08);
+  background: rgba(8, 17, 24, 0.38);
+}
+
+.settings-header {
+  padding-bottom: 2px;
 }
 
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-top: 8px;
+  padding: 8px;
 }
 
 .setting-item {
@@ -458,23 +432,36 @@ const handleRefresh = async () => {
 }
 
 .setting-item label {
-  font-size: 11px;
-  color: #858585;
-  text-transform: uppercase;
+  font-size: 10px;
+  color: #8ea6b8;
+  letter-spacing: 0.08em;
 }
 
 .setting-select {
-  padding: 6px 8px;
-  background-color: #3c3c3c;
-  border: 1px solid #555;
-  color: #cccccc;
-  border-radius: 3px;
-  font-size: 12px;
+  padding: 7px 9px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(132, 169, 193, 0.1);
+  color-scheme: dark;
+  color: #dbe8f1;
+  border-radius: 9px;
+  font-size: 11px;
   cursor: pointer;
+}
+
+.setting-select option {
+  background-color: #0f1922;
+  color: #e7f3fb;
+}
+
+.setting-select option:checked,
+.setting-select option:hover {
+  background-color: #173449;
+  color: #ffffff;
 }
 
 .setting-select:focus {
   outline: none;
-  border-color: #007acc;
+  border-color: rgba(87, 199, 255, 0.28);
+  box-shadow: 0 0 0 3px rgba(87, 199, 255, 0.12);
 }
 </style>

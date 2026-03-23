@@ -39,7 +39,7 @@ export const useSerialStore = defineStore('serial', () => {
   const portLogs = ref(new Map())  // path -> log array
   const portSettings = ref(new Map()) // path -> settings object
   const portSendingData = ref(new Map()) // path -> sending data string
-  const portFilters = ref(new Map()) // path -> { enabled, mode, matchMode, pattern } mode: 'discard' | 'hide', matchMode: 'keyword' | 'regex'
+  const portFilters = ref(new Map()) // path -> { enabled, mode, matchMode, pattern } mode: 'discard', matchMode: 'keyword' | 'regex'
 
   // 当前选中的串口设置（用于新建连接）
   const defaultSettings = ref(createDefaultSettings())
@@ -313,7 +313,7 @@ export const useSerialStore = defineStore('serial', () => {
   const getPortFilters = (portPath) => {
     return portFilters.value.get(portPath) || {
       enabled: false,
-      mode: 'discard', // 'discard' | 'hide'
+      mode: 'discard',
       matchMode: 'regex', // 'keyword' | 'regex'
       pattern: '',
       filterTarget: 'both' // 'hexData' | 'asciiData' | 'both'
