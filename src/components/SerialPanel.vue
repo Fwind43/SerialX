@@ -166,6 +166,21 @@ const handleSend = async () => {
   serialStore.clearPortNotice(props.portPath)
 }
 
+const handleSendingKeyDown = (event) => {
+  if (event.key !== 'Enter') return
+
+  if (event.ctrlKey || event.metaKey) {
+    event.preventDefault()
+    handleSend()
+    return
+  }
+
+  if (!event.shiftKey && !event.altKey) {
+    event.preventDefault()
+    handleSend()
+  }
+}
+
 const handleDisconnect = async () => {
   await serialStore.disconnect(props.portPath)
 }
@@ -210,7 +225,7 @@ const formatBytes = (bytes) => {
 }
 
 const hexPlaceholder = '输入十六进制数据，例如：48 65 6C 6C 6F'
-const textPlaceholder = '输入要发送的数据，按 Enter 发送...'
+const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发送...'
 </script>
 
 <template>
@@ -357,7 +372,7 @@ const textPlaceholder = '输入要发送的数据，按 Enter 发送...'
           class="send-input"
           :class="{ 'hex-invalid': portControlSettings.hexSend && !isHexInputValid, 'send-error': !!sendErrorMessage }"
           :placeholder="portControlSettings.hexSend ? hexPlaceholder : textPlaceholder"
-          @keyup.enter="handleSend"
+          @keydown="handleSendingKeyDown"
         />
         <button @click="handleSend" class="send-button" :disabled="isSendDisabled">
           发送
