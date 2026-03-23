@@ -1,10 +1,10 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useSerialStore } from '../stores/serial'
 
 const serialStore = useSerialStore()
 
-const props = defineProps({
+defineProps({
   show: {
     type: Boolean,
     default: false
@@ -14,16 +14,20 @@ const props = defineProps({
 const emit = defineEmits(['update:show'])
 
 const appearance = computed(() => serialStore.terminalAppearance)
+const showAdvancedSection = ref(false)
 
-const colorFields = [
-  { key: 'terminalBackground', label: '终端背景色', hint: 'xterm 主背景色' },
+const baseColorFields = [
+  { key: 'terminalBackground', label: '终端背景色', hint: 'xterm 主背景颜色' },
   { key: 'terminalForeground', label: '终端字体色', hint: '终端普通文本颜色' },
-  { key: 'cursorColor', label: '光标颜色', hint: '输入/定位光标颜色' },
-  { key: 'selectionColor', label: '选区颜色', hint: '鼠标选中文本的背景色' },
-  { key: 'searchMatchColor', label: '搜索匹配色', hint: '普通命中的荧光笔颜色' },
-  { key: 'searchMatchTextColor', label: '匹配文字色', hint: '普通命中文字颜色' },
+  { key: 'cursorColor', label: '光标颜色', hint: '输入和定位光标的颜色' },
+  { key: 'selectionColor', label: '选区颜色', hint: '鼠标选中文本时的背景色' }
+]
+
+const searchColorFields = [
+  { key: 'searchMatchColor', label: '搜索匹配色', hint: '普通命中的高亮颜色' },
+  { key: 'searchMatchTextColor', label: '匹配文字色', hint: '普通命中的文字颜色' },
   { key: 'searchCurrentMatchColor', label: '当前匹配色', hint: '当前命中的高亮颜色' },
-  { key: 'searchCurrentMatchTextColor', label: '当前文字色', hint: '当前命中文字颜色' }
+  { key: 'searchCurrentMatchTextColor', label: '当前文字色', hint: '当前命中的文字颜色' }
 ]
 
 const colorInputValue = (value) => {
@@ -75,60 +79,69 @@ const resetDefaults = () => {
       <div class="modal-header">
         <div>
           <div class="modal-title">终端外观设置</div>
-          <div class="modal-subtitle">自定义终端文字、搜索高亮和当前命中效果</div>
+          <div class="modal-subtitle">把常用颜色和低频高级项拆开，调色时更聚焦也更容易回看</div>
         </div>
-        <button @click="closeModal" class="modal-close">×</button>
+        <button class="modal-close" @click="closeModal">×</button>
       </div>
 
       <div class="modal-body">
-        <div class="settings-grid">
-          <div v-for="field in colorFields" :key="field.key" class="setting-card">
-            <div class="setting-info">
-              <label class="setting-label">{{ field.label }}</label>
-              <span class="setting-hint">{{ field.hint }}</span>
-            </div>
-            <div class="setting-controls">
-              <input
-                :value="colorInputValue(appearance[field.key])"
-                type="color"
-                class="color-picker"
-                @input="updateColor(field.key, $event.target.value)"
-              />
-              <input
-                :value="appearance[field.key]"
-                type="text"
-                class="color-input"
-                @input="updateColor(field.key, $event.target.value)"
-              />
+        <section class="settings-section">
+          <div class="section-heading">
+            <div class="section-title">基础</div>
+            <div class="section-subtitle">终端背景、文字、光标和选区</div>
+          </div>
+          <div class="settings-grid">
+            <div v-for="field in baseColorFields" :key="field.key" class="setting-card">
+              <div class="setting-info">
+                <label class="setting-label">{{ field.label }}</label>
+                <span class="setting-hint">{{ field.hint }}</span>
+              </div>
+              <div class="setting-controls">
+                <input
+                  :value="colorInputValue(appearance[field.key])"
+                  type="color"
+                  class="color-picker"
+                  @input="updateColor(field.key, $event.target.value)"
+                />
+                <input
+                  :value="appearance[field.key]"
+                  type="text"
+                  class="color-input"
+                  @input="updateColor(field.key, $event.target.value)"
+                />
+              </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div class="setting-card line-highlight-card">
-          <div class="setting-info">
-            <label class="setting-label">当前匹配行高亮</label>
-            <span class="setting-hint">支持 RGBA，控制整行荧光痕迹</span>
+        <section class="settings-section">
+          <div class="section-heading">
+            <div class="section-title">搜索高亮</div>
+            <div class="section-subtitle">普通命中和当前命中的颜色组合</div>
           </div>
-          <div class="line-grid">
-            <input
-              :value="appearance.searchLineHighlightColor"
-              type="text"
-              class="color-input line-input"
-              @input="serialStore.updateTerminalAppearance({ searchLineHighlightColor: $event.target.value })"
-            />
-            <label class="range-group">
-              <span>透明度</span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                :value="lineHighlight.a"
-                @input="updateLineHighlight({ ...lineHighlight, a: Number($event.target.value) })"
-              />
-            </label>
+          <div class="settings-grid">
+            <div v-for="field in searchColorFields" :key="field.key" class="setting-card">
+              <div class="setting-info">
+                <label class="setting-label">{{ field.label }}</label>
+                <span class="setting-hint">{{ field.hint }}</span>
+              </div>
+              <div class="setting-controls">
+                <input
+                  :value="colorInputValue(appearance[field.key])"
+                  type="color"
+                  class="color-picker"
+                  @input="updateColor(field.key, $event.target.value)"
+                />
+                <input
+                  :value="appearance[field.key]"
+                  type="text"
+                  class="color-input"
+                  @input="updateColor(field.key, $event.target.value)"
+                />
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
 
         <div class="preview-card">
           <div class="preview-title">预览</div>
@@ -148,11 +161,43 @@ const resetDefaults = () => {
             </span>
           </div>
         </div>
+
+        <section class="settings-section advanced-section">
+          <button class="advanced-toggle" @click="showAdvancedSection = !showAdvancedSection">
+            {{ showAdvancedSection ? '收起高级设置' : '展开高级设置' }}
+          </button>
+
+          <div v-if="showAdvancedSection" class="setting-card line-highlight-card">
+            <div class="setting-info">
+              <label class="setting-label">当前匹配行高亮</label>
+              <span class="setting-hint">低频设置，支持 RGBA 自定义整行弱高亮</span>
+            </div>
+            <div class="line-grid">
+              <input
+                :value="appearance.searchLineHighlightColor"
+                type="text"
+                class="color-input line-input"
+                @input="serialStore.updateTerminalAppearance({ searchLineHighlightColor: $event.target.value })"
+              />
+              <label class="range-group">
+                <span>透明度</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  :value="lineHighlight.a"
+                  @input="updateLineHighlight({ ...lineHighlight, a: Number($event.target.value) })"
+                />
+              </label>
+            </div>
+          </div>
+        </section>
       </div>
 
       <div class="modal-footer">
-        <button @click="resetDefaults" class="modal-btn secondary">恢复默认</button>
-        <button @click="closeModal" class="modal-btn primary">完成</button>
+        <button class="modal-btn secondary" @click="resetDefaults">恢复默认</button>
+        <button class="modal-btn primary" @click="closeModal">完成</button>
       </div>
     </div>
   </div>
@@ -229,6 +274,29 @@ const resetDefaults = () => {
   gap: 18px;
 }
 
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.section-subtitle {
+  font-size: 12px;
+  color: #9297a2;
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -287,25 +355,6 @@ const resetDefaults = () => {
   font-family: Consolas, "Courier New", monospace;
 }
 
-.line-grid {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.line-input {
-  min-width: 280px;
-}
-
-.range-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #d3d6dc;
-  font-size: 12px;
-}
-
 .preview-title {
   font-size: 13px;
   font-weight: 600;
@@ -332,6 +381,41 @@ const resetDefaults = () => {
 
 .preview-mark.current {
   border-radius: 0.1em;
+}
+
+.advanced-toggle {
+  align-self: flex-start;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e8ecf2;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.advanced-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.line-grid {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.line-input {
+  min-width: 280px;
+}
+
+.range-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #d3d6dc;
+  font-size: 12px;
 }
 
 .modal-btn {
