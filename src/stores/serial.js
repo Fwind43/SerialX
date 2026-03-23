@@ -297,6 +297,20 @@ export const useSerialStore = defineStore('serial', () => {
     return port ? port.isConnected : false
   }
 
+  const syncSelectedPort = () => {
+    const availablePortPaths = ports.value.map((port) => port.path)
+    const connectedPortPaths = Array.from(openPorts.value.entries())
+      .filter(([, port]) => port?.isConnected)
+      .map(([path]) => path)
+
+    if (selectedPort.value && (availablePortPaths.includes(selectedPort.value) || connectedPortPaths.includes(selectedPort.value))) {
+      return selectedPort.value
+    }
+
+    selectedPort.value = connectedPortPaths[0] || availablePortPaths[0] || null
+    return selectedPort.value
+  }
+
   const getPortSettings = (portPath) => {
     return portSettings.value.get(portPath) || defaultSettings.value
   }
@@ -403,8 +417,17 @@ export const useSerialStore = defineStore('serial', () => {
   // Actions
   async function refreshPorts() {
     try {
+      const currentSelectedPort = selectedPort.value
       const portList = await window.electronAPI.listPorts()
       ports.value = portList
+      const portPaths = portList.map((port) => port.path)
+
+      if (currentSelectedPort && portPaths.includes(currentSelectedPort)) {
+        selectedPort.value = currentSelectedPort
+      } else {
+        syncSelectedPort()
+      }
+
       return portList
     } catch (error) {
       console.error('Error refreshing ports:', error)
@@ -429,6 +452,7 @@ export const useSerialStore = defineStore('serial', () => {
       const result = await window.electronAPI.openPort(connectionSettings)
 
       if (result.success) {
+        selectedPort.value = targetPort
         openPorts.value.set(targetPort, {
           isConnected: true,
           baudRate: connectionSettings.baudRate,
@@ -477,6 +501,7 @@ export const useSerialStore = defineStore('serial', () => {
         // 保留日志数据、过滤设置、统计数据，只删除连接状态
         stopLoopSendForPort(targetPort)
         addPortLog(targetPort, `已断开`, 'info')
+        syncSelectedPort()
         return true
       }
     } catch (error) {
@@ -491,6 +516,7 @@ export const useSerialStore = defineStore('serial', () => {
       openPorts.value.clear()
       // 保留日志数据、过滤设置、统计数据，只删除连接状态
       stopLoopSend()
+      syncSelectedPort()
       return result.success
     } catch (error) {
       return false
@@ -959,6 +985,8 @@ export const useSerialStore = defineStore('serial', () => {
 
     window.electronAPI.onPortClosed(({ port }) => {
       openPorts.value.delete(port)
+      stopLoopSendForPort(port, { resetCount: false, silent: true })
+      syncSelectedPort()
     })
   }
 
@@ -984,6 +1012,7 @@ export const useSerialStore = defineStore('serial', () => {
     availableBaudRates,
     getEnabledCommands,
     getPortStatus,
+    syncSelectedPort,
     getPortSettings,
     getPortSendingData,
     setPortSendingData,
