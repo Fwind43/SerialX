@@ -10,45 +10,41 @@ import AppearanceSettingsModal from './components/AppearanceSettingsModal.vue'
 
 const serialStore = useSerialStore()
 
-// 检查是否是转换器独立窗口
-const isConverterMode = computed(() => {
-  return window.location.hash === '#/converter'
-})
+const isConverterMode = computed(() => window.location.hash === '#/converter')
 
-// 菜单控制
 const showToolsMenu = ref(false)
 const showSettingsMenu = ref(false)
 const showCommandsModal = ref(false)
 const showCommandPalette = ref(false)
 const showAppearanceSettingsModal = ref(false)
 const isSidebarCollapsed = ref(false)
+const isMaximized = ref(false)
 
-// 关闭所有菜单
 const closeAllMenus = () => {
   showToolsMenu.value = false
   showSettingsMenu.value = false
 }
 
-// 切换菜单显示
 const toggleToolsMenu = () => {
   if (showToolsMenu.value) {
     showToolsMenu.value = false
-  } else {
-    closeAllMenus()
-    showToolsMenu.value = true
+    return
   }
+
+  closeAllMenus()
+  showToolsMenu.value = true
 }
 
 const toggleSettingsMenu = () => {
   if (showSettingsMenu.value) {
     showSettingsMenu.value = false
-  } else {
-    closeAllMenus()
-    showSettingsMenu.value = true
+    return
   }
+
+  closeAllMenus()
+  showSettingsMenu.value = true
 }
 
-// 打开快捷命令面板
 const openCommandPalette = () => {
   showCommandPalette.value = true
 }
@@ -61,50 +57,33 @@ const showSettingsMessage = (message) => {
   window.alert(message)
 }
 
-// 全局键盘快捷键处理
-const handleGlobalKeydown = (e) => {
-  // Ctrl+P 打开快捷命令面板
-  if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-    // 检查是否有输入框获得焦点
-    const activeElement = document.activeElement
-    const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
-    if (!isInputFocused) {
-      e.preventDefault()
-      openCommandPalette()
-    }
+const handleGlobalKeydown = (event) => {
+  const activeElement = document.activeElement
+  const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
+
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p' && !isInputFocused) {
+    event.preventDefault()
+    openCommandPalette()
+    return
   }
 
-  // Ctrl+F 打开搜索 - 触发全局事件
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
-    const activeElement = document.activeElement
-    const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
-    if (!isInputFocused) {
-      e.preventDefault()
-      // 触发自定义事件，由 TerminalDisplay 组件监听
-      window.dispatchEvent(new CustomEvent('serialx-open-search', {
-        detail: {
-          portPath: serialStore.selectedPort
-        }
-      }))
-    }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f' && !isInputFocused) {
+    event.preventDefault()
+    window.dispatchEvent(new CustomEvent('serialx-open-search', {
+      detail: {
+        portPath: serialStore.selectedPort
+      }
+    }))
   }
 }
 
-// 窗口控制
 const minimizeWindow = () => {
   window.electronAPI?.minimizeWindow()
-}
-
-const maximizeWindow = () => {
-  window.electronAPI?.maximizeWindow()
 }
 
 const closeWindow = () => {
   window.electronAPI?.closeWindow()
 }
-
-// 窗口状态
-const isMaximized = ref(false)
 
 const toggleMaximize = () => {
   if (isMaximized.value) {
@@ -115,13 +94,11 @@ const toggleMaximize = () => {
   isMaximized.value = !isMaximized.value
 }
 
-// 打开进制转换工具
 const openConverter = () => {
   window.electronAPI?.openConverterWindow()
   showToolsMenu.value = false
 }
 
-// 打开常用命令配置
 const openCommandsConfig = () => {
   showCommandsModal.value = true
   showSettingsMenu.value = false
@@ -172,114 +149,119 @@ const resetAllSettings = async () => {
   showSettingsMessage('已恢复默认设置。')
 }
 
-// 关闭命令配置
-const closeCommandsModal = () => {
-  showCommandsModal.value = false
+const handleSendCommand = (event) => {
+  const command = event.detail
+  if (!command) return
+
+  const portPath = serialStore.selectedPort
+  if (!portPath) return
+
+  serialStore.setPortSendingData(portPath, command)
+  serialStore.sendData(portPath)
 }
 
-// 处理发送命令事件
-const handleSendCommand = (e) => {
-  const command = e.detail
-  if (command) {
-    // 找到当前激活的串口面板并发送命令
-    const activePanel = document.querySelector('.serial-panel')
-    if (activePanel) {
-      // 通过 store 发送
-      const portPath = serialStore.selectedPort
-      if (portPath) {
-        serialStore.setPortSendingData(portPath, command)
-        serialStore.sendData(portPath)
-      }
-    }
-  }
-}
-
-onMounted(async () => {
-  serialStore.refreshPorts()
-  // 加载常用命令配置
-  serialStore.loadCommonCommands()
-  // 恢复会话状态
-  await serialStore.restoreSessionState()
-
-  // 监听窗口最大化状态
-  window.electronAPI?.onWindowMaximized(() => {
-    isMaximized.value = true
-  })
-  window.electronAPI?.onWindowUnmaximized(() => {
-    isMaximized.value = false
-  })
-
-  // 监听全局键盘快捷键
-  window.addEventListener('keydown', handleGlobalKeydown)
-
-  // 监听命令发送事件
-  window.addEventListener('serialx-send-command', handleSendCommand)
-})
-
-// 组件卸载时清理
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleGlobalKeydown)
-  window.removeEventListener('serialx-send-command', handleSendCommand)
-  document.removeEventListener('click', handleClickOutside)
-})
-
-// 点击外部关闭菜单
 const handleClickOutside = (event) => {
   if (!event.target.closest('.menubar-item')) {
     closeAllMenus()
   }
 }
 
-// 监听全局点击事件
-document.addEventListener('click', handleClickOutside)
+onMounted(async () => {
+  serialStore.refreshPorts()
+  serialStore.loadCommonCommands()
+  await serialStore.restoreSessionState()
+
+  window.electronAPI?.onWindowMaximized(() => {
+    isMaximized.value = true
+  })
+
+  window.electronAPI?.onWindowUnmaximized(() => {
+    isMaximized.value = false
+  })
+
+  window.addEventListener('keydown', handleGlobalKeydown)
+  window.addEventListener('serialx-send-command', handleSendCommand)
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
+  window.removeEventListener('serialx-send-command', handleSendCommand)
+  document.removeEventListener('click', handleClickOutside)
+})
 </script>
 
 <template>
-  <div class="app-container" v-if="!isConverterMode">
-    <!-- 顶部标题栏 -->
+  <div v-if="!isConverterMode" class="app-container">
     <header class="app-header">
       <div class="header-left">
-        <!-- 菜单栏 -->
         <div class="menubar-items">
           <div class="menubar-item" @click.stop="toggleToolsMenu">
             <span class="menubar-label">工具</span>
             <div v-if="showToolsMenu" class="menubar-dropdown">
               <div class="dropdown-item" @click="openConverter">
-                <span class="dropdown-icon">🔢</span>
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M3 3h10v3H3zM3 8h4v5H3zM9 8h4v2H9zM9 12h4v1H9z" fill="currentColor" />
+                  </svg>
+                </span>
                 <span class="dropdown-text">进制转换工具</span>
               </div>
             </div>
           </div>
+
           <div class="menubar-item" @click.stop="toggleSettingsMenu">
             <span class="menubar-label">设置</span>
             <div v-if="showSettingsMenu" class="menubar-dropdown">
               <div class="dropdown-item" @click="openAppearanceSettings">
-                <span class="dropdown-icon">🎨</span>
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M8 3.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 0 0 0-3ZM4.4 8a3.6 3.6 0 1 1 7.2 0a3.6 3.6 0 0 1-7.2 0Zm8.85-.75 1.25.75-1.25.75-.3 1.42-1.42.3-.75 1.25-.75-1.25-1.42-.3-.3-1.42-1.25-.75 1.25-.75.3-1.42 1.42-.3.75-1.25.75 1.25 1.42.3.3 1.42Z" fill="currentColor" />
+                  </svg>
+                </span>
                 <span class="dropdown-text">终端外观设置</span>
               </div>
               <div class="dropdown-item" @click="exportSettings">
-                <span class="dropdown-icon">📤</span>
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M8 2v7.2l2.1-2.1.9.9L8 11 5 8l.9-.9L8 9.2V2ZM3 12h10v2H3z" fill="currentColor" />
+                  </svg>
+                </span>
                 <span class="dropdown-text">导出设置</span>
               </div>
               <div class="dropdown-item" @click="importSettings">
-                <span class="dropdown-icon">📥</span>
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M8 14V6.8L5.9 8.9 5 8l3-3 3 3-.9.9L8 6.8V14ZM3 2h10v2H3z" fill="currentColor" />
+                  </svg>
+                </span>
                 <span class="dropdown-text">导入设置</span>
               </div>
               <div class="dropdown-item danger" @click="resetAllSettings">
-                <span class="dropdown-icon">↺</span>
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M8 3a5 5 0 1 1-4.58 7H5v1H2V8h1v1.16A6 6 0 1 0 8 2v1Z" fill="currentColor" />
+                  </svg>
+                </span>
                 <span class="dropdown-text">恢复默认设置</span>
               </div>
               <div class="dropdown-item" @click="openCommandsConfig">
-                <span class="dropdown-icon">⚡</span>
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M3 3h10v10H3zM5 6h6v1H5zm0 2h6v1H5zm0 2h4v1H5z" fill="currentColor" />
+                  </svg>
+                </span>
                 <span class="dropdown-text">常用命令配置</span>
               </div>
             </div>
           </div>
+
           <div class="menubar-item">
             <span class="menubar-label">帮助</span>
           </div>
         </div>
       </div>
+
       <div class="header-center">
         <div class="brand-mark">
           <img src="../logo/icon.png" alt="SerialX" class="app-icon" />
@@ -290,49 +272,40 @@ document.addEventListener('click', handleClickOutside)
         </div>
         <span class="app-version-chip">v0.0.4-dev</span>
       </div>
+
       <div class="header-right window-controls">
-        <button class="window-btn minimize-btn" @click="minimizeWindow" title="最小化">
+        <button class="window-btn minimize-btn" title="最小化" @click="minimizeWindow">
           <svg width="12" height="12" viewBox="0 0 12 12">
-            <rect x="1" y="5" width="10" height="1" fill="currentColor"/>
+            <rect x="1" y="5" width="10" height="1" fill="currentColor" />
           </svg>
         </button>
-        <button class="window-btn maximize-btn" @click="toggleMaximize" :title="isMaximized ? '还原' : '最大化'">
+        <button class="window-btn maximize-btn" :title="isMaximized ? '还原' : '最大化'" @click="toggleMaximize">
           <svg v-if="!isMaximized" width="10" height="10" viewBox="0 0 10 10">
-            <rect x="1" y="1" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1"/>
+            <rect x="1" y="1" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1" />
           </svg>
           <svg v-else width="10" height="10" viewBox="0 0 10 10">
-            <rect x="2" y="0" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1"/>
-            <rect x="0" y="2" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+            <rect x="2" y="0" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1" />
+            <rect x="0" y="2" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5" />
           </svg>
         </button>
-        <button class="window-btn close-btn" @click="closeWindow" title="关闭">
+        <button class="window-btn close-btn" title="关闭" @click="closeWindow">
           <svg width="12" height="12" viewBox="0 0 12 12">
-            <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" stroke-width="1.2" />
           </svg>
         </button>
       </div>
     </header>
 
     <div class="workspace">
-      <!-- 左侧边栏：串口列表 -->
       <aside :class="['sidebar', { collapsed: isSidebarCollapsed }]">
         <SerialSidebar />
       </aside>
-      <button
-        class="sidebar-toggle"
-        :class="{ collapsed: isSidebarCollapsed }"
-        :title="isSidebarCollapsed ? '展开侧栏' : '收起侧栏'"
-        @click="toggleSidebar"
-      >
-        <span class="sidebar-toggle-icon">{{ isSidebarCollapsed ? '>' : '<' }}</span>
-      </button>
 
-      <!-- 中间内容区：多分屏终端 -->
-      <main :class="['main-area', { expanded: isSidebarCollapsed }]">
+      <main class="main-area">
         <button
-          class="sidebar-toggle main-sidebar-toggle"
+          class="sidebar-toggle"
           :class="{ collapsed: isSidebarCollapsed }"
-          :title="isSidebarCollapsed ? '灞曞紑渚ф爮' : '鏀惰捣渚ф爮'"
+          :title="isSidebarCollapsed ? '展开侧栏' : '收起侧栏'"
           @click="toggleSidebar"
         >
           <span class="sidebar-toggle-icon">{{ isSidebarCollapsed ? '>' : '<' }}</span>
@@ -341,7 +314,6 @@ document.addEventListener('click', handleClickOutside)
       </main>
     </div>
 
-    <!-- 底部状态栏 -->
     <footer class="status-bar">
       <span class="status-item primary">
         <span class="status-dot" :class="{ online: serialStore.openPorts.size > 0 }"></span>
@@ -353,27 +325,16 @@ document.addEventListener('click', handleClickOutside)
         <span class="status-value">{{ serialStore.openPorts.size > 0 ? '已连接' : '未连接' }}</span>
       </span>
       <span class="status-item">
-        <span class="status-label">活跃连接</span>
+        <span class="status-label">活动连接</span>
         <span class="status-value">{{ serialStore.openPorts.size }}</span>
       </span>
     </footer>
 
-    <!-- 常用命令配置弹窗 -->
-    <CommandsModal
-      v-model:show="showCommandsModal"
-    />
-
-    <!-- 快捷命令面板 -->
-    <AppearanceSettingsModal
-      v-model:show="showAppearanceSettingsModal"
-    />
-
-    <CommandPalette
-      v-model="showCommandPalette"
-    />
+    <CommandsModal v-model:show="showCommandsModal" />
+    <AppearanceSettingsModal v-model:show="showAppearanceSettingsModal" />
+    <CommandPalette v-model="showCommandPalette" />
   </div>
 
-  <!-- 转换器独立模式 -->
   <div v-else class="converter-only">
     <DataConverter standalone />
   </div>
@@ -383,13 +344,9 @@ document.addEventListener('click', handleClickOutside)
 .app-container {
   --app-bg: #08131b;
   --app-panel: rgba(10, 18, 25, 0.62);
-  --app-panel-strong: rgba(10, 19, 27, 0.82);
   --app-border: rgba(125, 162, 186, 0.1);
-  --app-border-strong: rgba(141, 189, 219, 0.3);
   --app-text: #d9e6f2;
   --app-text-soft: #8fa5b6;
-  --app-accent: #57c7ff;
-  --app-accent-strong: #17a7f2;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -408,7 +365,6 @@ document.addEventListener('click', handleClickOutside)
   pointer-events: none;
 }
 
-/* 顶部标题栏 */
 .app-header {
   display: flex;
   align-items: center;
@@ -424,7 +380,8 @@ document.addEventListener('click', handleClickOutside)
   z-index: 2;
 }
 
-.header-left {
+.header-left,
+.header-right {
   display: flex;
   align-items: center;
 }
@@ -438,20 +395,13 @@ document.addEventListener('click', handleClickOutside)
   transform: translateX(-50%);
 }
 
-.header-right {
-  display: flex;
-  align-items: center;
-}
-
 .brand-mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
-  background: rgba(87, 199, 255, 0.12);
-  border: 1px solid rgba(124, 193, 228, 0.18);
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
 }
 
 .brand-copy {
@@ -521,7 +471,13 @@ document.addEventListener('click', handleClickOutside)
 }
 
 .dropdown-icon {
-  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: #9ed6f2;
+  flex-shrink: 0;
 }
 
 .dropdown-text {
@@ -530,9 +486,11 @@ document.addEventListener('click', handleClickOutside)
 }
 
 .app-icon {
-  width: 24px;
-  height: 24px;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.18));
 }
 
 .app-title {
@@ -562,7 +520,6 @@ document.addEventListener('click', handleClickOutside)
   letter-spacing: 0.08em;
 }
 
-/* 窗口控制按钮 */
 .window-controls {
   display: flex;
   align-items: center;
@@ -592,12 +549,10 @@ document.addEventListener('click', handleClickOutside)
 
 .window-btn.maximize-btn:hover {
   background-color: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
 }
 
 .window-btn.close-btn:hover {
   background-color: #e81123;
-  color: #ffffff;
 }
 
 .window-btn:active {
@@ -608,7 +563,6 @@ document.addEventListener('click', handleClickOutside)
   display: block;
 }
 
-/* 工作区：左侧边栏 + 中间内容 */
 .workspace {
   display: flex;
   flex: 1;
@@ -619,7 +573,6 @@ document.addEventListener('click', handleClickOutside)
   z-index: 1;
 }
 
-/* 左侧边栏 */
 .sidebar {
   width: 272px;
   min-width: 200px;
@@ -639,6 +592,19 @@ document.addEventListener('click', handleClickOutside)
   min-width: 0;
   border-color: transparent;
   opacity: 0;
+}
+
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  background: rgba(7, 15, 22, 0.22);
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  backdrop-filter: blur(8px);
+  position: relative;
 }
 
 .sidebar-toggle {
@@ -666,10 +632,6 @@ document.addEventListener('click', handleClickOutside)
   background: rgba(13, 25, 35, 0.88);
 }
 
-.sidebar-toggle.collapsed {
-  left: 6px;
-}
-
 .sidebar-toggle-icon {
   display: inline-flex;
   align-items: center;
@@ -679,29 +641,6 @@ document.addEventListener('click', handleClickOutside)
   font-weight: 700;
 }
 
-/* 中间内容区 */
-.main-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-width: 0;
-  background: rgba(7, 15, 22, 0.22);
-  border: 1px solid var(--app-border);
-  border-radius: 18px;
-  backdrop-filter: blur(8px);
-  position: relative;
-}
-
-.main-area.expanded .sidebar-toggle {
-  left: 6px;
-}
-
-.workspace > .sidebar-toggle {
-  display: none;
-}
-
-/* 底部状态栏 */
 .status-bar {
   display: flex;
   align-items: center;
@@ -756,7 +695,6 @@ document.addEventListener('click', handleClickOutside)
   color: #f4fbff;
 }
 
-/* 转换器独立模式 */
 .converter-only {
   height: 100vh;
   width: 100vw;

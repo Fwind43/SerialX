@@ -21,7 +21,6 @@ const searchInput = ref(null)
 let terminal = null
 let fitAddon = null
 let searchAddon = null
-let activeMatchLineHighlight = null
 
 // 日志数据跟踪
 let logEntries = [] // 存储所有日志条目 { id, line }
@@ -90,10 +89,10 @@ const terminalAppearance = computed(() => {
 const terminalCssVars = computed(() => ({
   '--terminal-background': terminalAppearance.value.terminalBackground,
   '--terminal-foreground': terminalAppearance.value.terminalForeground,
-  '--search-match-text-color': terminalAppearance.value.searchMatchTextColor,
-  '--search-match-shadow': `inset 0 -0.62em 0 ${terminalAppearance.value.searchMatchColor}`,
-  '--search-current-match-text-color': terminalAppearance.value.searchCurrentMatchTextColor,
-  '--search-current-match-shadow': `inset 0 -0.68em 0 ${terminalAppearance.value.searchCurrentMatchColor}`,
+  '--search-match-text-color': terminalAppearance.value.terminalForeground,
+  '--search-match-shadow': 'inset 0 -0.72em 0 rgba(29, 61, 75, 0.92)',
+  '--search-current-match-text-color': '#ffffff',
+  '--search-current-match-shadow': 'inset 0 -0.78em 0 rgba(41, 88, 107, 0.98)',
   '--search-line-highlight': terminalAppearance.value.searchLineHighlightColor
 }))
 
@@ -202,9 +201,6 @@ const applyTerminalAppearance = () => {
   if (!terminal) return
   terminal.options.theme = getTerminalTheme()
   refreshSearchResults()
-  nextTick(() => {
-    updateActiveMatchLineHighlight()
-  })
 }
 
 const initTerminal = () => {
@@ -245,9 +241,6 @@ const initTerminal = () => {
   searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
     searchMatchCount.value = resultCount
     currentMatchIndex.value = resultIndex >= 0 ? resultIndex + 1 : 0
-    nextTick(() => {
-      updateActiveMatchLineHighlight()
-    })
   })
 
   // 监听窗口大小变化
@@ -385,61 +378,16 @@ const getSearchOptions = () => ({
   wholeWord: false,
   regex: false,
   decorations: {
-    matchBackground: terminalAppearance.value.searchMatchColor,
-    matchBorder: terminalAppearance.value.searchMatchColor,
-    matchOverviewRuler: terminalAppearance.value.searchMatchColor,
-    activeMatchBackground: terminalAppearance.value.searchCurrentMatchColor,
-    activeMatchBorder: terminalAppearance.value.searchCurrentMatchColor,
-    activeMatchColorOverviewRuler: terminalAppearance.value.searchCurrentMatchColor
+    matchBackground: 'rgba(29, 61, 75, 0.92)',
+    matchBorder: 'rgba(76, 130, 154, 0.88)',
+    matchOverviewRuler: 'rgba(29, 61, 75, 0.92)',
+    activeMatchBackground: 'rgba(41, 88, 107, 0.98)',
+    activeMatchBorder: 'rgba(118, 184, 214, 0.95)',
+    activeMatchColorOverviewRuler: 'rgba(41, 88, 107, 0.98)'
   }
 })
 
-const clearActiveMatchLineHighlight = () => {
-  if (activeMatchLineHighlight) {
-    activeMatchLineHighlight.dispose()
-    activeMatchLineHighlight = null
-  }
-}
-
-const updateActiveMatchLineHighlight = () => {
-  clearActiveMatchLineHighlight()
-
-  if (!terminal || !searchQuery.value || searchMatchCount.value <= 0) return
-
-  const selectionPosition = terminal.getSelectionPosition()
-  if (!selectionPosition) return
-
-  const markerOffset = -terminal.buffer.active.baseY - terminal.buffer.active.cursorY + selectionPosition.start.y
-  const marker = terminal.registerMarker(markerOffset)
-  if (!marker) return
-
-  const decoration = terminal.registerDecoration({
-    marker,
-    x: 0,
-    width: terminal.cols,
-    backgroundColor: terminalAppearance.value.searchLineHighlightColor
-  })
-
-  if (!decoration) {
-    marker.dispose()
-    return
-  }
-
-  const onRenderDisposable = decoration.onRender((element) => {
-    element.classList.add('xterm-find-active-line-decoration')
-  })
-
-  activeMatchLineHighlight = {
-    dispose() {
-      onRenderDisposable.dispose()
-      decoration.dispose()
-      marker.dispose()
-    }
-  }
-}
-
 const clearSearchHighlights = () => {
-  clearActiveMatchLineHighlight()
   if (terminal) {
     terminal.clearSelection()
   }
@@ -692,10 +640,11 @@ defineExpose({
 </script>
 
 <template>
-  <div class="terminal-wrapper" :style="terminalCssVars">
+  <div :class="['terminal-wrapper', { 'search-open': showSearch }]" :style="terminalCssVars">
     <!-- 搜索浮窗 -->
     <div v-if="showSearch" class="search-widget">
       <div class="search-input-wrapper">
+        <span class="search-chip">查找</span>
         <input
           ref="searchInput"
           v-model="searchQuery"
@@ -740,7 +689,7 @@ defineExpose({
     </div>
 
     <!-- xterm 容器 -->
-    <div ref="terminalContainer" class="terminal-container"></div>
+    <div :class="['terminal-container', { 'search-open': showSearch }]" ref="terminalContainer"></div>
   </div>
 </template>
 
@@ -766,6 +715,10 @@ defineExpose({
   padding: 2px 6px;
   box-sizing: border-box;
   overflow: hidden;
+}
+
+.terminal-container.search-open {
+  padding-top: 44px;
 }
 
 /* 隐藏 xterm 默认滚动条样式，使用自定义样式 */
@@ -828,7 +781,7 @@ defineExpose({
 .terminal-container ::v-deep(.xterm-find-match) {
   background-color: transparent !important;
   color: var(--search-match-text-color) !important;
-  font-weight: 600;
+  font-weight: 700;
   box-shadow: var(--search-match-shadow);
   border-radius: 0.08em;
 }
@@ -839,6 +792,7 @@ defineExpose({
   font-weight: 700;
   box-shadow: var(--search-current-match-shadow);
   border-radius: 0.1em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.42);
 }
 
 /* xterm 5.x search addon 高亮样式 */
@@ -847,34 +801,29 @@ defineExpose({
   color: var(--search-match-text-color) !important;
   box-shadow: var(--search-match-shadow);
   border-radius: 0.08em;
+  font-weight: 700;
 }
 
 .terminal-container ::v-deep(.xterm .xterm-selection-match) {
   background-color: transparent !important;
   color: var(--search-match-text-color) !important;
   box-shadow: var(--search-match-shadow);
+  font-weight: 700;
 }
 
-.terminal-container ::v-deep(.xterm-find-active-line-decoration) {
-  background: linear-gradient(90deg, var(--search-line-highlight), transparent 72%) !important;
-  box-shadow: none;
-}
 
 /* 搜索浮窗 */
 .search-widget {
   position: absolute;
-  top: 8px;
-  right: 10px;
+  top: 10px;
+  right: 12px;
   z-index: 100;
-  background-color: rgba(17, 26, 34, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
-  padding: 4px 6px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  backdrop-filter: blur(10px);
+  padding: 5px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(126, 161, 183, 0.12);
+  background: rgba(12, 21, 28, 0.9);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(12px);
 }
 
 .search-input-wrapper {
@@ -883,24 +832,38 @@ defineExpose({
   gap: 6px;
 }
 
+.search-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(87, 199, 255, 0.08);
+  color: #a9dfff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
 .search-input {
-  padding: 6px 8px;
-  background-color: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  color: #cccccc;
+  width: 180px;
+  height: 24px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(126, 161, 183, 0.08);
+  border-radius: 999px;
+  color: #dce8f0;
   font-size: 12px;
   font-family: 'Consolas', 'Monaco', monospace;
-  width: 250px;
   outline: none;
 }
 
 .search-input:focus {
-  border-color: #007acc;
+  border-color: rgba(87, 199, 255, 0.24);
 }
 
 .search-input::placeholder {
-  color: #6a6a6a;
+  color: #6f889a;
 }
 
 .search-controls {
@@ -910,37 +873,38 @@ defineExpose({
 }
 
 .search-count {
-  font-size: 12px;
-  color: #858585;
-  min-width: 50px;
+  min-width: 52px;
+  padding: 0 2px;
   text-align: right;
-  padding: 0 4px;
+  color: #8ea6b8;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .search-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  background-color: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 7px;
-  color: #cccccc;
+  width: 24px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(126, 161, 183, 0.08);
+  border-radius: 999px;
+  color: #dce8f0;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   padding: 0;
-  transition: all 0.15s;
+  transition: all 0.16s ease;
 }
 
 .search-btn:hover {
-  background-color: #4a4a4a;
-  border-color: #007acc;
+  background: rgba(87, 199, 255, 0.12);
+  border-color: rgba(87, 199, 255, 0.18);
 }
 
 .search-btn.close:hover {
-  background-color: #c42b1c;
-  border-color: #a02015;
+  background: rgba(196, 43, 28, 0.18);
+  border-color: rgba(196, 43, 28, 0.22);
 }
 
 /* 右键菜单 */

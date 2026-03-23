@@ -9,11 +9,11 @@ export const useSerialStore = defineStore('serial', () => {
     terminalForeground: '#d7e0ea',
     cursorColor: '#8bd3ff',
     selectionColor: 'rgba(139, 211, 255, 0.24)',
-    searchMatchColor: 'rgba(240, 230, 92, 0.62)',
-    searchMatchTextColor: '#182026',
-    searchCurrentMatchColor: 'rgba(255, 183, 77, 0.82)',
-    searchCurrentMatchTextColor: '#161b22',
-    searchLineHighlightColor: 'rgba(255, 214, 102, 0.16)'
+    searchMatchColor: 'rgba(255, 241, 118, 0.78)',
+    searchMatchTextColor: 'rgb(29, 61, 75)',
+    searchCurrentMatchColor: 'rgba(255, 145, 77, 0.96)',
+    searchCurrentMatchTextColor: 'rgb(29, 61, 75)',
+    searchLineHighlightColor: 'rgba(255, 196, 87, 0.14)'
   })
 
   const createDefaultSettings = () => ({

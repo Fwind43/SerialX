@@ -59,15 +59,17 @@ const settingsSummary = computed(() => {
       <div class="section-header">
         <span>可用串口</span>
         <span class="section-meta">{{ serialStore.ports.length }} 个</span>
-        <button @click="handleRefresh" class="refresh-btn" title="刷新">
+        <button class="refresh-btn" title="刷新" @click="handleRefresh">
           刷新
         </button>
       </div>
+
       <div class="ports-list">
         <div v-if="serialStore.ports.length === 0" class="no-ports">
           <span class="no-ports-icon">○</span>
           <span>未找到串口设备</span>
         </div>
+
         <div
           v-for="port in serialStore.ports"
           :key="port.path"
@@ -83,8 +85,8 @@ const settingsSummary = computed(() => {
           <button
             class="port-action-btn"
             :class="{ disconnect: isPortConnected(port.path) }"
-            @click.stop="handleConnect(port.path)"
             :title="isPortConnected(port.path) ? '断开该串口' : '连接该串口'"
+            @click.stop="handleConnect(port.path)"
           >
             {{ isPortConnected(port.path) ? '断开' : '连接' }}
           </button>
@@ -106,6 +108,7 @@ const settingsSummary = computed(() => {
           {{ showSettings ? '收起' : '编辑' }}
         </button>
       </div>
+
       <div v-if="showSettings" class="settings-grid">
         <div class="setting-item">
           <label>波特率</label>
