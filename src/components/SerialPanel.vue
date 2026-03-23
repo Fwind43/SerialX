@@ -15,6 +15,8 @@ const terminalRef = ref(null)
 const showFilters = ref(false)
 const showAdvancedOptions = ref(false)
 const sendErrorMessage = ref('')
+const sendSuccessMessage = ref('')
+let sendFeedbackTimer = null
 
 const portDisplaySettings = computed(() => serialStore.getPortDisplaySettings(props.portPath))
 const portControlSettings = computed(() => serialStore.getPortControlSettings(props.portPath))
@@ -141,6 +143,7 @@ const updatePacketTimeout = (value) => {
 const executeCommand = (command) => {
   serialStore.setPortSendingData(props.portPath, command)
   sendErrorMessage.value = ''
+  sendSuccessMessage.value = ''
   serialStore.clearPortNotice(props.portPath)
   serialStore.addPortLog(props.portPath, `命令 "${command}" 已填入输入框，请按 Enter 发送`, 'info')
 }
@@ -156,6 +159,7 @@ const handlePanelFocus = () => {
 const handleSendingInput = (value) => {
   serialStore.setPortSendingData(props.portPath, value)
   sendErrorMessage.value = ''
+  sendSuccessMessage.value = ''
   serialStore.clearPortNotice(props.portPath)
 }
 
@@ -166,12 +170,21 @@ const handleSend = async () => {
   const result = await serialStore.sendData(props.portPath, null, portControlSettings.value.hexSend)
   if (!result.success) {
     sendErrorMessage.value = result.error || '发送失败'
+    sendSuccessMessage.value = ''
     serialStore.addPortLog(props.portPath, `发送失败：${sendErrorMessage.value}`, 'error')
     return
   }
 
   sendErrorMessage.value = ''
+  sendSuccessMessage.value = '发送成功'
   serialStore.clearPortNotice(props.portPath)
+  if (sendFeedbackTimer) {
+    clearTimeout(sendFeedbackTimer)
+  }
+  sendFeedbackTimer = setTimeout(() => {
+    sendSuccessMessage.value = ''
+    sendFeedbackTimer = null
+  }, 1600)
 }
 
 const handleSendingKeyDown = (event) => {
@@ -389,6 +402,10 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
 
       <div v-if="sendErrorMessage" class="send-feedback error">
         {{ sendErrorMessage }}
+      </div>
+
+      <div v-else-if="sendSuccessMessage" class="send-feedback success">
+        {{ sendSuccessMessage }}
       </div>
 
       <div
@@ -839,6 +856,10 @@ const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发
 
 .send-feedback.error {
   color: #ffb8b1;
+}
+
+.send-feedback.success {
+  color: #99f0c8;
 }
 
 .send-feedback.notice {
