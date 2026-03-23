@@ -412,6 +412,26 @@ const clearTerminalLogs = () => {
   closeContextMenu()
 }
 
+const exportTerminalLogs = async () => {
+  const payload = serialStore.buildPortLogExport(props.portPath)
+  const suggestedName = `${props.portPath.replace(/[\\/:*?"<>|]/g, '_')}-logs-${new Date().toISOString().slice(0, 10)}.json`
+  const result = await window.electronAPI?.exportLogs(payload, suggestedName)
+
+  if (!result || result.canceled) {
+    closeContextMenu()
+    return
+  }
+
+  if (!result.success) {
+    serialStore.setPortNotice(props.portPath, 'error', result.error || '导出日志失败')
+    closeContextMenu()
+    return
+  }
+
+  serialStore.setPortNotice(props.portPath, 'success', `日志已导出到 ${result.filePath}`)
+  closeContextMenu()
+}
+
 const closeContextMenu = (event) => {
   if (event?.target?.closest('.context-menu')) return
   showContextMenu.value = false
@@ -653,6 +673,15 @@ defineExpose({
           </svg>
         </span>
         <span>全选</span>
+      </div>
+      <div class="context-menu-item" @click="exportTerminalLogs">
+        <span class="menu-icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" width="14" height="14">
+            <path d="M8 2v7.2l2.1-2.1.9.9L8 11 5 8l.9-.9L8 9.2V2Z" fill="currentColor" />
+            <path d="M3 12h10v2H3z" fill="currentColor" />
+          </svg>
+        </span>
+        <span>导出日志</span>
       </div>
       <div class="context-menu-divider"></div>
       <div class="context-menu-item danger" @click="clearTerminalLogs">

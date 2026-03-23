@@ -254,6 +254,33 @@ export const useSerialStore = defineStore('serial', () => {
     appUiState: { ...appUiState.value }
   })
 
+  const buildPortLogExport = (portPath) => {
+    const logsForPort = getPortLogs(portPath)
+    const portSettingsSnapshot = getPortSettings(portPath)
+    const statsSnapshot = getPortStats(portPath)
+    const displaySnapshot = getPortDisplaySettings(portPath)
+    const controlSnapshot = getPortControlSettings(portPath)
+
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      portPath,
+      connected: getPortStatus(portPath),
+      settings: { ...portSettingsSnapshot },
+      displaySettings: { ...displaySnapshot },
+      controlSettings: { ...controlSnapshot },
+      stats: { ...statsSnapshot },
+      logs: logsForPort.map((log) => ({
+        id: log.id,
+        timestamp: log.timestamp,
+        type: log.type,
+        message: log.message,
+        pureData: log.pureData ?? log.message,
+        hexData: log.hexData ?? null
+      }))
+    }
+  }
+
   const validateSettingsSnapshot = (snapshot = {}) => {
     if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
       throw new Error('设置文件内容无效')
@@ -1246,6 +1273,7 @@ export const useSerialStore = defineStore('serial', () => {
     updateWorkspaceLayout,
     updateAppUiState,
     buildSettingsSnapshot,
+    buildPortLogExport,
     applySettingsSnapshot,
     resetAppSettings,
     // Hex 工具函数

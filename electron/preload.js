@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveConfig: (config) => ipcRenderer.invoke('config:save', config),
   exportSettings: (payload) => ipcRenderer.invoke('settings:export', payload),
   importSettings: () => ipcRenderer.invoke('settings:import'),
+  exportLogs: (payload, suggestedName) => ipcRenderer.invoke('logs:export', payload, suggestedName),
 
   // Window Operations
   openConverterWindow: () => ipcRenderer.send('window:open-converter'),

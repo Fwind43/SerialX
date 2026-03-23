@@ -109,6 +109,29 @@ async function importSettingsFile() {
   }
 }
 
+async function exportLogsFile(payload, suggestedName = '') {
+  try {
+    const defaultFileName = suggestedName || `serialx-logs-${new Date().toISOString().slice(0, 10)}.json`
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: '导出 SerialX 日志',
+      defaultPath: path.join(app.getPath('documents'), defaultFileName),
+      filters: [
+        { name: 'JSON Files', extensions: ['json'] }
+      ]
+    })
+
+    if (canceled || !filePath) {
+      return { success: false, canceled: true }
+    }
+
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8')
+    return { success: true, filePath }
+  } catch (error) {
+    safeErrorLog('[Logs] Error exporting logs:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 // 通过注册表获取串口列表（兼容 com0com 等虚拟串口）
 function getPortsFromRegistry() {
   try {
@@ -524,6 +547,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('settings:import', async () => {
     return importSettingsFile()
+  })
+
+  ipcMain.handle('logs:export', async (event, payload, suggestedName) => {
+    return exportLogsFile(payload, suggestedName)
   })
 })
 
