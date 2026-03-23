@@ -239,10 +239,46 @@ export const useSerialStore = defineStore('serial', () => {
     workspaceLayout: JSON.parse(JSON.stringify(workspaceLayout.value))
   })
 
-  const applySettingsSnapshot = async (snapshot = {}) => {
-    if (!snapshot || typeof snapshot !== 'object') {
+  const validateSettingsSnapshot = (snapshot = {}) => {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
       throw new Error('设置文件内容无效')
     }
+
+    if (typeof snapshot.version !== 'number') {
+      throw new Error('设置文件缺少版本信息')
+    }
+
+    if (snapshot.version > SETTINGS_SNAPSHOT_VERSION) {
+      throw new Error(`设置文件版本过高，当前仅支持 v${SETTINGS_SNAPSHOT_VERSION}`)
+    }
+
+    if (snapshot.defaultSettings && typeof snapshot.defaultSettings !== 'object') {
+      throw new Error('默认串口参数格式无效')
+    }
+
+    if (snapshot.portDisplaySettings && typeof snapshot.portDisplaySettings !== 'object') {
+      throw new Error('显示设置格式无效')
+    }
+
+    if (snapshot.portControlSettings && typeof snapshot.portControlSettings !== 'object') {
+      throw new Error('控制设置格式无效')
+    }
+
+    if (snapshot.terminalAppearance && typeof snapshot.terminalAppearance !== 'object') {
+      throw new Error('终端外观设置格式无效')
+    }
+
+    if (snapshot.workspaceLayout && typeof snapshot.workspaceLayout !== 'object') {
+      throw new Error('工作区布局格式无效')
+    }
+
+    if (snapshot.commonCommands && !Array.isArray(snapshot.commonCommands)) {
+      throw new Error('常用命令配置格式无效')
+    }
+  }
+
+  const applySettingsSnapshot = async (snapshot = {}) => {
+    validateSettingsSnapshot(snapshot)
 
     defaultSettings.value = {
       ...createDefaultSettings(),
