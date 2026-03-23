@@ -8,8 +8,15 @@ const serialStore = useSerialStore()
 const MIN_PANE_WIDTH = 240
 const PANE_GAP_WIDTH = 18
 
-const splitPanes = ref([{ tabs: [], activeTab: '' }])
-const paneWidths = ref([])
+const splitPanes = ref(serialStore.workspaceLayout?.splitPanes?.length
+  ? serialStore.workspaceLayout.splitPanes.map((pane) => ({
+      tabs: Array.isArray(pane?.tabs) ? [...pane.tabs] : [],
+      activeTab: typeof pane?.activeTab === 'string' ? pane.activeTab : ''
+    }))
+  : [{ tabs: [], activeTab: '' }])
+const paneWidths = ref(Array.isArray(serialStore.workspaceLayout?.paneWidths)
+  ? [...serialStore.workspaceLayout.paneWidths]
+  : [])
 const paneRefs = ref([])
 const contentContainer = ref(null)
 
@@ -145,6 +152,10 @@ const syncSelectedPortWithPanes = () => {
 const syncPaneLayout = () => {
   ensurePaneStructure()
   syncSelectedPortWithPanes()
+  serialStore.updateWorkspaceLayout({
+    splitPanes: splitPanes.value,
+    paneWidths: paneWidths.value
+  })
 
   nextTick(() => {
     trimPaneRefs()
@@ -225,6 +236,13 @@ watch(() => serialStore.selectedPort, (selectedPort) => {
     splitPanes.value[targetPaneIndex].activeTab = selectedPort
   }
 })
+
+watch(paneWidths, (widths) => {
+  serialStore.updateWorkspaceLayout({
+    splitPanes: splitPanes.value,
+    paneWidths: widths
+  })
+}, { deep: true })
 
 const selectTab = (paneIndex, port) => {
   splitPanes.value[paneIndex].activeTab = port

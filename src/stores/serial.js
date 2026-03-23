@@ -23,6 +23,11 @@ export const useSerialStore = defineStore('serial', () => {
     parity: 'none'
   })
 
+  const createDefaultWorkspaceLayout = () => ({
+    splitPanes: [{ tabs: [], activeTab: '' }],
+    paneWidths: []
+  })
+
   const createDefaultCommonCommands = () => ([
     { id: 1, name: '复位', command: 'RESET', enabled: true },
     { id: 2, name: '状态查询', command: 'STATUS?', enabled: true },
@@ -59,6 +64,7 @@ export const useSerialStore = defineStore('serial', () => {
   // 每个串口的控制设置（独立配置）
   const portControlSettings = ref(new Map()) // path -> { isAutoScroll: boolean, isLoopSend: boolean, loopInterval: number, loopMaxCount: number, hexSend: boolean, packetTimeout: number }
   const terminalAppearance = ref(createDefaultTerminalAppearance())
+  const workspaceLayout = ref(createDefaultWorkspaceLayout())
 
   // 获取串口控制设置
   const getPortControlSettings = (portPath) => {
@@ -203,6 +209,25 @@ export const useSerialStore = defineStore('serial', () => {
     saveSessionState()
   }
 
+  const updateWorkspaceLayout = (layout = {}) => {
+    const nextPanes = Array.isArray(layout.splitPanes) && layout.splitPanes.length
+      ? layout.splitPanes.map((pane) => ({
+          tabs: Array.isArray(pane?.tabs) ? [...pane.tabs] : [],
+          activeTab: typeof pane?.activeTab === 'string' ? pane.activeTab : ''
+        }))
+      : createDefaultWorkspaceLayout().splitPanes
+
+    const nextWidths = Array.isArray(layout.paneWidths)
+      ? layout.paneWidths.map((width) => Number(width) || 0).filter((width) => width > 0)
+      : []
+
+    workspaceLayout.value = {
+      splitPanes: nextPanes,
+      paneWidths: nextWidths
+    }
+    saveSessionState()
+  }
+
   const buildSettingsSnapshot = () => ({
     version: SETTINGS_SNAPSHOT_VERSION,
     exportedAt: new Date().toISOString(),
@@ -210,7 +235,8 @@ export const useSerialStore = defineStore('serial', () => {
     portDisplaySettings: Object.fromEntries(portDisplaySettings.value),
     portControlSettings: Object.fromEntries(portControlSettings.value),
     commonCommands: JSON.parse(JSON.stringify(commonCommands.value)),
-    terminalAppearance: { ...terminalAppearance.value }
+    terminalAppearance: { ...terminalAppearance.value },
+    workspaceLayout: JSON.parse(JSON.stringify(workspaceLayout.value))
   })
 
   const applySettingsSnapshot = async (snapshot = {}) => {
@@ -228,6 +254,10 @@ export const useSerialStore = defineStore('serial', () => {
       ...createDefaultTerminalAppearance(),
       ...(snapshot.terminalAppearance || {})
     }
+    workspaceLayout.value = {
+      ...createDefaultWorkspaceLayout(),
+      ...(snapshot.workspaceLayout || {})
+    }
     commonCommands.value = Array.isArray(snapshot.commonCommands)
       ? JSON.parse(JSON.stringify(snapshot.commonCommands))
       : createDefaultCommonCommands()
@@ -242,7 +272,8 @@ export const useSerialStore = defineStore('serial', () => {
       portDisplaySettings: {},
       portControlSettings: {},
       commonCommands: createDefaultCommonCommands(),
-      terminalAppearance: createDefaultTerminalAppearance()
+      terminalAppearance: createDefaultTerminalAppearance(),
+      workspaceLayout: createDefaultWorkspaceLayout()
     })
   }
 
@@ -254,7 +285,8 @@ export const useSerialStore = defineStore('serial', () => {
         portDisplaySettings: Object.fromEntries(portDisplaySettings.value),
         portControlSettings: Object.fromEntries(portControlSettings.value),
         commonCommands: commonCommands.value,
-        terminalAppearance: terminalAppearance.value
+        terminalAppearance: terminalAppearance.value,
+        workspaceLayout: workspaceLayout.value
       }
       localStorage.setItem('serialx-session-state', JSON.stringify(state))
     } catch (error) {
@@ -284,6 +316,12 @@ export const useSerialStore = defineStore('serial', () => {
           terminalAppearance.value = {
             ...createDefaultTerminalAppearance(),
             ...state.terminalAppearance
+          }
+        }
+        if (state.workspaceLayout) {
+          workspaceLayout.value = {
+            ...createDefaultWorkspaceLayout(),
+            ...state.workspaceLayout
           }
         }
       }
@@ -1098,6 +1136,7 @@ export const useSerialStore = defineStore('serial', () => {
     logs,
     commonCommands,
     terminalAppearance,
+    workspaceLayout,
     portLoopSendCounts,
     portLoopSendPaused,
     portNotices,
@@ -1122,6 +1161,7 @@ export const useSerialStore = defineStore('serial', () => {
     updatePortControlSettings,
     updateTerminalAppearance,
     resetTerminalAppearance,
+    updateWorkspaceLayout,
     buildSettingsSnapshot,
     applySettingsSnapshot,
     resetAppSettings,
