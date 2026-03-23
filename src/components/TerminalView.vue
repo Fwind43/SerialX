@@ -110,6 +110,48 @@ const applyPaneWidths = (widths, paneCount = splitPanes.value.length) => {
   paneWidths.value = normalizePaneWidths(widths, paneCount)
 }
 
+const trimPaneRefs = () => {
+  paneRefs.value = paneRefs.value.slice(0, splitPanes.value.length)
+}
+
+const ensurePaneStructure = () => {
+  if (!splitPanes.value.length) {
+    splitPanes.value = [{ tabs: [], activeTab: '' }]
+  }
+
+  splitPanes.value.forEach((pane) => {
+    if (!Array.isArray(pane.tabs)) {
+      pane.tabs = []
+    }
+
+    if (!pane.tabs.includes(pane.activeTab)) {
+      pane.activeTab = pane.tabs[0] || ''
+    }
+  })
+}
+
+const syncSelectedPortWithPanes = () => {
+  const activeTabs = splitPanes.value
+    .map((pane) => pane.activeTab)
+    .filter(Boolean)
+
+  if (serialStore.selectedPort && activeTabs.includes(serialStore.selectedPort)) {
+    return
+  }
+
+  serialStore.selectedPort = activeTabs[0] || connectedPorts.value[0] || null
+}
+
+const syncPaneLayout = () => {
+  ensurePaneStructure()
+  syncSelectedPortWithPanes()
+
+  nextTick(() => {
+    trimPaneRefs()
+    handleResize()
+  })
+}
+
 const removePaneAndWidth = (paneIndex) => {
   const nextPaneCount = splitPanes.value.length - 1
   const currentWidths = getCurrentPaneWidths(splitPanes.value.length)
@@ -138,9 +180,7 @@ watch(() => connectedPorts.value, (newPorts) => {
   const currentTabs = allTabs.value
   newPorts.forEach((port) => {
     if (!currentTabs.includes(port)) {
-      if (splitPanes.value.length === 0) {
-        splitPanes.value.push({ tabs: [], activeTab: '' })
-      }
+      ensurePaneStructure()
       splitPanes.value[0].tabs.push(port)
       if (!splitPanes.value[0].activeTab) {
         splitPanes.value[0].activeTab = port
@@ -162,20 +202,24 @@ watch(() => connectedPorts.value, (newPorts) => {
     }
   }
 
-  nextTick(() => {
-    paneRefs.value = paneRefs.value.slice(0, splitPanes.value.length)
-  })
-
+  ensurePaneStructure()
   if (!newPorts.includes(serialStore.selectedPort)) {
     serialStore.selectedPort = splitPanes.value.find((pane) => pane.activeTab)?.activeTab || newPorts[0] || null
   }
+  syncPaneLayout()
 }, { deep: true })
 
 watch(() => serialStore.selectedPort, (selectedPort) => {
-  if (!selectedPort) return
+  if (!selectedPort) {
+    syncSelectedPortWithPanes()
+    return
+  }
 
   const targetPaneIndex = splitPanes.value.findIndex((pane) => pane.tabs.includes(selectedPort))
-  if (targetPaneIndex === -1) return
+  if (targetPaneIndex === -1) {
+    syncSelectedPortWithPanes()
+    return
+  }
 
   if (splitPanes.value[targetPaneIndex].activeTab !== selectedPort) {
     splitPanes.value[targetPaneIndex].activeTab = selectedPort
@@ -209,6 +253,7 @@ const splitPane = (paneIndex) => {
 
   if (!sourcePaneWidth) {
     paneWidths.value = getEvenPaneWidths(splitPanes.value.length)
+    syncPaneLayout()
     return
   }
 
@@ -218,15 +263,14 @@ const splitPane = (paneIndex) => {
   nextWidths[paneIndex] = primaryWidth
   nextWidths.splice(paneIndex + 1, 0, splitWidth)
   applyPaneWidths(nextWidths, splitPanes.value.length)
+  syncPaneLayout()
 }
 
 const removeEmptyPane = (paneIndex) => {
   if (splitPanes.value.length <= 1) return
   if (splitPanes.value[paneIndex].tabs.length > 0) return
   removePaneAndWidth(paneIndex)
-  nextTick(() => {
-    paneRefs.value = paneRefs.value.slice(0, splitPanes.value.length)
-  })
+  syncPaneLayout()
 }
 
 const handleContentDragOver = (event, paneIndex) => {
@@ -272,14 +316,12 @@ const handleContentDrop = (event, targetPaneIndex) => {
 
   if (sourcePane.tabs.length === 0 && splitPanes.value.length > 1) {
     removePaneAndWidth(sourcePaneIndex)
-    nextTick(() => {
-      paneRefs.value = paneRefs.value.slice(0, splitPanes.value.length)
-    })
   }
 
   dropZoneIndex.value = -1
   dropPosition.value = ''
   draggedData.value = null
+  syncPaneLayout()
 }
 
 const handleContentDragLeave = () => {
@@ -323,13 +365,11 @@ const handleTabListDrop = (event, targetPaneIndex) => {
 
   if (sourcePane.tabs.length === 0 && splitPanes.value.length > 1) {
     removePaneAndWidth(sourcePaneIndex)
-    nextTick(() => {
-      paneRefs.value = paneRefs.value.slice(0, splitPanes.value.length)
-    })
   }
 
   draggedData.value = null
   dropZoneIndex.value = -1
+  syncPaneLayout()
 }
 
 const handleDragEnd = () => {
@@ -400,6 +440,7 @@ onMounted(() => {
   window.addEventListener('mousemove', handleSeparatorMouseMove)
   window.addEventListener('mouseup', handleSeparatorMouseUp)
   window.addEventListener('resize', handleResize)
+  syncPaneLayout()
 })
 
 onUnmounted(() => {
