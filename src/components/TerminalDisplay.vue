@@ -45,14 +45,99 @@ const portDisplaySettings = computed(() => serialStore.getPortDisplaySettings(pr
 const portControlSettings = computed(() => serialStore.getPortControlSettings(props.portPath))
 const terminalAppearance = computed(() => serialStore.terminalAppearance)
 const portLogs = computed(() => serialStore.getPortLogs(props.portPath))
+const themeMode = computed(() => serialStore.appUiState?.themeMode || 'dark')
+const terminalAppearanceMode = computed(() => serialStore.appUiState?.terminalAppearanceMode || 'preset-dark')
+
+const isUsingLightPreset = computed(() => (
+  themeMode.value === 'light' && terminalAppearanceMode.value === 'preset-light'
+))
+
+const hexToRgb = (color) => {
+  if (typeof color !== 'string') return null
+  const normalized = color.trim().replace('#', '')
+  const hex = normalized.length === 3
+    ? normalized.split('').map((char) => `${char}${char}`).join('')
+    : normalized
+
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
+    return null
+  }
+
+  return {
+    r: Number.parseInt(hex.slice(0, 2), 16),
+    g: Number.parseInt(hex.slice(2, 4), 16),
+    b: Number.parseInt(hex.slice(4, 6), 16)
+  }
+}
+
+const lightForegroundRgb = computed(() => (
+  hexToRgb(terminalAppearance.value.terminalForeground) || { r: 23, g: 52, b: 71 }
+))
+
+const effectiveSelectionStyle = computed(() => {
+  if (isUsingLightPreset.value) {
+    const { r, g, b } = lightForegroundRgb.value
+    return {
+      background: `rgba(${r}, ${g}, ${b}, 0.28)`,
+      inactiveBackground: `rgba(${r}, ${g}, ${b}, 0.18)`,
+      foreground: undefined,
+      outline: `rgba(${r}, ${g}, ${b}, 0.38)`,
+      shadow: `inset 0 0 0 1px rgba(${r}, ${g}, ${b}, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.2)`
+    }
+  }
+
+  return {
+    background: terminalAppearance.value.selectionColor,
+    inactiveBackground: terminalAppearance.value.selectionColor,
+    foreground: undefined,
+    outline: 'transparent',
+    shadow: 'none'
+  }
+})
+
+const effectiveSearchPalette = computed(() => {
+  if (isUsingLightPreset.value) {
+    return {
+      matchBackground: 'rgba(51, 136, 204, 0.22)',
+      matchBorder: 'rgba(0, 120, 212, 0.4)',
+      matchTextColor: '#0f2940',
+      matchShadow: 'inset 0 -0.9em 0 rgba(122, 184, 235, 0.8)',
+      activeMatchBackground: 'rgba(0, 120, 212, 0.28)',
+      activeMatchBorder: 'rgba(0, 120, 212, 0.58)',
+      activeMatchTextColor: '#082235',
+      activeMatchShadow: 'inset 0 -0.92em 0 rgba(0, 120, 212, 0.34)',
+      overviewRuler: 'rgba(0, 120, 212, 0.55)'
+    }
+  }
+
+  return {
+    matchBackground: 'rgba(29, 61, 75, 0.92)',
+    matchBorder: 'rgba(76, 130, 154, 0.88)',
+    matchTextColor: terminalAppearance.value.terminalForeground,
+    matchShadow: 'inset 0 -0.72em 0 rgba(29, 61, 75, 0.92)',
+    activeMatchBackground: 'rgba(41, 88, 107, 0.98)',
+    activeMatchBorder: 'rgba(118, 184, 214, 0.95)',
+    activeMatchTextColor: '#ffffff',
+    activeMatchShadow: 'inset 0 -0.78em 0 rgba(41, 88, 107, 0.98)',
+    overviewRuler: 'rgba(29, 61, 75, 0.92)'
+  }
+})
 
 const terminalCssVars = computed(() => ({
   '--terminal-background': terminalAppearance.value.terminalBackground,
   '--terminal-foreground': terminalAppearance.value.terminalForeground,
-  '--search-match-text-color': terminalAppearance.value.terminalForeground,
-  '--search-match-shadow': 'inset 0 -0.72em 0 rgba(29, 61, 75, 0.92)',
-  '--search-current-match-text-color': '#ffffff',
-  '--search-current-match-shadow': 'inset 0 -0.78em 0 rgba(41, 88, 107, 0.98)',
+  '--terminal-frame-bg': themeMode.value === 'light' ? '#ffffff' : 'rgba(7, 13, 18, 0.22)',
+  '--terminal-frame-border': themeMode.value === 'light' ? 'rgba(0, 102, 153, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+  '--terminal-selection-bg': effectiveSelectionStyle.value.background,
+  '--terminal-selection-outline': effectiveSelectionStyle.value.outline,
+  '--terminal-selection-shadow': effectiveSelectionStyle.value.shadow,
+  '--terminal-inner-shadow': themeMode.value === 'light'
+    ? 'none'
+    : 'none',
+  '--search-match-text-color': effectiveSearchPalette.value.matchTextColor,
+  '--search-match-shadow': effectiveSearchPalette.value.matchShadow,
+  '--search-current-match-text-color': effectiveSearchPalette.value.activeMatchTextColor,
+  '--search-current-match-shadow': effectiveSearchPalette.value.activeMatchShadow,
   '--search-line-highlight': terminalAppearance.value.searchLineHighlightColor
 }))
 
@@ -107,8 +192,38 @@ const buildLogCacheKey = (log) => {
     log.id,
     portDisplaySettings.value.hexReceive ? 'hex' : 'text',
     portDisplaySettings.value.showAscii ? 'ascii' : 'plain',
+    portDisplaySettings.value.alignHexContinuation ? 'aligned' : 'single',
     getHexLengthPerLine()
   ].join(':')
+}
+
+const formatAlignedHexContent = (hexData, prefixWidth, asciiSuffix = '') => {
+  const terminalCols = terminal?.cols || 100
+  const indentWidth = Math.max(0, prefixWidth)
+  const continuationIndent = ' '.repeat(indentWidth)
+  const availableCols = Math.max(8, terminalCols - indentWidth)
+  const hexBytes = hexData.split(' ')
+  const bytesPerLine = Math.max(1, Math.floor((availableCols + 1) / 3))
+  const lines = []
+
+  for (let i = 0; i < hexBytes.length; i += bytesPerLine) {
+    const segment = hexBytes.slice(i, i + bytesPerLine).join(' ')
+    lines.push(i === 0 ? segment : `${continuationIndent}${segment}`)
+  }
+
+  if (asciiSuffix) {
+    if (lines.length === 0) {
+      return asciiSuffix
+    }
+    const singleLineCandidate = `${lines[0]} ${asciiSuffix}`
+    if (lines.length === 1 && singleLineCandidate.length <= availableCols) {
+      lines[0] += ` ${asciiSuffix}`
+    } else {
+      lines.push(`${continuationIndent}${asciiSuffix}`)
+    }
+  }
+
+  return lines.join('\n')
 }
 
 const formatLogLine = (log) => {
@@ -118,35 +233,23 @@ const formatLogLine = (log) => {
     return cachedLine
   }
 
-  const timestamp = log.timestamp.padEnd(8)
+  const timestamp = `[${log.timestamp.padEnd(8)}]`
   const prefix = getLogPrefix(log.type)
-  const maxCharsPerLine = getHexLengthPerLine()
+  const prefixText = `${timestamp} ${prefix} `
 
   let content = ''
   if (portDisplaySettings.value.hexReceive && log.hexData) {
     const hexData = log.hexData
-    const bytesPerLine = Math.floor(maxCharsPerLine / 3)
+    const asciiSuffix = portDisplaySettings.value.showAscii
+      ? ` [${hexData.split(' ').map((h) => {
+          const code = parseInt(h, 16)
+          return code >= 32 && code <= 126 ? String.fromCharCode(code) : '.'
+        }).join('')}]`
+      : ''
 
-    if (hexData.length <= maxCharsPerLine) {
-      content = hexData
-    } else {
-      const lines = []
-      const hexBytes = hexData.split(' ')
-      for (let i = 0; i < hexBytes.length; i += bytesPerLine) {
-        const segment = hexBytes.slice(i, i + bytesPerLine).join(' ')
-        const continuation = i > 0 ? '  ' : ''
-        lines.push(continuation + segment)
-      }
-      content = lines.join('\n')
-    }
-
-    if (portDisplaySettings.value.showAscii) {
-      const ascii = hexData.split(' ').map((h) => {
-        const code = parseInt(h, 16)
-        return code >= 32 && code <= 126 ? String.fromCharCode(code) : '.'
-      }).join('')
-      content += ` [${ascii}]`
-    }
+    content = portDisplaySettings.value.alignHexContinuation
+      ? formatAlignedHexContent(hexData, prefixText.length, asciiSuffix)
+      : `${hexData}${asciiSuffix}`
   } else {
     content = log.message
   }
@@ -160,9 +263,10 @@ const formatLogLine = (log) => {
     warning: '\x1b[38;5;214m'
   }
 
+  const timestampColor = '\x1b[38;2;103;136;153m'
   const reset = '\x1b[0m'
   const color = colorCodes[log.type] || colorCodes.info
-  const formattedLine = `${timestamp} ${color}${prefix}${reset} ${content}`
+  const formattedLine = `${timestampColor}${timestamp}${reset} ${color}${prefix}${reset} ${content}`
 
   formattedLogCache.set(cacheKey, formattedLine)
   if (formattedLogCache.size > MAX_LOG_COUNT * 8) {
@@ -177,7 +281,9 @@ const getTerminalTheme = () => ({
   foreground: terminalAppearance.value.terminalForeground,
   cursor: terminalAppearance.value.cursorColor,
   cursorAccent: terminalAppearance.value.terminalBackground,
-  selection: terminalAppearance.value.selectionColor,
+  selection: effectiveSelectionStyle.value.background,
+  selectionInactiveBackground: effectiveSelectionStyle.value.inactiveBackground,
+  selectionForeground: effectiveSelectionStyle.value.foreground,
   black: '#1e1e1e',
   red: '#f44747',
   green: '#6a9955',
@@ -201,12 +307,12 @@ const getSearchOptions = () => ({
   wholeWord: false,
   regex: false,
   decorations: {
-    matchBackground: 'rgba(29, 61, 75, 0.92)',
-    matchBorder: 'rgba(76, 130, 154, 0.88)',
-    matchOverviewRuler: 'rgba(29, 61, 75, 0.92)',
-    activeMatchBackground: 'rgba(41, 88, 107, 0.98)',
-    activeMatchBorder: 'rgba(118, 184, 214, 0.95)',
-    activeMatchColorOverviewRuler: 'rgba(41, 88, 107, 0.98)'
+    matchBackground: effectiveSearchPalette.value.matchBackground,
+    matchBorder: effectiveSearchPalette.value.matchBorder,
+    matchOverviewRuler: effectiveSearchPalette.value.overviewRuler,
+    activeMatchBackground: effectiveSearchPalette.value.activeMatchBackground,
+    activeMatchBorder: effectiveSearchPalette.value.activeMatchBorder,
+    activeMatchColorOverviewRuler: effectiveSearchPalette.value.overviewRuler
   }
 })
 
@@ -407,8 +513,17 @@ const initResizeObserver = () => {
   resizeObserver.observe(terminalContainer.value)
 }
 
+const normalizeCopiedSelection = (text) => {
+  if (!text) return text
+  if (!portDisplaySettings.value.hexReceive || !portDisplaySettings.value.alignHexContinuation) {
+    return text
+  }
+
+  return text.replace(/\r?\n[ ]{2,}(?=[0-9A-Fa-f]{2}(?:\s|$))/g, ' ')
+}
+
 const copySelection = async () => {
-  const text = terminal?.getSelection()
+  const text = normalizeCopiedSelection(terminal?.getSelection())
   if (text) {
     try {
       await navigator.clipboard.writeText(text)
@@ -640,7 +755,7 @@ defineExpose({
 </script>
 
 <template>
-  <div :class="['terminal-wrapper', { 'search-open': showSearch }]" :style="terminalCssVars">
+  <div :class="['terminal-wrapper', `theme-${themeMode}`, { 'search-open': showSearch }]" :style="terminalCssVars">
     <div v-if="showSearch" class="search-widget">
       <div class="search-input-wrapper">
         <span class="search-chip">查找</span>
@@ -744,20 +859,22 @@ defineExpose({
   display: flex;
   flex-direction: column;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--terminal-frame-border);
+  background-image: linear-gradient(180deg, var(--terminal-frame-bg), var(--terminal-frame-bg));
+  box-shadow: var(--terminal-inner-shadow);
 }
 
 .terminal-container {
   flex: 1;
   width: 100%;
   position: relative;
-  padding: 2px 6px;
+  padding: 8px 10px;
   box-sizing: border-box;
   overflow: hidden;
 }
 
 .terminal-container.search-open {
-  padding-top: 44px;
+  padding-top: 50px;
 }
 
 .terminal-container ::v-deep(.xterm-viewport) {
@@ -842,6 +959,15 @@ defineExpose({
   color: var(--search-match-text-color) !important;
   box-shadow: var(--search-match-shadow);
   font-weight: 700;
+}
+
+.terminal-container ::v-deep(.xterm .xterm-selection div) {
+  background-color: var(--terminal-selection-bg) !important;
+  box-shadow: var(--terminal-selection-shadow);
+}
+
+.terminal-container ::v-deep(.xterm-decoration-top) {
+  background-color: transparent !important;
 }
 
 .search-widget {
@@ -1007,5 +1133,67 @@ defineExpose({
   width: 14px;
   height: 14px;
   flex-shrink: 0;
+}
+
+.theme-light.terminal-wrapper {
+  border-color: rgba(0, 102, 153, 0.12);
+  box-shadow: none;
+}
+
+.theme-light .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-thumb) {
+  background: #c5d8e8 !important;
+}
+
+.theme-light .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-thumb:hover) {
+  background: #b3cddd !important;
+}
+
+.theme-light .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-thumb:active) {
+  background: #a4c1d6 !important;
+}
+
+.theme-light .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-corner) {
+  background: #ffffff !important;
+}
+
+.theme-light .search-widget,
+.theme-light .context-menu {
+  background: #ffffff;
+  border-color: rgba(0, 102, 153, 0.14);
+  box-shadow: 0 12px 28px rgba(31, 35, 40, 0.08);
+}
+
+.theme-light .search-chip {
+  background: rgba(0, 120, 212, 0.08);
+  color: #005fb8;
+}
+
+.theme-light .search-input,
+.theme-light .search-btn,
+.theme-light .context-menu-item {
+  background: #ffffff;
+  border-color: rgba(0, 102, 153, 0.12);
+  color: #1f2328;
+}
+
+.theme-light .search-input::placeholder,
+.theme-light .search-count {
+  color: #6b7785;
+}
+
+.theme-light .search-btn:hover,
+.theme-light .context-menu-item:hover {
+  background: rgba(0, 120, 212, 0.08);
+  border-color: rgba(0, 120, 212, 0.16);
+  color: #1f2328;
+}
+
+.theme-light .context-menu-item.disabled:hover {
+  background: transparent;
+  color: #1f2328;
+}
+
+.theme-light .context-menu-divider {
+  background: rgba(0, 102, 153, 0.12);
 }
 </style>

@@ -4,17 +4,46 @@ import { ref, computed, watch, reactive } from 'vue'
 export const useSerialStore = defineStore('serial', () => {
   const SETTINGS_SNAPSHOT_VERSION = 1
 
-  const createDefaultTerminalAppearance = () => ({
-    terminalBackground: '#11161c',
-    terminalForeground: '#d7e0ea',
-    cursorColor: '#8bd3ff',
-    selectionColor: 'rgba(139, 211, 255, 0.24)',
-    searchMatchColor: 'rgba(255, 241, 118, 0.78)',
-    searchMatchTextColor: 'rgb(29, 61, 75)',
-    searchCurrentMatchColor: 'rgba(255, 145, 77, 0.96)',
-    searchCurrentMatchTextColor: 'rgb(29, 61, 75)',
-    searchLineHighlightColor: 'rgba(255, 196, 87, 0.14)'
-  })
+  const createTerminalAppearancePreset = (mode = 'dark') => {
+    if (mode === 'light') {
+      return {
+        terminalBackground: '#f5fbff',
+        terminalForeground: '#173447',
+        cursorColor: '#1d80c9',
+        selectionColor: 'rgba(0, 120, 212, 0.34)',
+        searchMatchColor: 'rgba(122, 184, 235, 0.8)',
+        searchMatchTextColor: '#0f2940',
+        searchCurrentMatchColor: 'rgba(0, 120, 212, 0.34)',
+        searchCurrentMatchTextColor: '#082235',
+        searchLineHighlightColor: 'rgba(0, 120, 212, 0.08)'
+      }
+    }
+
+    return {
+      terminalBackground: '#11161c',
+      terminalForeground: '#d7e0ea',
+      cursorColor: '#8bd3ff',
+      selectionColor: 'rgba(139, 211, 255, 0.24)',
+      searchMatchColor: 'rgba(255, 241, 118, 0.78)',
+      searchMatchTextColor: 'rgb(29, 61, 75)',
+      searchCurrentMatchColor: 'rgba(255, 145, 77, 0.96)',
+      searchCurrentMatchTextColor: 'rgb(29, 61, 75)',
+      searchLineHighlightColor: 'rgba(255, 196, 87, 0.14)'
+    }
+  }
+
+  const createDefaultTerminalAppearance = () => createTerminalAppearancePreset('dark')
+  const resolveTerminalAppearanceForMode = (mode, appearance = {}) => {
+    const presetMode = mode === 'preset-light' ? 'light' : mode === 'preset-dark' ? 'dark' : null
+    if (presetMode) {
+      return createTerminalAppearancePreset(presetMode)
+    }
+
+    return {
+      ...createDefaultTerminalAppearance(),
+      ...appearance
+    }
+  }
 
   const createDefaultSettings = () => ({
     baudRate: 9600,
@@ -29,7 +58,12 @@ export const useSerialStore = defineStore('serial', () => {
   })
 
   const createDefaultAppUiState = () => ({
-    sidebarCollapsed: false
+    sidebarCollapsed: false,
+    themeMode: 'dark',
+    terminalAppearanceMode: 'preset-dark',
+    wallpaperEnabled: false,
+    wallpaperPath: '',
+    wallpaperOpacity: 0.22
   })
 
   const createDefaultCommonCommands = () => ([
@@ -63,13 +97,25 @@ export const useSerialStore = defineStore('serial', () => {
   const portManualDisconnects = reactive(new Set())
 
   // 每个串口的显示设置（独立配置）
-  const portDisplaySettings = ref(new Map()) // path -> { hexReceive: boolean, showAscii: boolean }
+  const portDisplaySettings = ref(new Map()) // path -> { hexReceive: boolean, showAscii: boolean, alignHexContinuation: boolean }
 
   // 每个串口的控制设置（独立配置）
   const portControlSettings = ref(new Map()) // path -> { isAutoScroll: boolean, isLoopSend: boolean, loopInterval: number, loopMaxCount: number, hexSend: boolean, packetTimeout: number }
   const terminalAppearance = ref(createDefaultTerminalAppearance())
   const workspaceLayout = ref(createDefaultWorkspaceLayout())
   const appUiState = ref(createDefaultAppUiState())
+
+  const persistUiPreferencesToConfig = async () => {
+    try {
+      if (!window?.electronAPI?.loadConfig || !window?.electronAPI?.saveConfig) return
+      const config = await window.electronAPI.loadConfig()
+      config.appUiState = JSON.parse(JSON.stringify(appUiState.value))
+      config.terminalAppearance = JSON.parse(JSON.stringify(terminalAppearance.value))
+      await window.electronAPI.saveConfig(config)
+    } catch (error) {
+      console.error('[Store] Error saving UI preferences:', error)
+    }
+  }
 
   // 获取串口控制设置
   const getPortControlSettings = (portPath) => {
@@ -187,7 +233,8 @@ export const useSerialStore = defineStore('serial', () => {
     if (!portDisplaySettings.value.has(portPath)) {
       portDisplaySettings.value.set(portPath, {
         hexReceive: false,
-        showAscii: true
+        showAscii: true,
+        alignHexContinuation: false
       })
     }
     return portDisplaySettings.value.get(portPath)
@@ -206,12 +253,49 @@ export const useSerialStore = defineStore('serial', () => {
       ...terminalAppearance.value,
       ...updates
     }
+    appUiState.value = {
+      ...appUiState.value,
+      terminalAppearanceMode: 'custom'
+    }
     saveSessionState()
+    persistUiPreferencesToConfig()
   }
 
-  const resetTerminalAppearance = () => {
-    terminalAppearance.value = createDefaultTerminalAppearance()
+  const isTerminalAppearancePreset = (mode, appearance = terminalAppearance.value) => {
+    const preset = createTerminalAppearancePreset(mode)
+    return Object.keys(preset).every((key) => preset[key] === appearance?.[key])
+  }
+
+  const applyThemeMode = (mode) => {
+    const nextMode = mode === 'light' ? 'light' : 'dark'
+    const previousMode = appUiState.value.themeMode || 'dark'
+    const currentAppearanceMode = appUiState.value.terminalAppearanceMode || `preset-${previousMode}`
+    const followsCurrentPreset =
+      currentAppearanceMode === `preset-${previousMode}` ||
+      isTerminalAppearancePreset(previousMode)
+
+    appUiState.value = {
+      ...appUiState.value,
+      themeMode: nextMode,
+      terminalAppearanceMode: followsCurrentPreset ? `preset-${nextMode}` : currentAppearanceMode
+    }
+
+    if (followsCurrentPreset) {
+      terminalAppearance.value = createTerminalAppearancePreset(nextMode)
+    }
+
     saveSessionState()
+    persistUiPreferencesToConfig()
+  }
+
+  const resetTerminalAppearance = (mode = appUiState.value.themeMode || 'dark') => {
+    terminalAppearance.value = createTerminalAppearancePreset(mode)
+    appUiState.value = {
+      ...appUiState.value,
+      terminalAppearanceMode: `preset-${mode === 'light' ? 'light' : 'dark'}`
+    }
+    saveSessionState()
+    persistUiPreferencesToConfig()
   }
 
   const updateWorkspaceLayout = (layout = {}) => {
@@ -239,6 +323,7 @@ export const useSerialStore = defineStore('serial', () => {
       ...updates
     }
     saveSessionState()
+    persistUiPreferencesToConfig()
   }
 
   const buildSettingsSnapshot = () => ({
@@ -486,11 +571,18 @@ export const useSerialStore = defineStore('serial', () => {
         if (state.commonCommands) {
           commonCommands.value = state.commonCommands
         }
-        if (state.terminalAppearance) {
-          terminalAppearance.value = {
-            ...createDefaultTerminalAppearance(),
-            ...state.terminalAppearance
-          }
+        const nextAppUiState = state.appUiState && typeof state.appUiState === 'object'
+          ? {
+              ...createDefaultAppUiState(),
+              ...state.appUiState
+            }
+          : null
+
+        if (state.terminalAppearance || nextAppUiState) {
+          terminalAppearance.value = resolveTerminalAppearanceForMode(
+            nextAppUiState?.terminalAppearanceMode,
+            state.terminalAppearance
+          )
         }
         if (state.workspaceLayout) {
           workspaceLayout.value = {
@@ -501,11 +593,32 @@ export const useSerialStore = defineStore('serial', () => {
         if (typeof state.selectedPort === 'string' || state.selectedPort === null) {
           selectedPort.value = state.selectedPort
         }
-        if (state.appUiState) {
-          appUiState.value = {
-            ...createDefaultAppUiState(),
-            ...state.appUiState
-          }
+        if (nextAppUiState) {
+          appUiState.value = nextAppUiState
+        }
+      }
+
+      if (window?.electronAPI?.loadConfig) {
+        const config = await window.electronAPI.loadConfig()
+        const nextConfigUiState = config?.appUiState && typeof config.appUiState === 'object'
+          ? {
+              ...createDefaultAppUiState(),
+              ...appUiState.value,
+              ...config.appUiState
+            }
+          : null
+
+        if (nextConfigUiState) {
+          appUiState.value = nextConfigUiState
+        }
+        if (config?.terminalAppearance || nextConfigUiState) {
+          terminalAppearance.value = resolveTerminalAppearanceForMode(
+            nextConfigUiState?.terminalAppearanceMode || appUiState.value.terminalAppearanceMode,
+            {
+              ...terminalAppearance.value,
+              ...(config?.terminalAppearance || {})
+            }
+          )
         }
       }
     } catch (error) {
@@ -1323,6 +1436,8 @@ export const useSerialStore = defineStore('serial', () => {
     logs,
     commonCommands,
     terminalAppearance,
+    createTerminalAppearancePreset,
+    applyThemeMode,
     workspaceLayout,
     appUiState,
     portLoopSendCounts,

@@ -4,6 +4,7 @@ import { useSerialStore } from '../stores/serial'
 
 const serialStore = useSerialStore()
 const showSettings = ref(false)
+const themeMode = computed(() => serialStore.appUiState?.themeMode || 'dark')
 
 const isPortConnected = (portPath) => serialStore.getPortStatus(portPath)
 const getPortNotice = (portPath) => serialStore.getPortNotice(portPath)
@@ -48,7 +49,7 @@ const settingsSummary = computed(() => {
 </script>
 
 <template>
-  <div class="sidebar-container">
+  <div :class="['sidebar-container', `theme-${themeMode}`]">
     <div class="sidebar-title">
       <div class="title-copy">
         <span class="title-kicker">Serial Workspace</span>
@@ -490,5 +491,100 @@ const settingsSummary = computed(() => {
   outline: none;
   border-color: rgba(87, 199, 255, 0.28);
   box-shadow: 0 0 0 3px rgba(87, 199, 255, 0.12);
+}
+
+.theme-light.sidebar-container {
+  background: #ffffff;
+}
+
+.theme-light .sidebar-title,
+.theme-light .ports-section,
+.theme-light .settings-section {
+  border-color: rgba(0, 102, 153, 0.12);
+}
+
+.theme-light .title-kicker,
+.theme-light .section-header,
+.theme-light .section-meta,
+.theme-light .settings-summary,
+.theme-light .port-meta,
+.theme-light .setting-item label {
+  color: #6b7785;
+}
+
+.theme-light .title-text,
+.theme-light .port-path {
+  color: #1f2328;
+}
+
+.theme-light .ports-section,
+.theme-light .settings-section {
+  background: #ffffff;
+}
+
+.theme-light .refresh-btn,
+.theme-light .settings-toggle,
+.theme-light .setting-select,
+.theme-light .port-action-btn {
+  background: #ffffff;
+  border-color: rgba(0, 102, 153, 0.12);
+  color: #1f2328;
+}
+
+.theme-light .refresh-btn:hover,
+.theme-light .settings-toggle:hover,
+.theme-light .port-item:hover {
+  background: rgba(0, 120, 212, 0.08);
+}
+
+.theme-light .port-item.selected {
+  background: rgba(0, 120, 212, 0.1);
+  border-color: rgba(0, 120, 212, 0.18);
+}
+
+.theme-light .port-icon {
+  background: #5c6b77;
+  box-shadow: 0 0 0 5px rgba(92, 107, 119, 0.12);
+}
+
+.theme-light .port-status-connected {
+  background: rgba(82, 215, 166, 0.12);
+  color: #177b57;
+}
+
+.theme-light .port-action-btn.disconnect {
+  background: rgba(196, 43, 28, 0.08);
+  color: #b2473d;
+}
+
+.theme-light .no-ports,
+.theme-light .port-notice.info {
+  color: #6b7785;
+}
+
+.theme-light .no-ports-icon {
+  background: rgba(0, 120, 212, 0.08);
+  color: #005fb8;
+}
+
+.theme-light .setting-select {
+  color-scheme: light;
+  color: #1f2328;
+  background: #ffffff;
+}
+
+.theme-light .setting-select option {
+  background-color: #ffffff;
+  color: #1f2328;
+}
+
+.theme-light .setting-select option:checked,
+.theme-light .setting-select option:hover {
+  background-color: #e8f3ff;
+  color: #1f2328;
+}
+
+.theme-light .ports-list::-webkit-scrollbar-thumb {
+  background: rgba(197, 216, 232, 0.9);
 }
 </style>

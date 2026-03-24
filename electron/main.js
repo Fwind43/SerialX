@@ -182,6 +182,30 @@ async function importWorkspaceSnapshotFile() {
   }
 }
 
+async function selectWallpaperFile() {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: '选择壁纸图片',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Image Files', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }
+      ]
+    })
+
+    if (canceled || !filePaths?.length) {
+      return { success: false, canceled: true }
+    }
+
+    return {
+      success: true,
+      filePath: filePaths[0]
+    }
+  } catch (error) {
+    safeErrorLog('[Wallpaper] Error selecting wallpaper:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 // 通过注册表获取串口列表（兼容 com0com 等虚拟串口）
 function getPortsFromRegistry() {
   try {
@@ -556,29 +580,33 @@ app.whenReady().then(() => {
   })
 
   // 窗口控制
-  ipcMain.on('window:minimize', () => {
-    if (mainWindow) {
-      mainWindow.minimize()
+  ipcMain.on('window:minimize', (event) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow
+    if (targetWindow) {
+      targetWindow.minimize()
     }
   })
 
-  ipcMain.on('window:maximize', () => {
-    if (mainWindow) {
-      if (!mainWindow.isMaximized()) {
-        mainWindow.maximize()
+  ipcMain.on('window:maximize', (event) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow
+    if (targetWindow) {
+      if (!targetWindow.isMaximized()) {
+        targetWindow.maximize()
       }
     }
   })
 
-  ipcMain.on('window:unmaximize', () => {
-    if (mainWindow) {
-      mainWindow.unmaximize()
+  ipcMain.on('window:unmaximize', (event) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow
+    if (targetWindow) {
+      targetWindow.unmaximize()
     }
   })
 
-  ipcMain.on('window:close', () => {
-    if (mainWindow) {
-      mainWindow.close()
+  ipcMain.on('window:close', (event) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow
+    if (targetWindow) {
+      targetWindow.close()
     }
   })
 
@@ -609,6 +637,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('workspace:import', async () => {
     return importWorkspaceSnapshotFile()
+  })
+
+  ipcMain.handle('wallpaper:select', async () => {
+    return selectWallpaperFile()
   })
 })
 

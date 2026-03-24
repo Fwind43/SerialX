@@ -25,6 +25,7 @@ const portStats = computed(() => serialStore.getPortStats(props.portPath))
 const portFilters = computed(() => serialStore.getPortFilters(props.portPath))
 const isConnected = computed(() => serialStore.getPortStatus(props.portPath))
 const portNotice = computed(() => serialStore.getPortNotice(props.portPath))
+const themeMode = computed(() => serialStore.appUiState?.themeMode || 'dark')
 const enabledCommands = computed(() => serialStore.getEnabledCommands)
 const quickCommands = computed(() => enabledCommands.value.slice(0, 3))
 const isPaused = computed(() => serialStore.portLoopSendPaused.get(props.portPath) || false)
@@ -90,6 +91,12 @@ const toggleHexSend = () => {
 const toggleShowAscii = () => {
   serialStore.updatePortDisplaySettings(props.portPath, {
     showAscii: !portDisplaySettings.value.showAscii
+  })
+}
+
+const toggleAlignHexContinuation = () => {
+  serialStore.updatePortDisplaySettings(props.portPath, {
+    alignHexContinuation: !portDisplaySettings.value.alignHexContinuation
   })
 }
 
@@ -273,7 +280,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="serial-panel" @mousedown="handlePanelFocus">
+  <div :class="['serial-panel', `theme-${themeMode}`]" @mousedown="handlePanelFocus">
     <div class="panel-header">
       <div class="panel-title">
         <span class="port-icon"></span>
@@ -424,16 +431,6 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <div v-if="sendErrorMessage" class="send-feedback error">
-        {{ sendErrorMessage }}
-      </div>
-      <div v-else-if="sendSuccessMessage" class="send-feedback success">
-        {{ sendSuccessMessage }}
-      </div>
-      <div v-else-if="portNotice" :class="['send-feedback', 'notice', portNotice.type]">
-        {{ portNotice.message }}
-      </div>
-
       <div class="send-options">
         <div v-if="quickCommands.length > 0" class="quick-command-row">
           <button
@@ -476,6 +473,14 @@ onUnmounted(() => {
           <label v-if="portDisplaySettings.hexReceive" class="checkbox-label">
             <input type="checkbox" :checked="portDisplaySettings.showAscii" @change="toggleShowAscii" />
             <span class="option-text">ASCII</span>
+          </label>
+          <label v-if="portDisplaySettings.hexReceive" class="checkbox-label">
+            <input
+              type="checkbox"
+              :checked="portDisplaySettings.alignHexContinuation"
+              @change="toggleAlignHexContinuation"
+            />
+            <span class="option-text">对齐续行</span>
           </label>
           <label class="checkbox-label">
             <input type="checkbox" :checked="portControlSettings.isLoopSend" @change="toggleLoopSend" />
@@ -580,9 +585,19 @@ onUnmounted(() => {
           />
           <span class="interval-unit">{{ portControlSettings.loopFailureLimit > 0 ? '次' : '不限' }}</span>
         </label>
+        </div>
+      </div>
+
+      <div v-if="sendErrorMessage" class="send-feedback floating error">
+        {{ sendErrorMessage }}
+      </div>
+      <div v-else-if="sendSuccessMessage" class="send-feedback floating success">
+        {{ sendSuccessMessage }}
+      </div>
+      <div v-else-if="portNotice" :class="['send-feedback', 'floating', 'notice', portNotice.type]">
+        {{ portNotice.message }}
       </div>
     </div>
-  </div>
 </template>
 
 <style scoped>
@@ -817,6 +832,7 @@ onUnmounted(() => {
 }
 
 .send-console {
+  position: relative;
   padding: 10px 12px 12px;
   background: rgba(10, 18, 25, 0.48);
   border-top: 1px solid rgba(126, 161, 183, 0.12);
@@ -886,40 +902,64 @@ onUnmounted(() => {
 }
 
 .send-feedback {
-  margin: -2px 0 8px;
   font-size: 11px;
   line-height: 1.4;
 }
 
+.send-feedback.floating {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  max-width: min(280px, calc(100% - 24px));
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+
 .send-feedback.error {
   color: #ffb8b1;
+  background: rgba(196, 43, 28, 0.14);
+  border-color: rgba(196, 43, 28, 0.22);
 }
 
 .send-feedback.success {
   color: #99f0c8;
+  background: rgba(32, 145, 92, 0.14);
+  border-color: rgba(32, 145, 92, 0.2);
 }
 
 .send-feedback.notice {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
-  padding: 0 1px;
 }
 
 .send-feedback.notice.error {
   color: #ffb8b1;
+  background: rgba(196, 43, 28, 0.14);
+  border-color: rgba(196, 43, 28, 0.22);
 }
 
 .send-feedback.notice.warning {
   color: #ffd18a;
+  background: rgba(196, 137, 43, 0.14);
+  border-color: rgba(196, 137, 43, 0.2);
 }
 
 .send-feedback.notice.success {
   color: #99f0c8;
+  background: rgba(32, 145, 92, 0.14);
+  border-color: rgba(32, 145, 92, 0.2);
 }
 
 .send-feedback.notice.info {
   color: #8ccdf3;
+  background: rgba(46, 115, 161, 0.14);
+  border-color: rgba(46, 115, 161, 0.22);
 }
 
 .send-options {
@@ -958,21 +998,40 @@ onUnmounted(() => {
 }
 
 .command-select {
-  padding: 9px 34px 9px 12px;
+  height: 34px;
+  padding: 0 34px 0 12px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(126, 161, 183, 0.12);
   border-radius: 10px;
   color-scheme: dark;
   color: #f4fbff;
   font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23d9ecff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4.25 6 8l4-3.75' fill='none' stroke='%23d9ecff' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
+  background-size: 12px 12px;
   min-width: 190px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.command-select::-ms-expand {
+  display: none;
+}
+
+.command-select:hover:not(:disabled) {
+  border-color: rgba(87, 199, 255, 0.2);
+}
+
+.command-select:focus {
+  outline: none;
+  border-color: rgba(87, 199, 255, 0.26);
+  box-shadow: 0 0 0 3px rgba(87, 199, 255, 0.1);
 }
 
 .command-select option {
@@ -1137,5 +1196,176 @@ onUnmounted(() => {
 .interval-unit {
   color: #94adbf;
   font-size: 12px;
+}
+
+.theme-light.serial-panel {
+  background: #ffffff;
+  color: #1f2328;
+}
+
+.theme-light .panel-header,
+.theme-light .filter-panel,
+.theme-light .send-console {
+  background: #ffffff;
+  border-color: rgba(0, 102, 153, 0.12);
+}
+
+.theme-light .port-icon {
+  background: #1f84c8;
+  box-shadow: 0 0 0 5px rgba(31, 132, 200, 0.12);
+}
+
+.theme-light .port-path {
+  color: #1f2328;
+}
+
+.theme-light .port-baud,
+.theme-light .filter-hint,
+.theme-light .advanced-summary-label,
+.theme-light .interval-label,
+.theme-light .interval-unit {
+  color: #6b7785;
+}
+
+.theme-light .loop-send-status {
+  background: rgba(255, 183, 77, 0.1);
+  border-color: rgba(255, 183, 77, 0.18);
+}
+
+.theme-light .loop-count {
+  color: #8a5a18;
+}
+
+.theme-light .stats-display,
+.theme-light .action-btn,
+.theme-light .inline-group,
+.theme-light .checkbox-label,
+.theme-light .advanced-summary,
+.theme-light .advanced-toggle,
+.theme-light .interval-group,
+.theme-light .command-select,
+.theme-light .pattern-input,
+.theme-light .send-input,
+.theme-light .interval-input {
+  background-color: #ffffff;
+  border-color: rgba(0, 102, 153, 0.12);
+  color: #1f2328;
+}
+
+.theme-light .action-btn:hover,
+.theme-light .action-btn.filter.active,
+.theme-light .advanced-toggle:hover,
+.theme-light .advanced-toggle.active,
+.theme-light .quick-command-btn:hover:not(:disabled) {
+  background: rgba(0, 120, 212, 0.08);
+  border-color: rgba(0, 120, 212, 0.16);
+}
+
+.theme-light .action-btn.disconnect:hover,
+.theme-light .send-input.hex-invalid,
+.theme-light .send-input.send-error {
+  border-color: rgba(196, 43, 28, 0.26);
+}
+
+.theme-light .stats-line.tx {
+  color: #1f84c8;
+}
+
+.theme-light .stats-line.rx {
+  color: #2f8f4f;
+}
+
+.theme-light .option-text,
+.theme-light .mode-text,
+.theme-light .target-label,
+.theme-light .advanced-summary-value,
+.theme-light .packet-label {
+  color: #1f2328;
+}
+
+.theme-light .pattern-input::placeholder,
+.theme-light .send-input::placeholder {
+  color: #6b7785;
+}
+
+.theme-light .send-button {
+  background: #1b7bc4;
+  border-color: rgba(27, 123, 196, 0.14);
+}
+
+.theme-light .send-button:disabled {
+  background: rgba(214, 221, 228, 0.7);
+  color: #6c8597;
+}
+
+.theme-light .send-feedback.error,
+.theme-light .send-feedback.notice.error {
+  color: #b2473d;
+}
+
+.theme-light .send-feedback.success,
+.theme-light .send-feedback.notice.success {
+  color: #177b57;
+}
+
+.theme-light .send-feedback.notice.warning {
+  color: #a36616;
+}
+
+.theme-light .send-feedback.notice.info {
+  color: #2a6f9d;
+}
+
+.theme-light .send-feedback.floating {
+  box-shadow: 0 8px 20px rgba(31, 35, 40, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.theme-light .quick-command-btn {
+  background: rgba(33, 122, 184, 0.08);
+  border-color: rgba(33, 122, 184, 0.14);
+  color: #005fb8;
+}
+
+.theme-light .command-select {
+  color-scheme: light;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4.25 6 8l4-3.75' fill='none' stroke='%231f3342' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 12px;
+}
+
+.theme-light .command-select option {
+  background-color: #ffffff;
+  color: #1f2328;
+}
+
+.theme-light .command-select option:checked,
+.theme-light .command-select option:hover {
+  background-color: #e8f3ff;
+  color: #1f2328;
+}
+
+.theme-light .loop-start-btn {
+  background: rgba(33, 122, 184, 0.12);
+  color: #196ca3;
+  border-color: rgba(33, 122, 184, 0.16);
+}
+
+.theme-light .loop-pause-btn {
+  background: rgba(255, 183, 77, 0.14);
+  color: #9a671e;
+  border-color: rgba(255, 183, 77, 0.2);
+}
+
+.theme-light .loop-stop-btn {
+  background: rgba(196, 43, 28, 0.1);
+  color: #b2473d;
+  border-color: rgba(196, 43, 28, 0.16);
+}
+
+.theme-light .packet-timeout {
+  background: #ffffff;
+  border-color: rgba(0, 102, 153, 0.12);
 }
 </style>

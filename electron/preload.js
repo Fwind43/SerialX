@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportLogs: (payload, suggestedName) => ipcRenderer.invoke('logs:export', payload, suggestedName),
   exportWorkspaceSnapshot: (payload) => ipcRenderer.invoke('workspace:export', payload),
   importWorkspaceSnapshot: () => ipcRenderer.invoke('workspace:import'),
+  selectWallpaper: () => ipcRenderer.invoke('wallpaper:select'),
 
   // Window Operations
   openConverterWindow: () => ipcRenderer.send('window:open-converter'),

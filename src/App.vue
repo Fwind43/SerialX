@@ -25,11 +25,21 @@ const settingsToast = ref({
   message: ''
 })
 const showResetConfirm = ref(false)
+
+const appUiState = computed(() => serialStore.appUiState || {})
 const isSidebarCollapsed = computed({
-  get: () => serialStore.appUiState?.sidebarCollapsed ?? false,
+  get: () => appUiState.value.sidebarCollapsed ?? false,
   set: (value) => {
     serialStore.updateAppUiState({ sidebarCollapsed: value })
   }
+})
+const themeMode = computed(() => appUiState.value.themeMode || 'dark')
+const isDarkMode = computed(() => themeMode.value === 'dark')
+const wallpaperPath = computed(() => appUiState.value.wallpaperPath || '')
+const wallpaperEnabled = computed(() => Boolean(appUiState.value.wallpaperEnabled && wallpaperPath.value))
+const wallpaperOpacity = computed(() => {
+  const value = Number(appUiState.value.wallpaperOpacity ?? 0.22)
+  return Number.isFinite(value) ? Math.min(0.45, Math.max(0.08, value)) : 0.22
 })
 
 let settingsToastTimer = null
@@ -91,6 +101,61 @@ const hideSettingsToast = () => {
     clearTimeout(settingsToastTimer)
     settingsToastTimer = null
   }
+}
+
+const setThemeMode = (mode) => {
+  serialStore.applyThemeMode(mode)
+  showSettingsMenu.value = false
+  showSettingsMessage(`已切换到${mode === 'dark' ? '深色' : '浅色'}模式`, 'success', '主题已更新')
+}
+
+const toFileUrl = (filePath) => {
+  if (!filePath) return ''
+  const normalized = filePath.replace(/\\/g, '/')
+  return encodeURI(`file:///${normalized.replace(/^([A-Za-z]):/, '$1:')}`)
+}
+
+const pickWallpaper = async () => {
+  showSettingsMenu.value = false
+  const result = await window.electronAPI?.selectWallpaper()
+  if (!result || result.canceled) return
+
+  if (!result.success) {
+    showSettingsMessage(`选择壁纸失败\n${result.error || '未知错误'}`, 'error', '壁纸未更新')
+    return
+  }
+
+  serialStore.updateAppUiState({
+    wallpaperEnabled: true,
+    wallpaperPath: result.filePath
+  })
+  showSettingsMessage(`已应用壁纸\n${result.filePath}`, 'success', '桌面背景已更新')
+}
+
+const toggleWallpaper = () => {
+  if (!wallpaperPath.value) {
+    pickWallpaper()
+    return
+  }
+
+  serialStore.updateAppUiState({
+    wallpaperEnabled: !wallpaperEnabled.value
+  })
+  showSettingsMenu.value = false
+  showSettingsMessage(
+    wallpaperEnabled.value ? '已关闭自定义壁纸。' : '已启用自定义壁纸。',
+    'success',
+    wallpaperEnabled.value ? '壁纸已关闭' : '壁纸已启用'
+  )
+}
+
+const clearWallpaper = () => {
+  serialStore.updateAppUiState({
+    wallpaperEnabled: false,
+    wallpaperPath: ''
+  })
+  showSettingsMenu.value = false
+  showSettingsMessage('已清除当前自定义壁纸。', 'success', '壁纸已清除')
 }
 
 const formatImportedSettingsSummary = (result) => {
@@ -253,6 +318,51 @@ const handleClickOutside = (event) => {
   }
 }
 
+const rootThemeVars = computed(() => {
+  const wallpaperVars = {
+    '--app-wallpaper-image': wallpaperEnabled.value ? `url("${toFileUrl(wallpaperPath.value)}")` : 'none',
+    '--app-wallpaper-opacity': wallpaperEnabled.value ? String(wallpaperOpacity.value) : '0'
+  }
+
+  if (themeMode.value === 'light') {
+    return {
+      '--app-bg': '#f6fbff',
+      '--app-bg-gradient': 'linear-gradient(180deg, #f6fbff 0%, #f6fbff 100%)',
+      '--app-panel': 'rgba(255, 255, 255, 0.92)',
+      '--app-panel-strong': 'rgba(255, 255, 255, 1)',
+      '--app-border': 'rgba(0, 102, 153, 0.14)',
+      '--app-text': '#1f2328',
+      '--app-text-soft': '#6b7785',
+      '--app-header-bg': 'rgba(255, 255, 255, 0.96)',
+      '--app-main-bg': '#ffffff',
+      '--app-chip-bg': 'rgba(0, 120, 212, 0.1)',
+      '--app-chip-border': 'rgba(0, 120, 212, 0.16)',
+      '--app-chip-text': '#005fb8',
+      '--app-radial': 'none',
+      '--app-toast-bg': 'rgba(255, 255, 255, 0.98)',
+      ...wallpaperVars
+    }
+  }
+
+  return {
+    '--app-bg': '#08131b',
+    '--app-bg-gradient': 'linear-gradient(180deg, #09131b 0%, #08131b 100%)',
+    '--app-panel': 'rgba(10, 18, 25, 0.62)',
+    '--app-panel-strong': 'rgba(8, 15, 22, 0.94)',
+    '--app-border': 'rgba(125, 162, 186, 0.1)',
+    '--app-text': '#d9e6f2',
+    '--app-text-soft': '#8fa5b6',
+    '--app-header-bg': 'rgba(8, 15, 22, 0.72)',
+    '--app-main-bg': 'rgba(7, 15, 22, 0.22)',
+    '--app-chip-bg': 'rgba(87, 199, 255, 0.08)',
+    '--app-chip-border': 'rgba(87, 199, 255, 0.22)',
+    '--app-chip-text': '#bfe9ff',
+    '--app-radial': 'radial-gradient(circle at 50% 0%, rgba(87, 199, 255, 0.08), transparent 42%)',
+    '--app-toast-bg': 'rgba(8, 15, 22, 0.94)',
+    ...wallpaperVars
+  }
+})
+
 onMounted(async () => {
   serialStore.refreshPorts()
   serialStore.loadCommonCommands()
@@ -283,7 +393,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="!isConverterMode" class="app-container">
+  <div
+    v-if="!isConverterMode"
+    :class="['app-container', `theme-${themeMode}`]"
+    :style="rootThemeVars"
+  >
     <header class="app-header">
       <div class="header-left">
         <div class="menubar-items">
@@ -304,6 +418,60 @@ onUnmounted(() => {
           <div class="menubar-item" @click.stop="toggleSettingsMenu">
             <span class="menubar-label">设置</span>
             <div v-if="showSettingsMenu" class="menubar-dropdown">
+              <div class="dropdown-section-label">主题</div>
+              <div class="dropdown-item" :class="{ selected: isDarkMode }" @click="setThemeMode('dark')">
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M9.8 2.3a5.7 5.7 0 1 0 3.9 10.2A6.2 6.2 0 0 1 9.8 2.3Z" fill="currentColor" />
+                  </svg>
+                </span>
+                <span class="dropdown-text">深色模式</span>
+              </div>
+              <div class="dropdown-item" :class="{ selected: !isDarkMode }" @click="setThemeMode('light')">
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <circle cx="8" cy="8" r="3" fill="currentColor" />
+                    <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6 13 13M3 13l1.4-1.4M11.6 4.4 13 3" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" />
+                  </svg>
+                </span>
+                <span class="dropdown-text">浅色模式</span>
+              </div>
+              <div class="dropdown-divider"></div>
+              <div class="dropdown-section-label">桌面背景</div>
+              <div class="dropdown-item" @click="pickWallpaper">
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M2 3h12v10H2z" fill="none" stroke="currentColor" stroke-width="1.2" />
+                    <circle cx="5.2" cy="6" r="1.1" fill="currentColor" />
+                    <path d="m4 11 2.6-2.8 2.1 2 1.6-1.6L12 11" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </span>
+                <span class="dropdown-text">{{ wallpaperPath ? '更换壁纸' : '选择壁纸' }}</span>
+              </div>
+              <div
+                v-if="wallpaperPath"
+                class="dropdown-item"
+                :class="{ selected: wallpaperEnabled }"
+                @click="toggleWallpaper"
+              >
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M8 2.5A4.5 4.5 0 1 0 12.5 7 4.5 4.5 0 0 0 8 2.5Zm0 1.4A3.1 3.1 0 1 1 4.9 7 3.1 3.1 0 0 1 8 3.9Z" fill="currentColor" />
+                    <path d="M8 1v2M8 13v2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" />
+                  </svg>
+                </span>
+                <span class="dropdown-text">{{ wallpaperEnabled ? '关闭壁纸' : '启用壁纸' }}</span>
+              </div>
+              <div v-if="wallpaperPath" class="dropdown-item danger" @click="clearWallpaper">
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M5 4h6l-.5 8h-5z" fill="none" stroke="currentColor" stroke-width="1.2" />
+                    <path d="M4 4h8M6 4V2h4v2" fill="none" stroke="currentColor" stroke-width="1.2" />
+                  </svg>
+                </span>
+                <span class="dropdown-text">清除壁纸</span>
+              </div>
+              <div class="dropdown-divider"></div>
               <div class="dropdown-section-label">外观与命令</div>
               <div class="dropdown-item" @click="openAppearanceSettings">
                 <span class="dropdown-icon" aria-hidden="true">
@@ -381,7 +549,7 @@ onUnmounted(() => {
           <span class="app-title">SerialX</span>
           <span class="app-subtitle">串口调试工作台</span>
         </div>
-        <span class="app-version-chip">v0.0.5-dev</span>
+        <span class="app-version-chip">v0.0.6-dev</span>
       </div>
 
       <div class="header-right window-controls">
@@ -474,15 +642,10 @@ onUnmounted(() => {
 
 <style scoped>
 .app-container {
-  --app-bg: #08131b;
-  --app-panel: rgba(10, 18, 25, 0.62);
-  --app-border: rgba(125, 162, 186, 0.1);
-  --app-text: #d9e6f2;
-  --app-text-soft: #8fa5b6;
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: linear-gradient(180deg, #09131b 0%, var(--app-bg) 100%);
+  background: var(--app-bg-gradient);
   color: var(--app-text);
   overflow: hidden;
   position: relative;
@@ -492,8 +655,20 @@ onUnmounted(() => {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 50% 0%, rgba(87, 199, 255, 0.08), transparent 42%);
-  opacity: 0.8;
+  background-image: var(--app-wallpaper-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: var(--app-wallpaper-opacity);
+  pointer-events: none;
+}
+
+.app-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--app-radial);
+  opacity: 0.9;
   pointer-events: none;
 }
 
@@ -503,7 +678,7 @@ onUnmounted(() => {
   justify-content: space-between;
   min-height: 48px;
   padding: 0 14px;
-  background: rgba(8, 15, 22, 0.72);
+  background: var(--app-header-bg);
   border-bottom: 1px solid var(--app-border);
   flex-shrink: 0;
   -webkit-app-region: drag;
@@ -563,6 +738,11 @@ onUnmounted(() => {
   border-color: rgba(255, 255, 255, 0.05);
 }
 
+.theme-light .menubar-item:hover {
+  background-color: rgba(21, 82, 123, 0.08);
+  border-color: rgba(21, 82, 123, 0.08);
+}
+
 .menubar-label {
   font-size: 13px;
   color: var(--app-text);
@@ -574,7 +754,7 @@ onUnmounted(() => {
   top: 100%;
   left: 0;
   min-width: 228px;
-  background: rgba(8, 15, 22, 0.96);
+  background: var(--app-panel-strong);
   border: 1px solid var(--app-border);
   border-radius: 12px;
   padding: 8px;
@@ -589,14 +769,14 @@ onUnmounted(() => {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
-  color: #7fa0b6;
+  color: var(--app-text-soft);
   text-transform: uppercase;
 }
 
 .dropdown-divider {
   height: 1px;
   margin: 6px 6px 4px;
-  background: rgba(125, 162, 186, 0.1);
+  background: var(--app-border);
 }
 
 .dropdown-item {
@@ -609,12 +789,18 @@ onUnmounted(() => {
   transition: all 0.18s ease;
 }
 
-.dropdown-item:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+.dropdown-item:hover,
+.dropdown-item.selected {
+  background-color: rgba(87, 199, 255, 0.12);
+}
+
+.theme-light .dropdown-item:hover,
+.theme-light .dropdown-item.selected {
+  background-color: rgba(29, 118, 176, 0.1);
 }
 
 .dropdown-item.danger:hover {
-  background-color: rgba(196, 43, 28, 0.18);
+  background-color: rgba(196, 43, 28, 0.14);
 }
 
 .dropdown-icon {
@@ -623,7 +809,7 @@ onUnmounted(() => {
   justify-content: center;
   width: 16px;
   height: 16px;
-  color: #9ed6f2;
+  color: var(--app-chip-text);
   flex-shrink: 0;
 }
 
@@ -643,7 +829,7 @@ onUnmounted(() => {
 .app-title {
   font-size: 14px;
   font-weight: 700;
-  color: #f4fbff;
+  color: var(--app-text);
   letter-spacing: 0.06em;
 }
 
@@ -659,9 +845,9 @@ onUnmounted(() => {
   align-items: center;
   padding: 4px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(87, 199, 255, 0.22);
-  background: rgba(87, 199, 255, 0.08);
-  color: #bfe9ff;
+  border: 1px solid var(--app-chip-border);
+  background: var(--app-chip-bg);
+  color: var(--app-chip-text);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -694,12 +880,17 @@ onUnmounted(() => {
   color: #ffffff;
 }
 
+.theme-light .window-btn:hover {
+  background-color: rgba(21, 82, 123, 0.1);
+}
+
 .window-btn.maximize-btn:hover {
   background-color: rgba(255, 255, 255, 0.1);
 }
 
 .window-btn.close-btn:hover {
   background-color: #e81123;
+  color: #ffffff;
 }
 
 .window-btn:active {
@@ -747,7 +938,7 @@ onUnmounted(() => {
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
-  background: rgba(7, 15, 22, 0.22);
+  background: var(--app-main-bg);
   border: 1px solid var(--app-border);
   border-radius: 18px;
   backdrop-filter: blur(8px);
@@ -763,10 +954,10 @@ onUnmounted(() => {
   width: 12px;
   min-width: 12px;
   height: 52px;
-  border: 1px solid rgba(125, 162, 186, 0.08);
+  border: 1px solid var(--app-border);
   border-radius: 999px;
-  background: rgba(10, 19, 27, 0.72);
-  color: #8fa5b6;
+  background: var(--app-panel-strong);
+  color: var(--app-text-soft);
   cursor: pointer;
   transition: all 0.18s ease;
   backdrop-filter: blur(8px);
@@ -774,9 +965,8 @@ onUnmounted(() => {
 }
 
 .sidebar-toggle:hover {
-  color: #f4fbff;
-  border-color: rgba(87, 199, 255, 0.18);
-  background: rgba(13, 25, 35, 0.88);
+  color: var(--app-text);
+  background: var(--app-panel);
 }
 
 .sidebar-toggle-icon {
@@ -794,7 +984,7 @@ onUnmounted(() => {
   min-height: 34px;
   padding: 0 10px 8px;
   background: transparent;
-  color: #ffffff;
+  color: var(--app-text);
   font-size: 12px;
   gap: 8px;
   flex-shrink: 0;
@@ -809,7 +999,7 @@ onUnmounted(() => {
   gap: 8px;
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(10, 21, 30, 0.72);
+  background: var(--app-panel);
   border: 1px solid var(--app-border);
   color: var(--app-text);
   backdrop-filter: blur(8px);
@@ -820,15 +1010,14 @@ onUnmounted(() => {
 }
 
 .status-item.primary {
-  border-color: rgba(87, 199, 255, 0.2);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  border-color: var(--app-chip-border);
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #5e7484;
+  background: #748a99;
   box-shadow: 0 0 0 4px rgba(94, 116, 132, 0.16);
 }
 
@@ -839,7 +1028,7 @@ onUnmounted(() => {
 
 .status-value {
   font-weight: 700;
-  color: #f4fbff;
+  color: var(--app-text);
 }
 
 .settings-toast {
@@ -854,18 +1043,18 @@ onUnmounted(() => {
   gap: 12px;
   padding: 14px 14px 14px 16px;
   border-radius: 14px;
-  border: 1px solid rgba(125, 162, 186, 0.14);
-  background: rgba(8, 15, 22, 0.94);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--app-border);
+  background: var(--app-toast-bg);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
   backdrop-filter: blur(16px);
 }
 
 .settings-toast.success {
-  border-color: rgba(82, 215, 166, 0.2);
+  border-color: rgba(82, 215, 166, 0.24);
 }
 
 .settings-toast.error {
-  border-color: rgba(232, 84, 84, 0.22);
+  border-color: rgba(232, 84, 84, 0.26);
 }
 
 .toast-copy {
@@ -876,14 +1065,14 @@ onUnmounted(() => {
 .toast-title {
   font-size: 13px;
   font-weight: 700;
-  color: #f4fbff;
+  color: var(--app-text);
 }
 
 .toast-message {
   margin-top: 4px;
   font-size: 12px;
   line-height: 1.55;
-  color: #a8bece;
+  color: var(--app-text-soft);
   white-space: pre-line;
 }
 
@@ -893,7 +1082,7 @@ onUnmounted(() => {
   border: none;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
-  color: #dbe8f1;
+  color: var(--app-text);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -913,22 +1102,22 @@ onUnmounted(() => {
   width: min(420px, calc(100vw - 32px));
   padding: 20px;
   border-radius: 16px;
-  background: linear-gradient(160deg, #1b2730, #111a22);
-  border: 1px solid rgba(125, 162, 186, 0.16);
-  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.34);
+  background: var(--app-panel-strong);
+  border: 1px solid var(--app-border);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.22);
 }
 
 .confirm-title {
   font-size: 16px;
   font-weight: 700;
-  color: #f4fbff;
+  color: var(--app-text);
 }
 
 .confirm-message {
   margin-top: 10px;
   font-size: 13px;
   line-height: 1.6;
-  color: #9db2c2;
+  color: var(--app-text-soft);
 }
 
 .confirm-actions {
@@ -950,14 +1139,14 @@ onUnmounted(() => {
 
 .confirm-btn.secondary {
   background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.08);
-  color: #dce8f0;
+  border-color: var(--app-border);
+  color: var(--app-text);
 }
 
 .confirm-btn.danger {
-  background: rgba(196, 43, 28, 0.16);
-  border-color: rgba(196, 43, 28, 0.24);
-  color: #ffd4d0;
+  background: rgba(196, 43, 28, 0.14);
+  border-color: rgba(196, 43, 28, 0.2);
+  color: #d7594d;
 }
 
 .toast-fade-enter-active,
@@ -976,4 +1165,5 @@ onUnmounted(() => {
   width: 100vw;
   overflow: hidden;
 }
+
 </style>

@@ -4,6 +4,7 @@ import { useSerialStore } from '../stores/serial'
 import SerialPanel from './SerialPanel.vue'
 
 const serialStore = useSerialStore()
+const themeMode = computed(() => serialStore.appUiState?.themeMode || 'dark')
 
 const MIN_PANE_WIDTH = 240
 const PANE_GAP_WIDTH = 18
@@ -189,13 +190,13 @@ const removePaneAndWidth = (paneIndex) => {
 
 watch(() => connectedPorts.value, (newPorts) => {
   const currentTabs = allTabs.value
+  let latestConnectedPort = null
   newPorts.forEach((port) => {
     if (!currentTabs.includes(port)) {
       ensurePaneStructure()
       splitPanes.value[0].tabs.push(port)
-      if (!splitPanes.value[0].activeTab) {
-        splitPanes.value[0].activeTab = port
-      }
+      splitPanes.value[0].activeTab = port
+      latestConnectedPort = port
     }
   })
 
@@ -214,7 +215,9 @@ watch(() => connectedPorts.value, (newPorts) => {
   }
 
   ensurePaneStructure()
-  if (!newPorts.includes(serialStore.selectedPort)) {
+  if (latestConnectedPort) {
+    serialStore.selectedPort = latestConnectedPort
+  } else if (!newPorts.includes(serialStore.selectedPort)) {
     serialStore.selectedPort = splitPanes.value.find((pane) => pane.activeTab)?.activeTab || newPorts[0] || null
   }
   syncPaneLayout()
@@ -469,7 +472,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="terminal-shell">
+  <div :class="['terminal-shell', `theme-${themeMode}`]">
     <div ref="contentContainer" class="content-container">
       <template v-for="(pane, paneIndex) in splitPanes" :key="paneIndex">
         <div
@@ -764,5 +767,101 @@ onUnmounted(() => {
 
 .delete-empty-btn:hover {
   background: rgba(196, 43, 28, 0.22);
+}
+
+.theme-light.terminal-shell {
+  background: #ffffff;
+}
+
+.theme-light .split-pane-group {
+  background: #ffffff;
+  border-color: rgba(0, 102, 153, 0.12);
+}
+
+.theme-light .split-separator::before {
+  background: rgba(0, 102, 153, 0.14);
+}
+
+.theme-light .split-separator:hover::before {
+  background: rgba(33, 122, 184, 0.34);
+}
+
+.theme-light .tab-header-section {
+  background: #ffffff;
+  border-bottom-color: rgba(0, 102, 153, 0.12);
+}
+
+.theme-light .tab-list::-webkit-scrollbar-thumb {
+  background: rgba(197, 216, 232, 0.9);
+}
+
+.theme-light .tab-item {
+  color: #6b7785;
+}
+
+.theme-light .tab-item:hover {
+  background: rgba(33, 122, 184, 0.06);
+}
+
+.theme-light .tab-item.active {
+  background: rgba(0, 120, 212, 0.1);
+  border-color: rgba(0, 120, 212, 0.18);
+  color: #1f2328;
+}
+
+.theme-light .tab-icon {
+  background: #1f84c8;
+  box-shadow: 0 0 0 4px rgba(31, 132, 200, 0.12);
+}
+
+.theme-light .tab-close {
+  color: #6c8597;
+}
+
+.theme-light .tab-close:hover {
+  color: #fff;
+}
+
+.theme-light .pane-split-btn {
+  border-color: rgba(0, 102, 153, 0.12);
+  background: #ffffff;
+  color: #1f2328;
+}
+
+.theme-light .pane-split-btn:hover {
+  background: rgba(33, 122, 184, 0.1);
+}
+
+.theme-light .split-pane.drop-zone-left {
+  background: linear-gradient(to right, rgba(33, 122, 184, 0.12) 0%, transparent 28%);
+  box-shadow: inset 3px 0 0 rgba(33, 122, 184, 0.34);
+}
+
+.theme-light .split-pane.drop-zone-right {
+  background: linear-gradient(to left, rgba(33, 122, 184, 0.12) 0%, transparent 28%);
+  box-shadow: inset -3px 0 0 rgba(33, 122, 184, 0.34);
+}
+
+.theme-light .empty-state {
+  color: #6b7785;
+}
+
+.theme-light .empty-icon {
+  background: rgba(0, 120, 212, 0.08);
+  color: #005fb8;
+}
+
+.theme-light .empty-state p {
+  color: #1f2328;
+}
+
+.theme-light .delete-empty-btn {
+  border-color: rgba(196, 43, 28, 0.18);
+  background: rgba(196, 43, 28, 0.08);
+  color: #b2473d;
+}
+
+.theme-light .delete-empty-btn:hover {
+  background: rgba(196, 43, 28, 0.14);
 }
 </style>
