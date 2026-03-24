@@ -28,6 +28,11 @@ const showResetConfirm = ref(false)
 
 const appUiState = computed(() => serialStore.appUiState || {})
 const appTheme = computed(() => serialStore.appTheme || {})
+const activeThemeSchemeId = computed(() => (
+  appUiState.value.activeThemeSchemeId ||
+  appUiState.value.terminalAppearanceMode ||
+  `preset-${appUiState.value.themeMode || 'dark'}`
+))
 const isSidebarCollapsed = computed({
   get: () => appUiState.value.sidebarCollapsed ?? false,
   set: (value) => {
@@ -35,7 +40,8 @@ const isSidebarCollapsed = computed({
   }
 })
 const themeMode = computed(() => appUiState.value.themeMode || 'dark')
-const isDarkMode = computed(() => themeMode.value === 'dark')
+const isDarkMode = computed(() => activeThemeSchemeId.value === 'preset-dark')
+const isLightMode = computed(() => activeThemeSchemeId.value === 'preset-light')
 const wallpaperPath = computed(() => appUiState.value.wallpaperPath || '')
 const wallpaperEnabled = computed(() => Boolean(appUiState.value.wallpaperEnabled && wallpaperPath.value))
 const wallpaperOpacity = computed(() => {
@@ -139,9 +145,10 @@ const hideSettingsToast = () => {
 }
 
 const setThemeMode = (mode) => {
-  serialStore.applyThemeMode(mode)
+  const nextSchemeId = mode === 'light' ? 'preset-light' : 'preset-dark'
+  serialStore.applyThemeScheme(nextSchemeId)
   showSettingsMenu.value = false
-  showSettingsMessage(`已切换到${mode === 'dark' ? '深色' : '浅色'}模式`, 'success', '主题已更新')
+  showSettingsMessage(`已切换到${mode === 'dark' ? '深色' : '浅色'}主题`, 'success', '主题已更新')
 }
 
 const syncWallpaperDataUrl = async () => {
@@ -523,16 +530,16 @@ onUnmounted(() => {
                     <path d="M9.8 2.3a5.7 5.7 0 1 0 3.9 10.2A6.2 6.2 0 0 1 9.8 2.3Z" fill="currentColor" />
                   </svg>
                 </span>
-                <span class="dropdown-text">深色模式</span>
+                <span class="dropdown-text">深色主题</span>
               </div>
-              <div class="dropdown-item" :class="{ selected: !isDarkMode }" @click="setThemeMode('light')">
+              <div class="dropdown-item" :class="{ selected: isLightMode }" @click="setThemeMode('light')">
                 <span class="dropdown-icon" aria-hidden="true">
                   <svg viewBox="0 0 16 16" width="16" height="16">
                     <circle cx="8" cy="8" r="3" fill="currentColor" />
                     <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6 13 13M3 13l1.4-1.4M11.6 4.4 13 3" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" />
                   </svg>
                 </span>
-                <span class="dropdown-text">浅色模式</span>
+                <span class="dropdown-text">浅色主题</span>
               </div>
               <div class="dropdown-divider"></div>
               <div class="dropdown-section-label">外观与命令</div>

@@ -7,32 +7,32 @@ export const useSerialStore = defineStore('serial', () => {
   const createTerminalAppearancePreset = (mode = 'dark') => {
     if (mode === 'light') {
       return {
-        terminalBackground: '#f5fbff',
-        terminalForeground: '#173447',
+        terminalBackground: '#fbfcfe',
+        terminalForeground: '#1f2937',
         fontSize: 13,
         fontWeight: '400',
-        cursorColor: '#1d80c9',
-        selectionColor: 'rgba(0, 120, 212, 0.34)',
-        searchMatchColor: 'rgba(122, 184, 235, 0.8)',
-        searchMatchTextColor: '#0f2940',
-        searchCurrentMatchColor: 'rgba(0, 120, 212, 0.34)',
-        searchCurrentMatchTextColor: '#082235',
-        searchLineHighlightColor: 'rgba(0, 120, 212, 0.08)'
+        cursorColor: '#2563eb',
+        selectionColor: 'rgba(37, 99, 235, 0.16)',
+        searchMatchColor: 'rgba(96, 165, 250, 0.18)',
+        searchMatchTextColor: '#1e3a8a',
+        searchCurrentMatchColor: 'rgba(37, 99, 235, 0.22)',
+        searchCurrentMatchTextColor: '#1d4ed8',
+        searchLineHighlightColor: 'rgba(37, 99, 235, 0.05)'
       }
     }
 
     return {
-      terminalBackground: '#11161c',
-      terminalForeground: '#d7e0ea',
+      terminalBackground: '#0b1020',
+      terminalForeground: '#eef2ff',
       fontSize: 13,
       fontWeight: '400',
-      cursorColor: '#8bd3ff',
-      selectionColor: 'rgba(139, 211, 255, 0.24)',
-      searchMatchColor: 'rgba(255, 241, 118, 0.78)',
-      searchMatchTextColor: 'rgb(29, 61, 75)',
-      searchCurrentMatchColor: 'rgba(255, 145, 77, 0.96)',
-      searchCurrentMatchTextColor: 'rgb(29, 61, 75)',
-      searchLineHighlightColor: 'rgba(255, 196, 87, 0.14)'
+      cursorColor: '#5ea0ff',
+      selectionColor: 'rgba(94, 160, 255, 0.16)',
+      searchMatchColor: 'rgba(30, 41, 59, 0.88)',
+      searchMatchTextColor: '#dbe7ff',
+      searchCurrentMatchColor: 'rgba(94, 160, 255, 0.24)',
+      searchCurrentMatchTextColor: '#f8fbff',
+      searchLineHighlightColor: 'rgba(94, 160, 255, 0.08)'
     }
   }
 
@@ -40,36 +40,36 @@ export const useSerialStore = defineStore('serial', () => {
   const createAppThemePreset = (mode = 'dark') => {
     if (mode === 'light') {
       return {
-        background: '#f6fbff',
-        headerBg: '#ffffff',
+        background: '#f5f7fb',
+        headerBg: '#fbfcfe',
         menuBg: '#ffffff',
-        sidebarShell: '#ffffff',
-        sidebarSurface: '#ffffff',
-        workspaceShell: '#ffffff',
+        sidebarShell: '#f7f8fc',
+        sidebarSurface: '#fcfdff',
+        workspaceShell: '#f4f6fb',
         workspaceSurface: '#ffffff',
-        statusBarBg: '#ffffff',
-        text: '#1f2328',
-        textSoft: '#6b7785',
-        border: '#d5e6ef',
-        accent: '#0078d4',
-        accentText: '#005fb8'
+        statusBarBg: '#f8f9fd',
+        text: '#111827',
+        textSoft: '#6b7280',
+        border: '#d8deea',
+        accent: '#2563eb',
+        accentText: '#1d4ed8'
       }
     }
 
     return {
-      background: '#08131b',
-      headerBg: '#08131b',
-      menuBg: '#151b22',
-      sidebarShell: '#0a1219',
-      sidebarSurface: '#0c141c',
-      workspaceShell: '#0a1219',
-      workspaceSurface: '#0c141c',
-      statusBarBg: '#0a1219',
-      text: '#d9e6f2',
-      textSoft: '#8fa5b6',
-      border: '#223847',
-      accent: '#57c7ff',
-      accentText: '#bfe9ff'
+      background: '#080b14',
+      headerBg: '#0d1220',
+      menuBg: '#111827',
+      sidebarShell: '#0d1220',
+      sidebarSurface: '#121a2b',
+      workspaceShell: '#090f1d',
+      workspaceSurface: '#121a2b',
+      statusBarBg: '#0d1220',
+      text: '#f9fafb',
+      textSoft: '#94a3b8',
+      border: '#273248',
+      accent: '#5ea0ff',
+      accentText: '#dbeafe'
     }
   }
   const createDefaultAppTheme = () => createAppThemePreset('dark')
@@ -81,11 +81,19 @@ export const useSerialStore = defineStore('serial', () => {
 
     return `preset-${fallbackMode === 'light' ? 'light' : 'dark'}`
   }
+  const resolveThemeModeFromSchemeId = (schemeId = '', fallbackMode = 'dark') => {
+    if (schemeId === 'preset-light') return 'light'
+    if (schemeId === 'preset-dark') return 'dark'
+    return fallbackMode === 'light' ? 'light' : 'dark'
+  }
   const buildAppUiStateWithThemeScheme = (state = {}) => {
-    const themeMode = state.themeMode === 'light' ? 'light' : 'dark'
     const activeThemeSchemeId = normalizeThemeSchemeId(
       state.activeThemeSchemeId || state.terminalAppearanceMode || state.appThemeMode,
-      themeMode
+      state.themeMode === 'light' ? 'light' : 'dark'
+    )
+    const themeMode = resolveThemeModeFromSchemeId(
+      activeThemeSchemeId,
+      state.themeMode === 'light' ? 'light' : 'dark'
     )
 
     return {
@@ -157,6 +165,34 @@ export const useSerialStore = defineStore('serial', () => {
       ...createDefaultAppTheme(),
       ...theme
     }
+  }
+  const syncBuiltInThemeSchemeState = () => {
+    const schemeId = normalizeThemeSchemeId(
+      appUiState.value.activeThemeSchemeId || appUiState.value.terminalAppearanceMode || appUiState.value.appThemeMode,
+      appUiState.value.themeMode || 'dark'
+    )
+
+    if (schemeId !== 'preset-light' && schemeId !== 'preset-dark') {
+      return false
+    }
+
+    const nextAppTheme = createAppThemePreset(schemeId === 'preset-light' ? 'light' : 'dark')
+    const nextTerminalAppearance = createTerminalAppearancePreset(schemeId === 'preset-light' ? 'light' : 'dark')
+
+    const appThemeChanged = JSON.stringify(appTheme.value) !== JSON.stringify(nextAppTheme)
+    const terminalAppearanceChanged = JSON.stringify(terminalAppearance.value) !== JSON.stringify(nextTerminalAppearance)
+    const appUiStateChanged = appUiState.value.activeThemeSchemeId !== schemeId ||
+      appUiState.value.terminalAppearanceMode !== schemeId ||
+      appUiState.value.appThemeMode !== schemeId
+
+    appTheme.value = nextAppTheme
+    terminalAppearance.value = nextTerminalAppearance
+    appUiState.value = buildAppUiStateWithThemeScheme({
+      ...appUiState.value,
+      activeThemeSchemeId: schemeId
+    })
+
+    return appThemeChanged || terminalAppearanceChanged || appUiStateChanged
   }
 
   const createDefaultSettings = () => ({
@@ -298,9 +334,11 @@ export const useSerialStore = defineStore('serial', () => {
       customAppearancePresets.value = nextCustomAppearancePresets
     }
 
-    if (nextAppearance) {
-      terminalAppearance.value = nextAppearance
-    }
+      if (nextAppearance) {
+        terminalAppearance.value = nextAppearance
+      }
+
+    syncBuiltInThemeSchemeState()
 
     isApplyingExternalUiSnapshot = false
   }
@@ -488,14 +526,20 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   const applyThemeSchemeState = (schemeId) => {
-    const scheme = getThemeSchemeById(schemeId)
+    const normalizedSchemeId = normalizeThemeSchemeId(schemeId, appUiState.value.themeMode || 'dark')
+    const scheme = getThemeSchemeById(normalizedSchemeId)
     if (!scheme) return false
+    const sourceSchemeId = scheme.kind === 'custom'
+      ? normalizeThemeSchemeId(scheme.sourceMode || normalizedSchemeId, appUiState.value.themeMode || 'dark')
+      : normalizedSchemeId
+    const nextThemeMode = resolveThemeModeFromSchemeId(sourceSchemeId, appUiState.value.themeMode || 'dark')
 
-    terminalAppearance.value = resolveTerminalAppearanceForMode(schemeId, scheme.appearance)
-    appTheme.value = resolveAppThemeForMode(schemeId, scheme.appTheme)
+    terminalAppearance.value = resolveTerminalAppearanceForMode(normalizedSchemeId, scheme.appearance)
+    appTheme.value = resolveAppThemeForMode(normalizedSchemeId, scheme.appTheme)
     appUiState.value = buildAppUiStateWithThemeScheme({
       ...appUiState.value,
-      activeThemeSchemeId: schemeId
+      themeMode: nextThemeMode,
+      activeThemeSchemeId: normalizedSchemeId
     })
     return true
   }
@@ -644,33 +688,8 @@ export const useSerialStore = defineStore('serial', () => {
     pushUiSyncSnapshot()
   }
 
-  const isTerminalAppearancePreset = (mode, appearance = terminalAppearance.value) => {
-    const preset = createTerminalAppearancePreset(mode)
-    return Object.keys(preset).every((key) => preset[key] === appearance?.[key])
-  }
-
   const applyThemeMode = (mode) => {
-    const nextMode = mode === 'light' ? 'light' : 'dark'
-    const previousMode = appUiState.value.themeMode || 'dark'
-    const currentSchemeId = getActiveThemeSchemeId()
-    const followsCurrentPreset =
-      currentSchemeId === `preset-${previousMode}` ||
-      isTerminalAppearancePreset(previousMode)
-
-    appUiState.value = buildAppUiStateWithThemeScheme({
-      ...appUiState.value,
-      themeMode: nextMode,
-      activeThemeSchemeId: followsCurrentPreset ? `preset-${nextMode}` : currentSchemeId
-    })
-
-    if (followsCurrentPreset) {
-      terminalAppearance.value = createTerminalAppearancePreset(nextMode)
-      appTheme.value = createAppThemePreset(nextMode)
-    }
-
-    saveSessionState()
-    persistUiPreferencesToConfig()
-    pushUiSyncSnapshot()
+    return applyThemeScheme(`preset-${mode === 'light' ? 'light' : 'dark'}`)
   }
 
   const resetTerminalAppearance = (mode = null) => {
@@ -1093,6 +1112,12 @@ export const useSerialStore = defineStore('serial', () => {
         if (config?.customAppearancePresets) {
           customAppearancePresets.value = normalizeCustomAppearancePresets(config.customAppearancePresets)
         }
+      }
+
+      const didSyncBuiltInPreset = syncBuiltInThemeSchemeState()
+      if (didSyncBuiltInPreset) {
+        await saveSessionState()
+        await persistUiPreferencesToConfig()
       }
 
       pushUiSyncSnapshot()

@@ -606,10 +606,10 @@ function createAppearanceWindow() {
   }
 
   appearanceWindow = new BrowserWindow({
-    width: 620,
-    height: 900,
-    minWidth: 460,
-    minHeight: 620,
+    width: 1120,
+    height: 860,
+    minWidth: 960,
+    minHeight: 680,
     autoHideMenuBar: true,
     title: 'SerialX 外观设置',
     webPreferences: {

@@ -5,708 +5,654 @@ import { useSerialStore } from '../stores/serial'
 const serialStore = useSerialStore()
 
 const props = defineProps({
-  show: {
-    type: Boolean,
-    default: false
-  },
-  standalone: {
-    type: Boolean,
-    default: false
-  }
+  show: { type: Boolean, default: false },
+  standalone: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['update:show'])
 
-const appearance = computed(() => serialStore.terminalAppearance)
-const appTheme = computed(() => serialStore.appTheme || {})
-const customAppearancePresets = computed(() => serialStore.customAppearancePresets || [])
+const activePanel = ref('theme')
+const newThemeName = ref('')
+const actionMessage = ref('')
+const actionTone = ref('info')
+
 const appUiState = computed(() => serialStore.appUiState || {})
-const activeThemeSchemeId = computed(() => (
+const terminalAppearance = computed(() => serialStore.terminalAppearance || {})
+const appTheme = computed(() => serialStore.appTheme || {})
+const customThemes = computed(() => serialStore.customAppearancePresets || [])
+
+const activeThemeId = computed(() => (
   appUiState.value.activeThemeSchemeId ||
   appUiState.value.terminalAppearanceMode ||
   `preset-${appUiState.value.themeMode || 'dark'}`
 ))
-const wallpaperPath = computed(() => appUiState.value.wallpaperPath || '')
-const wallpaperEnabled = computed(() => Boolean(appUiState.value.wallpaperEnabled && wallpaperPath.value))
-const wallpaperOpacity = computed(() => {
-  const value = Number(appUiState.value.wallpaperOpacity ?? 0.22)
-  return Number.isFinite(value) ? Math.min(0.6, Math.max(0.28, value)) : 0.36
-})
-const sidebarOpacity = computed(() => {
-  const value = Number(appUiState.value.sidebarOpacity ?? 0.42)
-  return Number.isFinite(value) ? Math.min(0.82, Math.max(0.04, value)) : 0.42
-})
-const workspaceOpacity = computed(() => {
-  const value = Number(appUiState.value.workspaceOpacity ?? 0.42)
-  return Number.isFinite(value) ? Math.min(0.82, Math.max(0.04, value)) : 0.42
-})
-const terminalOpacity = computed(() => {
-  const value = Number(appUiState.value.terminalOpacity ?? 0.34)
-  return Number.isFinite(value) ? Math.min(0.82, Math.max(0.04, value)) : 0.34
-})
-const wallpaperTransparencyPercent = computed(() => Math.round((1 - wallpaperOpacity.value) * 100))
-const sidebarTransparencyPercent = computed(() => Math.round((1 - sidebarOpacity.value) * 100))
-const workspaceTransparencyPercent = computed(() => Math.round((1 - workspaceOpacity.value) * 100))
-const terminalTransparencyPercent = computed(() => Math.round((1 - terminalOpacity.value) * 100))
-const activeSection = ref('scheme')
-const newPresetName = ref('')
-const actionMessage = ref('')
-const actionTone = ref('info')
 
-const appearanceSchemeOptions = computed(() => ([
-  {
-    id: 'preset-dark',
-    name: '深色默认',
-    mode: 'preset-dark',
-    kind: 'built-in',
-    description: '内置暗黑方案，锁定不可直接修改'
-  },
-  {
-    id: 'preset-light',
-    name: '浅色默认',
-    mode: 'preset-light',
-    kind: 'built-in',
-    description: '内置浅色方案，锁定不可直接修改'
-  },
-  ...customAppearancePresets.value.map((preset) => ({
-    id: preset.id,
-    name: preset.name,
-    mode: `custom:${preset.id}`,
+const themeOptions = computed(() => ([
+  { id: 'preset-dark', mode: 'preset-dark', name: '深色默认', kind: 'built-in', description: '内置深色主题，适合作为暗色基底' },
+  { id: 'preset-light', mode: 'preset-light', name: '浅色默认', kind: 'built-in', description: '内置浅色主题，适合作为亮色基底' },
+  ...customThemes.value.map((theme) => ({
+    id: theme.id,
+    mode: `custom:${theme.id}`,
+    name: theme.name,
     kind: 'custom',
-    description: '用户自定义方案，可继续编辑'
+    description: '用户自定义主题，可继续编辑'
   }))
 ]))
 
-const isBuiltInAppearanceMode = computed(() => (
-  activeThemeSchemeId.value === 'preset-dark' || activeThemeSchemeId.value === 'preset-light'
+const activeTheme = computed(() => (
+  themeOptions.value.find((theme) => theme.mode === activeThemeId.value) || themeOptions.value[0]
 ))
-const currentSchemeName = computed(() => {
-  const current = appearanceSchemeOptions.value.find((scheme) => scheme.mode === activeThemeSchemeId.value)
-  return current?.name || '未命名方案'
-})
-const canCreateScheme = computed(() => typeof serialStore.createThemeScheme === 'function' || typeof serialStore.createCustomTerminalAppearancePreset === 'function')
 
-const baseColorFields = [
-  { key: 'terminalBackground', label: '终端背景色', hint: 'xterm 主背景颜色' },
-  { key: 'terminalForeground', label: '终端字体色', hint: '终端普通文本颜色' },
-  { key: 'cursorColor', label: '光标颜色', hint: '输入和定位光标的颜色' },
-  { key: 'selectionColor', label: '选区颜色', hint: '鼠标选中文本时的背景色' }
+const isBuiltInTheme = computed(() => (
+  activeThemeId.value === 'preset-dark' || activeThemeId.value === 'preset-light'
+))
+
+const canEditTheme = computed(() => !isBuiltInTheme.value)
+const canCreateTheme = computed(() => (
+  typeof serialStore.createThemeScheme === 'function' ||
+  typeof serialStore.createCustomTerminalAppearancePreset === 'function'
+))
+
+const wallpaperPath = computed(() => appUiState.value.wallpaperPath || '')
+const wallpaperEnabled = computed(() => Boolean(appUiState.value.wallpaperEnabled && wallpaperPath.value))
+
+const themePanels = [
+  { id: 'theme', label: '主题' },
+  { id: 'application', label: '应用' },
+  { id: 'terminal', label: '终端' },
+  { id: 'wallpaper', label: '壁纸' }
 ]
 
-const searchColorFields = [
-  { key: 'searchMatchColor', label: '搜索匹配色', hint: '普通命中的高亮颜色' },
-  { key: 'searchMatchTextColor', label: '匹配文字色', hint: '普通命中的文字颜色' },
-  { key: 'searchCurrentMatchColor', label: '当前匹配色', hint: '当前命中的高亮颜色' },
-  { key: 'searchCurrentMatchTextColor', label: '当前文字色', hint: '当前命中的文字颜色' }
+const appThemeGroups = [
+  {
+    id: 'shell',
+    title: '窗口与导航',
+    description: '控制窗口外层、标题栏、菜单和状态栏，决定整套主题的第一眼气质。',
+    fields: [
+      { key: 'background', label: '应用背景', hint: '窗口最外层背景颜色' },
+      { key: 'headerBg', label: '标题栏', hint: '顶部标题栏与窗口控制区背景' },
+      { key: 'menuBg', label: '菜单下拉', hint: '菜单和下拉面板背景' },
+      { key: 'statusBarBg', label: '状态栏', hint: '底部状态区域背景' }
+    ]
+  },
+  {
+    id: 'surface',
+    title: '侧栏与工作区',
+    description: '控制侧栏、工作区和面板表面，决定界面层次和空间感。',
+    fields: [
+      { key: 'sidebarShell', label: '侧栏外壳', hint: '左侧串口区域外层背景' },
+      { key: 'sidebarSurface', label: '侧栏内容', hint: '侧栏内部内容区背景' },
+      { key: 'workspaceShell', label: '工作区外壳', hint: '主工作区外层背景' },
+      { key: 'workspaceSurface', label: '工作区内容', hint: '标签、面板和内容区背景' }
+    ]
+  },
+  {
+    id: 'semantic',
+    title: '文字与强调',
+    description: '控制主文字、弱文字、边框和强调色，保证应用与终端语言一致。',
+    fields: [
+      { key: 'text', label: '主文字色', hint: '标题和主要信息文字颜色' },
+      { key: 'textSoft', label: '次级文字色', hint: '说明和弱化信息文字颜色' },
+      { key: 'border', label: '边框色', hint: '分隔线、边界和描边颜色' },
+      { key: 'accent', label: '强调色', hint: '选中、高亮和品牌强调颜色' },
+      { key: 'accentText', label: '强调文字色', hint: '强调底色上的文字颜色' }
+    ]
+  }
 ]
 
-const appThemeFields = [
-  { key: 'background', label: '应用背景', hint: '窗口最外层背景颜色' },
-  { key: 'headerBg', label: '标题栏', hint: '顶部标题栏与窗口控制区域背景' },
-  { key: 'menuBg', label: '菜单下拉', hint: '工具/设置等菜单下拉面板背景' },
-  { key: 'sidebarShell', label: '侧栏外壳', hint: '左侧串口栏最外层面板背景' },
-  { key: 'sidebarSurface', label: '侧栏内容', hint: '侧栏内部区块、按钮与设置区域背景' },
-  { key: 'workspaceShell', label: '工作区外壳', hint: '主工作区与外层壳体背景' },
-  { key: 'workspaceSurface', label: '工作区内容', hint: '标签、面板与内容区块背景' },
-  { key: 'statusBarBg', label: '状态栏', hint: '底部状态胶囊与状态区域背景' },
-  { key: 'text', label: '主文字色', hint: '标题与主要信息的文字颜色' },
-  { key: 'textSoft', label: '次级文字色', hint: '说明、元信息与弱化文本' },
-  { key: 'border', label: '边框色', hint: '面板边界、分隔线与描边' },
-  { key: 'accent', label: '强调色', hint: '高亮、选中和品牌强调色' },
-  { key: 'accentText', label: '强调文字色', hint: '高亮胶囊和强调内容上的文字色' }
+const terminalGroups = [
+  {
+    id: 'base',
+    title: '基础外观',
+    description: '终端的底色、文字、光标和选区，决定终端本身的整体风格。',
+    fields: [
+      { key: 'terminalBackground', label: '终端背景', hint: 'xterm 主背景颜色' },
+      { key: 'terminalForeground', label: '终端文字', hint: '终端普通文本颜色' },
+      { key: 'cursorColor', label: '光标颜色', hint: '光标和定位颜色' },
+      { key: 'selectionColor', label: '选区颜色', hint: '选中文本时的背景色' }
+    ]
+  },
+  {
+    id: 'search',
+    title: '搜索高亮',
+    description: '控制普通命中、当前命中和整行高亮，让搜索反馈保持统一。',
+    fields: [
+      { key: 'searchMatchColor', label: '匹配高亮', hint: '普通命中的高亮背景色' },
+      { key: 'searchMatchTextColor', label: '匹配文字', hint: '普通命中的文字颜色' },
+      { key: 'searchCurrentMatchColor', label: '当前命中', hint: '当前命中的高亮背景色' },
+      { key: 'searchCurrentMatchTextColor', label: '当前文字', hint: '当前命中的文字颜色' }
+    ]
+  }
+]
+
+const transparencyFields = [
+  { key: 'wallpaperOpacity', label: '壁纸透明度', hint: '数值越高越透明，壁纸会更淡一些', min: 40, max: 72, alphaMin: 0.28, alphaMax: 0.6 },
+  { key: 'sidebarOpacity', label: '侧栏透明度', hint: '控制左侧串口栏与设置区的透出程度', min: 18, max: 96, alphaMin: 0.04, alphaMax: 0.82 },
+  { key: 'workspaceOpacity', label: '工作区透明度', hint: '控制标签区、pane 容器和主工作区壳层', min: 18, max: 96, alphaMin: 0.04, alphaMax: 0.82 },
+  { key: 'terminalOpacity', label: '终端透明度', hint: '控制终端正文区域和外框的透出程度', min: 18, max: 96, alphaMin: 0.04, alphaMax: 0.82 }
 ]
 
 const fontSize = computed(() => {
-  const value = Number(appearance.value.fontSize ?? 13)
+  const value = Number(terminalAppearance.value.fontSize ?? 13)
   return Number.isFinite(value) ? Math.min(24, Math.max(10, value)) : 13
 })
 
 const fontWeight = computed(() => {
-  const value = String(appearance.value.fontWeight ?? '400')
+  const value = String(terminalAppearance.value.fontWeight ?? '400')
   return ['300', '400', '500', '600', '700'].includes(value) ? value : '400'
 })
 
-const colorInputValue = (value) => {
-  if (typeof value !== 'string') return '#000000'
-  return value.startsWith('#') ? value : '#000000'
-}
+const transparencyPercentMap = computed(() => ({
+  wallpaperOpacity: toTransparencyPercent(appUiState.value.wallpaperOpacity, 0.22, 0.28, 0.6),
+  sidebarOpacity: toTransparencyPercent(appUiState.value.sidebarOpacity, 0.42, 0.04, 0.82),
+  workspaceOpacity: toTransparencyPercent(appUiState.value.workspaceOpacity, 0.42, 0.04, 0.82),
+  terminalOpacity: toTransparencyPercent(appUiState.value.terminalOpacity, 0.34, 0.04, 0.82)
+}))
 
-const updateColor = (key, value) => {
-  serialStore.updateTerminalAppearance({ [key]: value })
-}
+const lineHighlight = computed(() => parseRgba(terminalAppearance.value.searchLineHighlightColor))
 
-const updateAppThemeColor = (key, value) => {
-  if (typeof serialStore.updateAppTheme === 'function') {
-    const updated = serialStore.updateAppTheme({ [key]: value })
-    if (!updated) {
-      showActionFeedback('内置方案不能直接编辑，请先基于它新建一套方案。', 'error')
-    }
-    return
-  }
-
-  serialStore.appTheme = {
-    ...(serialStore.appTheme || {}),
-    [key]: value
-  }
-  showActionFeedback('应用主题已更新。', 'success')
-}
-
-const updateFontSize = (value) => {
-  const numericValue = Number(value)
-  if (!Number.isFinite(numericValue)) return
-  serialStore.updateTerminalAppearance({
-    fontSize: Math.min(24, Math.max(10, numericValue))
-  })
-}
-
-const updateFontWeight = (value) => {
-  const nextValue = String(value)
-  if (!['300', '400', '500', '600', '700'].includes(nextValue)) return
-  serialStore.updateTerminalAppearance({
-    fontWeight: nextValue
-  })
-}
-
-const updateLineHighlight = (value) => {
-  serialStore.updateTerminalAppearance({
-    searchLineHighlightColor: `rgba(${value.r}, ${value.g}, ${value.b}, ${value.a})`
-  })
-}
-
-const parseRgba = (value) => {
-  const match = typeof value === 'string'
-    ? value.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([0-9.]+))?\s*\)/i)
-    : null
-
-  if (!match) {
-    return { r: 255, g: 235, b: 59, a: 0.14 }
-  }
-
-  return {
-    r: Number(match[1]),
-    g: Number(match[2]),
-    b: Number(match[3]),
-    a: Number(match[4] ?? 1)
-  }
-}
-
-const lineHighlight = computed(() => parseRgba(appearance.value.searchLineHighlightColor))
-
-const showActionFeedback = (message, tone = 'info') => {
+function showFeedback(message, tone = 'info') {
   actionMessage.value = message
   actionTone.value = tone
 }
 
-const closeModal = () => {
+function closeModal() {
   emit('update:show', false)
 }
 
-const pickWallpaper = async () => {
-  const result = await window.electronAPI?.selectWallpaper?.()
-  if (!result || result.canceled || !result.success) return
+function colorInputValue(value) {
+  if (typeof value !== 'string') return '#000000'
+  return value.startsWith('#') ? value : '#000000'
+}
 
-  serialStore.updateAppUiState({
-    wallpaperEnabled: true,
-    wallpaperPath: result.filePath
+function parseRgba(value) {
+  const match = typeof value === 'string'
+    ? value.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([0-9.]+))?\s*\)/i)
+    : null
+  if (!match) return { r: 37, g: 99, b: 235, a: 0.08 }
+  return { r: Number(match[1]), g: Number(match[2]), b: Number(match[3]), a: Number(match[4] ?? 1) }
+}
+
+function toTransparencyPercent(value, fallback, minAlpha, maxAlpha) {
+  const numericValue = Number(value ?? fallback)
+  const clamped = Number.isFinite(numericValue) ? Math.min(maxAlpha, Math.max(minAlpha, numericValue)) : fallback
+  return Math.round((1 - clamped) * 100)
+}
+
+function updateTheme(mode) {
+  if (activeThemeId.value === mode) {
+    showFeedback('当前主题已在使用中。', 'info')
+    return
+  }
+  const applyTheme = serialStore.applyThemeScheme || serialStore.applyTerminalAppearanceMode
+  if (typeof applyTheme !== 'function') {
+    showFeedback('当前窗口需要刷新后才能切换主题。', 'error')
+    return
+  }
+  const applied = applyTheme(mode)
+  showFeedback(applied ? '主题已应用。' : '主题应用失败。', applied ? 'success' : 'error')
+}
+
+function createTheme(sourceMode = activeThemeId.value) {
+  const createScheme = serialStore.createThemeScheme || serialStore.createCustomTerminalAppearancePreset
+  if (typeof createScheme !== 'function') {
+    showFeedback('当前窗口需要刷新后才能创建主题。', 'error')
+    return
+  }
+  const created = createScheme(newThemeName.value, sourceMode)
+  newThemeName.value = ''
+  showFeedback(`已新建主题“${created?.name || '自定义主题'}”。`, 'success')
+}
+
+function removeTheme(mode) {
+  const removeScheme = serialStore.removeThemeScheme || serialStore.removeCustomTerminalAppearancePreset
+  const presetId = typeof mode === 'string' && mode.startsWith('custom:') ? mode.slice('custom:'.length) : ''
+  if (!presetId || typeof removeScheme !== 'function') {
+    showFeedback('当前窗口需要刷新后才能删除主题。', 'error')
+    return
+  }
+  removeScheme(presetId)
+  showFeedback('自定义主题已删除。', 'success')
+}
+
+function resetTheme() {
+  if (typeof serialStore.resetThemeScheme === 'function') {
+    serialStore.resetThemeScheme()
+    showFeedback('当前主题已恢复默认状态。', 'success')
+    return
+  }
+  serialStore.resetTerminalAppearance?.()
+  serialStore.resetAppTheme?.()
+  showFeedback('当前主题已恢复默认状态。', 'success')
+}
+
+function resetApplicationTheme() {
+  if (typeof serialStore.resetAppTheme !== 'function') return
+  serialStore.resetAppTheme()
+  showFeedback('当前主题里的应用外观已恢复默认值。', 'success')
+}
+
+function updateAppColor(key, value) {
+  const updated = serialStore.updateAppTheme?.({ [key]: value })
+  if (updated === false) showFeedback('内置主题不能直接编辑，请先基于它新建一套自定义主题。', 'error')
+}
+
+function updateTerminalColor(key, value) {
+  const updated = serialStore.updateTerminalAppearance?.({ [key]: value })
+  if (updated === false) showFeedback('内置主题不能直接编辑，请先基于它新建一套自定义主题。', 'error')
+}
+
+function updateFontSize(value) {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return
+  updateTerminalColor('fontSize', Math.min(24, Math.max(10, numericValue)))
+}
+
+function updateFontWeight(value) {
+  const nextValue = String(value)
+  if (!['300', '400', '500', '600', '700'].includes(nextValue)) return
+  updateTerminalColor('fontWeight', nextValue)
+}
+
+function updateLineHighlight(value) {
+  updateTerminalColor('searchLineHighlightColor', `rgba(${value.r}, ${value.g}, ${value.b}, ${value.a})`)
+}
+
+function updateTransparency(field, value) {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return
+  serialStore.updateAppUiState?.({
+    [field.key]: Math.min(field.alphaMax, Math.max(field.alphaMin, 1 - numericValue / 100))
   })
 }
 
-const toggleWallpaper = () => {
+async function pickWallpaper() {
+  const result = await window.electronAPI?.selectWallpaper?.()
+  if (!result || result.canceled || !result.success) return
+  serialStore.updateAppUiState?.({ wallpaperEnabled: true, wallpaperPath: result.filePath })
+}
+
+function toggleWallpaper() {
   if (!wallpaperPath.value) {
     pickWallpaper()
     return
   }
-
-  serialStore.updateAppUiState({
-    wallpaperEnabled: !wallpaperEnabled.value
-  })
+  serialStore.updateAppUiState?.({ wallpaperEnabled: !wallpaperEnabled.value })
 }
 
-const clearWallpaper = () => {
-  serialStore.updateAppUiState({
-    wallpaperEnabled: false,
-    wallpaperPath: ''
-  })
-}
-
-const updateTransparencyField = (key, value, minAlpha, maxAlpha) => {
-  const numericValue = Number(value)
-  if (!Number.isFinite(numericValue)) return
-
-  serialStore.updateAppUiState({
-    [key]: Math.min(maxAlpha, Math.max(minAlpha, 1 - numericValue / 100))
-  })
-}
-
-const applyAppearanceScheme = (mode) => {
-  if (activeThemeSchemeId.value === mode) {
-    showActionFeedback('当前方案已在使用中。', 'info')
-    return
-  }
-
-  if (typeof serialStore.applyThemeScheme === 'function') {
-    const applied = serialStore.applyThemeScheme(mode)
-    showActionFeedback(applied ? '方案已应用。' : '方案应用失败。', applied ? 'success' : 'error')
-    return
-  }
-
-  if (typeof serialStore.applyTerminalAppearanceMode === 'function') {
-    const applied = serialStore.applyTerminalAppearanceMode(mode)
-    showActionFeedback(applied ? '方案已应用。' : '方案应用失败。', applied ? 'success' : 'error')
-    return
-  }
-
-  const presetMode = mode === 'preset-light' ? 'light' : mode === 'preset-dark' ? 'dark' : null
-  if (presetMode) {
-    serialStore.resetTerminalAppearance?.(presetMode)
-    showActionFeedback('内置方案已应用。', 'success')
-    return
-  }
-
-  showActionFeedback('当前窗口需要刷新后才能使用方案切换。', 'error')
-}
-
-const createAppearanceScheme = (sourceMode = activeThemeSchemeId.value) => {
-  const createScheme = serialStore.createThemeScheme || serialStore.createCustomTerminalAppearancePreset
-  if (typeof createScheme !== 'function') {
-    showActionFeedback('当前窗口需要刷新后才能创建方案。', 'error')
-    return
-  }
-  const preset = createScheme(newPresetName.value, sourceMode)
-  newPresetName.value = ''
-  showActionFeedback(`已新建方案“${preset?.name || '自定义方案'}”。`, 'success')
-}
-
-const removeAppearanceScheme = (mode) => {
-  const presetId = typeof mode === 'string' && mode.startsWith('custom:')
-    ? mode.slice('custom:'.length)
-    : ''
-  const removeScheme = serialStore.removeThemeScheme || serialStore.removeCustomTerminalAppearancePreset
-  if (!presetId || typeof removeScheme !== 'function') {
-    showActionFeedback('当前窗口需要刷新后才能删除方案。', 'error')
-    return
-  }
-  removeScheme(presetId)
-  showActionFeedback('自定义方案已删除。', 'success')
-}
-
-const resetDefaults = () => {
-  if (typeof serialStore.resetThemeScheme === 'function') {
-    serialStore.resetThemeScheme()
-    showActionFeedback('当前方案已恢复到创建时的默认状态。', 'success')
-    return
-  }
-
-  serialStore.resetTerminalAppearance?.()
-  serialStore.resetAppTheme?.()
-  showActionFeedback('当前方案已恢复默认状态。', 'success')
-}
-
-const resetApplicationTheme = () => {
-  if (typeof serialStore.resetAppTheme === 'function') {
-    serialStore.resetAppTheme()
-    showActionFeedback('应用主题已恢复当前模式默认值。', 'success')
-    return
-  }
+function clearWallpaper() {
+  serialStore.updateAppUiState?.({ wallpaperEnabled: false, wallpaperPath: '' })
 }
 </script>
 
 <template>
   <div v-if="show" :class="['modal-overlay', { standalone: props.standalone }]">
-    <div class="modal">
-      <div class="modal-header">
-        <div>
-          <div class="modal-title">外观设置</div>
-          <div class="modal-subtitle">先选方案，再细调终端与壁纸；主窗口会同步实时预览</div>
+    <div class="theme-window">
+      <header class="window-header">
+        <div class="window-copy">
+          <div class="window-title">主题设置</div>
+          <div class="window-subtitle">一个主题同时覆盖应用界面与终端外观，壁纸与透明度也在同一处统一调整。</div>
         </div>
-        <button class="modal-close" @click="closeModal">×</button>
-      </div>
+        <button class="close-btn" @click="closeModal">×</button>
+      </header>
 
-      <div class="modal-body">
-        <section class="settings-section hero-section">
-          <div class="hero-card">
-            <div class="hero-copy">
-              <div class="hero-label">当前方案</div>
-              <div class="hero-title">{{ currentSchemeName }}</div>
-              <div class="hero-meta">{{ isBuiltInAppearanceMode ? '内置方案，锁定只读' : '自定义方案，可直接编辑' }}</div>
-            </div>
-            <div class="hero-actions">
-              <button class="modal-btn secondary" :disabled="!canCreateScheme" @click="createAppearanceScheme()">基于当前新建</button>
-              <button v-if="!isBuiltInAppearanceMode" class="modal-btn secondary" @click="resetDefaults">恢复当前方案默认值</button>
-            </div>
-          </div>
-          <div v-if="actionMessage" :class="['action-feedback', actionTone]">{{ actionMessage }}</div>
-          <div class="section-tabs">
-            <button :class="['section-tab', { active: activeSection === 'scheme' }]" @click="activeSection = 'scheme'">方案</button>
-            <button :class="['section-tab', { active: activeSection === 'app' }]" @click="activeSection = 'app'">应用</button>
-            <button :class="['section-tab', { active: activeSection === 'wallpaper' }]" @click="activeSection = 'wallpaper'">壁纸</button>
-            <button :class="['section-tab', { active: activeSection === 'terminal' }]" @click="activeSection = 'terminal'">终端</button>
-            <button :class="['section-tab', { active: activeSection === 'advanced' }]" @click="activeSection = 'advanced'">高级</button>
-          </div>
-        </section>
-
-        <section v-if="activeSection === 'scheme'" class="settings-section">
-          <div class="section-heading">
-            <div class="section-title">外观方案</div>
-            <div class="section-subtitle">内置浅色与深色方案锁定不可修改，先基于某套方案新建，再编辑自己的方案</div>
-          </div>
-          <div class="settings-grid">
-            <div
-              v-for="scheme in appearanceSchemeOptions"
-              :key="scheme.mode"
-              :class="['setting-card', 'scheme-card', { active: activeThemeSchemeId === scheme.mode }]"
+      <div class="window-body">
+        <aside class="sidebar">
+          <div class="sidebar-title">分类</div>
+          <nav class="nav-card">
+            <button
+              v-for="panel in themePanels"
+              :key="panel.id"
+              :class="['nav-btn', { active: activePanel === panel.id }]"
+              @click="activePanel = panel.id"
             >
-              <div class="scheme-card-head">
-                <div>
-                  <div class="setting-label">{{ scheme.name }}</div>
-                  <div class="setting-hint">{{ scheme.description }}</div>
+              {{ panel.label }}
+            </button>
+          </nav>
+
+          <section class="sidebar-card sidebar-status-card">
+            <div class="eyebrow">当前主题</div>
+            <div class="sidebar-theme-name">{{ activeTheme.name }}</div>
+            <div class="sidebar-theme-meta">{{ activeTheme.kind === 'custom' ? '自定义，可编辑' : '内置，只读' }}</div>
+          </section>
+
+          <section v-if="actionMessage" :class="['sidebar-card', 'feedback-card', actionTone]">
+            {{ actionMessage }}
+          </section>
+        </aside>
+
+        <main class="content">
+          <section class="toolbar-card">
+            <div class="toolbar-copy">
+              <div class="toolbar-title">当前主题</div>
+              <div class="toolbar-subtitle">主题会同时驱动应用界面与终端外观，壁纸与透明度在同一个窗口内联动调整。</div>
+            </div>
+            <div class="toolbar-meta">
+              <span class="toolbar-theme-name">{{ activeTheme.name }}</span>
+              <span class="toolbar-badge">{{ activeTheme.kind === 'custom' ? '自定义主题' : '内置主题' }}</span>
+            </div>
+          </section>
+
+          <section v-if="activePanel === 'theme'" class="content-section">
+            <div class="section-head">
+              <div>
+                <div class="section-title">主题方案</div>
+                <div class="section-subtitle">先选一套整主题，再决定是否基于它创建自己的主题。应用外观和终端外观会一起切换。</div>
+              </div>
+              <div class="section-actions">
+                <button class="ui-btn secondary" :disabled="!canCreateTheme" @click="createTheme()">基于当前新建</button>
+                <button class="ui-btn secondary" :disabled="!canEditTheme" @click="resetTheme">恢复主题默认值</button>
+              </div>
+            </div>
+
+            <div class="scheme-list">
+              <article
+                v-for="theme in themeOptions"
+                :key="theme.mode"
+                :class="['scheme-card', { active: activeThemeId === theme.mode }]"
+              >
+                <div class="scheme-card-head">
+                  <div>
+                    <div class="scheme-name">{{ theme.name }}</div>
+                    <div class="scheme-description">{{ theme.description }}</div>
+                  </div>
+                  <span :class="['scheme-kind', theme.kind]">{{ theme.kind === 'custom' ? '自定义' : '内置' }}</span>
                 </div>
-                <span :class="['scheme-badge', scheme.kind]">
-                  {{ scheme.kind === 'built-in' ? '内置' : '自定义' }}
+
+                <div class="scheme-actions">
+                  <button class="ui-btn secondary" :disabled="activeThemeId === theme.mode" @click="updateTheme(theme.mode)">
+                    {{ activeThemeId === theme.mode ? '当前使用中' : '应用主题' }}
+                  </button>
+                  <button class="ui-btn secondary" :disabled="!canCreateTheme" @click="createTheme(theme.mode)">基于此复制</button>
+                  <button
+                    v-if="theme.kind === 'custom'"
+                    class="ui-btn danger"
+                    :disabled="activeThemeId === theme.mode"
+                    @click="removeTheme(theme.mode)"
+                  >
+                    删除
+                  </button>
+                </div>
+              </article>
+            </div>
+
+            <section class="editor-card">
+              <div class="card-title">新主题</div>
+              <div class="card-hint">复制当前主题的应用配色和终端配置，生成一套新的可编辑主题。</div>
+              <div class="inline-form">
+                <input
+                  v-model="newThemeName"
+                  type="text"
+                  class="text-input"
+                  maxlength="30"
+                  placeholder="例如：冷白电蓝 / 雾黑低对比"
+                />
+                <button class="ui-btn primary" :disabled="!canCreateTheme" @click="createTheme()">新建主题</button>
+              </div>
+            </section>
+          </section>
+
+          <section v-else-if="activePanel === 'application'" class="content-section">
+            <div class="section-head">
+              <div>
+                <div class="section-title">应用外观</div>
+                <div class="section-subtitle">这里编辑的是当前主题中的应用区域。主窗口、菜单、面板和弹层都从这里取色。</div>
+              </div>
+              <div class="section-actions">
+                <button class="ui-btn secondary" :disabled="!canEditTheme" @click="resetApplicationTheme">恢复应用默认值</button>
+              </div>
+            </div>
+
+            <div v-if="!canEditTheme" class="notice-card">
+              当前是内置主题。应用外观和终端外观属于同一套主题，所以这里同样只读；先回到“主题”里复制一套自己的主题再编辑。
+            </div>
+
+            <div class="group-list">
+              <section v-for="group in appThemeGroups" :key="group.id" class="editor-card">
+                <div class="section-block-head">
+                  <div class="card-title">{{ group.title }}</div>
+                  <div class="card-hint">{{ group.description }}</div>
+                </div>
+                <div class="field-list">
+                  <div v-for="field in group.fields" :key="field.key" class="field-row">
+                    <div class="field-copy">
+                      <div class="field-label">{{ field.label }}</div>
+                      <div class="field-hint">{{ field.hint }}</div>
+                    </div>
+                    <div class="field-controls">
+                      <input
+                        :value="colorInputValue(appTheme[field.key])"
+                        type="color"
+                        class="color-picker"
+                        :disabled="!canEditTheme"
+                        @input="updateAppColor(field.key, $event.target.value)"
+                      />
+                      <input
+                        :value="appTheme[field.key]"
+                        type="text"
+                        class="text-input"
+                        :disabled="!canEditTheme"
+                        @input="updateAppColor(field.key, $event.target.value)"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <section class="preview-card">
+              <div class="card-title">应用预览</div>
+              <div class="app-preview" :style="{ backgroundColor: appTheme.background, borderColor: appTheme.border }">
+                <div class="app-preview-header" :style="{ backgroundColor: appTheme.headerBg, color: appTheme.text, borderColor: appTheme.border }">SerialX</div>
+                <div class="app-preview-body">
+                  <div class="app-preview-sidebar" :style="{ backgroundColor: appTheme.sidebarSurface, color: appTheme.text, borderColor: appTheme.border }">
+                    <span class="preview-title-text">侧栏</span>
+                    <span class="preview-note-text" :style="{ color: appTheme.textSoft }">串口、设置、筛选</span>
+                  </div>
+                  <div class="app-preview-main" :style="{ backgroundColor: appTheme.workspaceSurface, color: appTheme.text, borderColor: appTheme.border }">
+                    <span class="preview-pill" :style="{ backgroundColor: appTheme.accent, color: appTheme.accentText }">当前标签</span>
+                    <span class="preview-note-text" :style="{ color: appTheme.textSoft }">面板、内容区、弹层</span>
+                  </div>
+                </div>
+                <div class="app-preview-status" :style="{ backgroundColor: appTheme.statusBarBg, color: appTheme.textSoft, borderColor: appTheme.border }">状态栏</div>
+              </div>
+            </section>
+          </section>
+
+          <section v-else-if="activePanel === 'terminal'" class="content-section">
+            <div class="section-head">
+              <div>
+                <div class="section-title">终端外观</div>
+                <div class="section-subtitle">这里编辑的是当前主题中的终端部分，包括字号、字重、终端底色、光标、选区和搜索高亮。</div>
+              </div>
+            </div>
+
+            <div v-if="!canEditTheme" class="notice-card">
+              当前是内置主题。终端外观也属于同一套主题，所以这里同样只读；先回到“主题”里复制一套自己的主题再编辑。
+            </div>
+
+            <section class="editor-card">
+              <div class="card-title">排版</div>
+              <div class="card-hint">先定字号和字重，再继续细调颜色，整体会更顺手。</div>
+              <div class="field-list">
+                <div class="field-row">
+                  <div class="field-copy">
+                    <div class="field-label">字体大小</div>
+                    <div class="field-hint">影响终端密度与可读性</div>
+                  </div>
+                  <div class="field-controls slider-controls">
+                    <input
+                      class="slider-input"
+                      type="range"
+                      min="10"
+                      max="24"
+                      step="1"
+                      :value="fontSize"
+                      :disabled="!canEditTheme"
+                      @input="updateFontSize($event.target.value)"
+                    />
+                    <span class="slider-value">{{ fontSize }}px</span>
+                  </div>
+                </div>
+
+                <div class="field-row">
+                  <div class="field-copy">
+                    <div class="field-label">字体粗细</div>
+                    <div class="field-hint">让终端文字更轻或更扎实</div>
+                  </div>
+                  <div class="field-controls">
+                    <select class="text-input" :value="fontWeight" :disabled="!canEditTheme" @change="updateFontWeight($event.target.value)">
+                      <option value="300">300 细体</option>
+                      <option value="400">400 常规</option>
+                      <option value="500">500 中等</option>
+                      <option value="600">600 半粗</option>
+                      <option value="700">700 粗体</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <div class="group-list">
+              <section v-for="group in terminalGroups" :key="group.id" class="editor-card">
+                <div class="section-block-head">
+                  <div class="card-title">{{ group.title }}</div>
+                  <div class="card-hint">{{ group.description }}</div>
+                </div>
+                <div class="field-list">
+                  <div v-for="field in group.fields" :key="field.key" class="field-row">
+                    <div class="field-copy">
+                      <div class="field-label">{{ field.label }}</div>
+                      <div class="field-hint">{{ field.hint }}</div>
+                    </div>
+                    <div class="field-controls">
+                      <input
+                        :value="colorInputValue(terminalAppearance[field.key])"
+                        type="color"
+                        class="color-picker"
+                        :disabled="!canEditTheme"
+                        @input="updateTerminalColor(field.key, $event.target.value)"
+                      />
+                      <input
+                        :value="terminalAppearance[field.key]"
+                        type="text"
+                        class="text-input"
+                        :disabled="!canEditTheme"
+                        @input="updateTerminalColor(field.key, $event.target.value)"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <div class="field-copy">
+                      <div class="field-label">整行高亮</div>
+                      <div class="field-hint">当前命中所在行的弱高亮，支持 RGBA</div>
+                    </div>
+                    <div class="field-controls stacked-controls">
+                      <input
+                        :value="terminalAppearance.searchLineHighlightColor"
+                        type="text"
+                        class="text-input"
+                        :disabled="!canEditTheme"
+                        @input="updateTerminalColor('searchLineHighlightColor', $event.target.value)"
+                      />
+                      <div class="slider-inline">
+                        <span class="field-inline-label">透明度</span>
+                        <input
+                          class="slider-input"
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.01"
+                          :value="lineHighlight.a"
+                          :disabled="!canEditTheme"
+                          @input="updateLineHighlight({ ...lineHighlight, a: Number($event.target.value) })"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <section class="preview-card">
+              <div class="card-title">终端预览</div>
+              <div
+                class="terminal-preview"
+                :style="{
+                  backgroundColor: terminalAppearance.terminalBackground,
+                  color: terminalAppearance.terminalForeground,
+                  fontSize: `${fontSize}px`,
+                  fontWeight
+                }"
+              >
+                <span>RX: normal text</span>
+                <span
+                  class="mark"
+                  :style="{ color: terminalAppearance.searchMatchTextColor, boxShadow: `inset 0 -0.62em 0 ${terminalAppearance.searchMatchColor}` }"
+                >
+                  matched
+                </span>
+                <span
+                  class="mark current"
+                  :style="{ color: terminalAppearance.searchCurrentMatchTextColor, boxShadow: `inset 0 -0.68em 0 ${terminalAppearance.searchCurrentMatchColor}` }"
+                >
+                  current
                 </span>
               </div>
-              <div class="scheme-actions">
-                <button class="modal-btn secondary" :disabled="activeThemeSchemeId === scheme.mode" @click="applyAppearanceScheme(scheme.mode)">
-                  {{ activeThemeSchemeId === scheme.mode ? '当前使用中' : '应用' }}
-                </button>
-                <button class="modal-btn secondary" :disabled="!canCreateScheme" @click="createAppearanceScheme(scheme.mode)">基于此新建</button>
-                <button
-                  v-if="scheme.kind === 'custom'"
-                  class="modal-btn danger"
-                  :disabled="activeThemeSchemeId === scheme.mode"
-                  @click="removeAppearanceScheme(scheme.mode)"
-                >
-                  删除
-                </button>
+            </section>
+          </section>
+
+          <section v-else class="content-section">
+            <div class="section-head">
+              <div>
+                <div class="section-title">壁纸与透明度</div>
+                <div class="section-subtitle">壁纸不属于主题配色本身，但会和当前主题一起工作，所以放在同一套设置里统一管理。</div>
               </div>
             </div>
 
-            <div class="setting-card">
-              <div class="setting-info">
-                <label class="setting-label">新方案名称</label>
-                <span class="setting-hint">当前会基于已选中的方案创建一套新的可编辑方案</span>
+            <section class="editor-card">
+              <div class="card-title">桌面背景</div>
+              <div class="card-hint">{{ wallpaperPath || '还没有选择壁纸' }}</div>
+              <div class="section-actions">
+                <button class="ui-btn secondary" @click="pickWallpaper">{{ wallpaperPath ? '更换壁纸' : '选择壁纸' }}</button>
+                <button v-if="wallpaperPath" class="ui-btn secondary" @click="toggleWallpaper">{{ wallpaperEnabled ? '关闭壁纸' : '启用壁纸' }}</button>
+                <button v-if="wallpaperPath" class="ui-btn danger" @click="clearWallpaper">清除壁纸</button>
               </div>
-              <div class="setting-controls">
-                <input
-                  v-model="newPresetName"
-                  type="text"
-                  class="color-input"
-                  maxlength="30"
-                  placeholder="例如：浅蓝终端 / 低对比深色"
-                />
-                <button class="modal-btn primary" :disabled="!canCreateScheme" @click="createAppearanceScheme()">新建方案</button>
-              </div>
-            </div>
-          </div>
-          <div v-if="isBuiltInAppearanceMode" class="locked-hint">
-            当前使用的是内置方案。颜色、字号和字重不会直接写回内置方案；先“基于此新建”后再调。
-          </div>
-        </section>
+            </section>
 
-        <section v-if="activeSection === 'wallpaper'" class="settings-section">
-          <div class="section-heading">
-            <div class="section-title">壁纸与透明度</div>
-            <div class="section-subtitle">把壁纸开关和各区域透出强度集中到一个面板里调</div>
-          </div>
-          <div class="settings-grid">
-            <div class="setting-card">
-              <div class="setting-info">
-                <label class="setting-label">桌面背景</label>
-                <span class="setting-hint">{{ wallpaperPath || '还没有选择壁纸' }}</span>
+            <section class="editor-card">
+              <div class="card-title">透明度</div>
+              <div class="card-hint">数值越高越透明。你可以分别控制壁纸、侧栏、工作区和终端的透出程度。</div>
+              <div class="field-list">
+                <div v-for="field in transparencyFields" :key="field.key" class="field-row">
+                  <div class="field-copy">
+                    <div class="field-label">{{ field.label }}</div>
+                    <div class="field-hint">{{ field.hint }}</div>
+                  </div>
+                  <div class="field-controls slider-controls">
+                    <input
+                      class="slider-input"
+                      type="range"
+                      :min="field.min"
+                      :max="field.max"
+                      step="2"
+                      :value="transparencyPercentMap[field.key]"
+                      @input="updateTransparency(field, $event.target.value)"
+                    />
+                    <span class="slider-value">{{ transparencyPercentMap[field.key] }}%</span>
+                  </div>
+                </div>
               </div>
-              <div class="wallpaper-actions">
-                <button class="modal-btn secondary" @click="pickWallpaper">
-                  {{ wallpaperPath ? '更换壁纸' : '选择壁纸' }}
-                </button>
-                <button v-if="wallpaperPath" class="modal-btn secondary" @click="toggleWallpaper">
-                  {{ wallpaperEnabled ? '关闭壁纸' : '启用壁纸' }}
-                </button>
-                <button v-if="wallpaperPath" class="modal-btn danger" @click="clearWallpaper">清除壁纸</button>
-              </div>
-            </div>
-
-            <div class="setting-card">
-              <div class="setting-info">
-                <label class="setting-label">壁纸透明度</label>
-                <span class="setting-hint">数值越高越透明，壁纸会更淡一些</span>
-              </div>
-              <div class="slider-row">
-                <input
-                  class="slider-input"
-                  type="range"
-                  min="40"
-                  max="72"
-                  step="2"
-                  :value="wallpaperTransparencyPercent"
-                  @input="updateTransparencyField('wallpaperOpacity', $event.target.value, 0.28, 0.6)"
-                />
-                <span class="slider-value">{{ wallpaperTransparencyPercent }}%</span>
-              </div>
-            </div>
-
-            <div class="setting-card">
-              <div class="setting-info">
-                <label class="setting-label">侧栏透明度</label>
-                <span class="setting-hint">控制左侧串口栏与设置区的透出程度</span>
-              </div>
-              <div class="slider-row">
-                <input
-                  class="slider-input"
-                  type="range"
-                  min="18"
-                  max="96"
-                  step="2"
-                  :value="sidebarTransparencyPercent"
-                  @input="updateTransparencyField('sidebarOpacity', $event.target.value, 0.04, 0.82)"
-                />
-                <span class="slider-value">{{ sidebarTransparencyPercent }}%</span>
-              </div>
-            </div>
-
-            <div class="setting-card">
-              <div class="setting-info">
-                <label class="setting-label">工作区透明度</label>
-                <span class="setting-hint">控制标签区、pane 容器和主内容壳层</span>
-              </div>
-              <div class="slider-row">
-                <input
-                  class="slider-input"
-                  type="range"
-                  min="18"
-                  max="96"
-                  step="2"
-                  :value="workspaceTransparencyPercent"
-                  @input="updateTransparencyField('workspaceOpacity', $event.target.value, 0.04, 0.82)"
-                />
-                <span class="slider-value">{{ workspaceTransparencyPercent }}%</span>
-              </div>
-            </div>
-
-            <div class="setting-card">
-              <div class="setting-info">
-                <label class="setting-label">终端透明度</label>
-                <span class="setting-hint">控制终端正文区域和终端外框的透出程度</span>
-              </div>
-              <div class="slider-row">
-                <input
-                  class="slider-input"
-                  type="range"
-                  min="18"
-                  max="96"
-                  step="2"
-                  :value="terminalTransparencyPercent"
-                  @input="updateTransparencyField('terminalOpacity', $event.target.value, 0.04, 0.82)"
-                />
-                <span class="slider-value">{{ terminalTransparencyPercent }}%</span>
-              </div>
-            </div>
-
-          </div>
-        </section>
-
-        <section v-if="activeSection === 'app'" class="settings-section">
-          <div class="section-heading">
-            <div class="section-title">应用主题</div>
-            <div class="section-subtitle">先开放最核心的全局壳层颜色，覆盖侧栏、面板、菜单、文字和高亮语义色</div>
-          </div>
-          <div class="settings-grid">
-            <div v-for="field in appThemeFields" :key="field.key" class="setting-card">
-              <div class="setting-info">
-                <label class="setting-label">{{ field.label }}</label>
-                <span class="setting-hint">{{ field.hint }}</span>
-              </div>
-              <div class="setting-controls">
-                <input
-                  :value="colorInputValue(appTheme[field.key])"
-                  type="color"
-                  class="color-picker"
-                  :disabled="isBuiltInAppearanceMode"
-                  @input="updateAppThemeColor(field.key, $event.target.value)"
-                />
-                <input
-                  :value="appTheme[field.key]"
-                  type="text"
-                  class="color-input"
-                  :disabled="isBuiltInAppearanceMode"
-                  @input="updateAppThemeColor(field.key, $event.target.value)"
-                />
-              </div>
-            </div>
-          </div>
-          <div class="setting-actions">
-            <button class="modal-btn secondary" :disabled="isBuiltInAppearanceMode" @click="resetApplicationTheme">恢复应用主题默认值</button>
-          </div>
-          <div v-if="isBuiltInAppearanceMode" class="locked-hint">
-            当前使用的是内置整套主题方案。应用区域颜色和终端外观都会一起锁定；请先在“方案”页基于当前方案新建，再编辑。
-          </div>
-        </section>
-
-        <section v-if="activeSection === 'terminal'" class="settings-section">
-          <div class="section-heading">
-            <div class="section-title">基础</div>
-            <div class="section-subtitle">终端背景、文字、字号、字重和选区</div>
-          </div>
-          <div class="settings-grid">
-            <div class="setting-card">
-              <div class="setting-info">
-                <label class="setting-label">字体大小</label>
-                <span class="setting-hint">直接影响终端每行显示密度与整体可读性</span>
-              </div>
-              <div class="slider-row">
-                <input
-                  class="slider-input"
-                  type="range"
-                  min="10"
-                  max="24"
-                  step="1"
-                  :value="fontSize"
-                  :disabled="isBuiltInAppearanceMode"
-                  @input="updateFontSize($event.target.value)"
-                />
-                <span class="slider-value">{{ fontSize }}px</span>
-              </div>
-            </div>
-
-            <div class="setting-card">
-              <div class="setting-info">
-                <label class="setting-label">字体粗细</label>
-                <span class="setting-hint">让终端文字更轻或更扎实，便于搭配不同主题</span>
-              </div>
-              <div class="setting-controls">
-                <select class="color-input" :value="fontWeight" :disabled="isBuiltInAppearanceMode" @change="updateFontWeight($event.target.value)">
-                  <option value="300">300 细体</option>
-                  <option value="400">400 常规</option>
-                  <option value="500">500 中等</option>
-                  <option value="600">600 半粗</option>
-                  <option value="700">700 粗体</option>
-                </select>
-              </div>
-            </div>
-
-            <div v-for="field in baseColorFields" :key="field.key" class="setting-card">
-              <div class="setting-info">
-                <label class="setting-label">{{ field.label }}</label>
-                <span class="setting-hint">{{ field.hint }}</span>
-              </div>
-              <div class="setting-controls">
-                <input
-                  :value="colorInputValue(appearance[field.key])"
-                  type="color"
-                  class="color-picker"
-                  :disabled="isBuiltInAppearanceMode"
-                  @input="updateColor(field.key, $event.target.value)"
-                />
-                <input
-                  :value="appearance[field.key]"
-                  type="text"
-                  class="color-input"
-                  :disabled="isBuiltInAppearanceMode"
-                  @input="updateColor(field.key, $event.target.value)"
-                />
-              </div>
-            </div>
-          </div>
-          <div v-if="isBuiltInAppearanceMode" class="locked-hint">
-            当前处于内置方案浏览状态。要修改颜色、字号或字重，请先回到“方案”页基于它新建一套自定义方案。
-          </div>
-        </section>
-
-        <section v-if="activeSection === 'advanced'" class="settings-section">
-          <div class="section-heading">
-            <div class="section-title">搜索高亮</div>
-            <div class="section-subtitle">普通命中和当前命中的颜色组合</div>
-          </div>
-          <div class="settings-grid">
-            <div v-for="field in searchColorFields" :key="field.key" class="setting-card">
-              <div class="setting-info">
-                <label class="setting-label">{{ field.label }}</label>
-                <span class="setting-hint">{{ field.hint }}</span>
-              </div>
-              <div class="setting-controls">
-                <input
-                  :value="colorInputValue(appearance[field.key])"
-                  type="color"
-                  class="color-picker"
-                  :disabled="isBuiltInAppearanceMode"
-                  @input="updateColor(field.key, $event.target.value)"
-                />
-                <input
-                  :value="appearance[field.key]"
-                  type="text"
-                  class="color-input"
-                  :disabled="isBuiltInAppearanceMode"
-                  @input="updateColor(field.key, $event.target.value)"
-                />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <div v-if="activeSection === 'terminal' || activeSection === 'advanced'" class="preview-card">
-          <div class="preview-title">预览</div>
-          <div
-            class="preview-surface"
-            :style="{
-              backgroundColor: appearance.terminalBackground,
-              color: appearance.terminalForeground,
-              fontSize: `${fontSize}px`,
-              fontWeight
-            }"
-          >
-            <span class="preview-text">RX: normal text</span>
-            <span
-              class="preview-mark"
-              :style="{ color: appearance.searchMatchTextColor, boxShadow: `inset 0 -0.62em 0 ${appearance.searchMatchColor}` }"
-            >
-              matched
-            </span>
-            <span
-              class="preview-mark current"
-              :style="{ color: appearance.searchCurrentMatchTextColor, boxShadow: `inset 0 -0.68em 0 ${appearance.searchCurrentMatchColor}` }"
-            >
-              current
-            </span>
-          </div>
-        </div>
-
-        <section v-if="activeSection === 'advanced'" class="settings-section advanced-section">
-          <div class="setting-card line-highlight-card">
-            <div class="setting-info">
-              <label class="setting-label">当前匹配行高亮</label>
-              <span class="setting-hint">低频设置，支持 RGBA 自定义整行弱高亮</span>
-            </div>
-            <div class="line-grid">
-              <input
-                :value="appearance.searchLineHighlightColor"
-                type="text"
-                class="color-input line-input"
-                :disabled="isBuiltInAppearanceMode"
-                @input="serialStore.updateTerminalAppearance({ searchLineHighlightColor: $event.target.value })"
-              />
-              <label class="range-group">
-                <span>透明度</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  :value="lineHighlight.a"
-                  :disabled="isBuiltInAppearanceMode"
-                  @input="updateLineHighlight({ ...lineHighlight, a: Number($event.target.value) })"
-                />
-              </label>
-            </div>
-          </div>
-          <div v-if="isBuiltInAppearanceMode" class="locked-hint">
-            高级搜索高亮同样遵循方案锁定规则。内置方案只读，自定义方案可编辑。
-          </div>
-        </section>
+            </section>
+          </section>
+        </main>
       </div>
 
-      <div class="modal-footer">
-        <button class="modal-btn secondary" @click="resetDefaults">恢复默认</button>
-        <button class="modal-btn primary" @click="closeModal">完成</button>
-      </div>
+      <footer class="window-footer">
+        <button class="ui-btn secondary" @click="resetTheme">恢复主题默认值</button>
+        <button class="ui-btn primary" @click="closeModal">完成</button>
+      </footer>
     </div>
   </div>
 </template>
@@ -715,26 +661,13 @@ const resetApplicationTheme = () => {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: transparent;
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
   padding: 72px 20px 20px;
+  background: transparent;
   z-index: 1100;
   pointer-events: none;
-}
-
-.modal {
-  width: min(560px, calc(100vw - 40px));
-  max-height: calc(100vh - 92px);
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(160deg, var(--app-modal-bg), var(--app-modal-soft));
-  border: 1px solid var(--app-modal-border);
-  border-radius: 18px;
-  box-shadow: var(--app-shadow-lg);
-  backdrop-filter: blur(18px);
-  pointer-events: auto;
 }
 
 .modal-overlay.standalone {
@@ -746,211 +679,300 @@ const resetApplicationTheme = () => {
   pointer-events: auto;
 }
 
-.modal-overlay.standalone .modal {
+.theme-window {
+  width: min(980px, calc(100vw - 40px));
+  max-height: calc(100vh - 92px);
+  display: flex;
+  flex-direction: column;
+  background: var(--app-workspace-base);
+  border: 1px solid var(--app-border);
+  border-radius: 22px;
+  box-shadow: var(--app-shadow-lg);
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+}
+
+.modal-overlay.standalone .theme-window {
   width: 100%;
   height: 100vh;
   max-height: 100vh;
-  min-height: 0;
-  border-radius: 0;
   border: none;
+  border-radius: 0;
   box-shadow: none;
 }
 
-.modal-header,
-.modal-footer {
+.window-header,
+.window-footer {
   padding: 20px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
 }
 
-.modal-header { border-bottom: 1px solid var(--app-border); }
+.window-header {
+  border-bottom: 1px solid var(--app-border);
+}
 
-.modal-footer {
+.window-footer {
   border-top: 1px solid var(--app-border);
-  gap: 12px;
   justify-content: flex-end;
 }
 
-.modal-title {
+.window-copy {
+  min-width: 0;
+}
+
+.window-title {
   font-size: 18px;
   font-weight: 700;
   color: var(--app-text);
 }
 
-.modal-subtitle {
+.window-subtitle {
   margin-top: 6px;
   font-size: 12px;
+  line-height: 1.6;
   color: var(--app-text-soft);
 }
 
-.modal-close {
-  width: 34px;
-  height: 34px;
-  border: none;
+.close-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--app-border);
   border-radius: 10px;
-  background: var(--app-chip-bg);
+  background: var(--app-workspace-shell);
   color: var(--app-text);
   cursor: pointer;
 }
 
-.modal-body {
+.window-body {
   flex: 1;
   min-height: 0;
-  padding: 24px;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
 }
 
-.settings-section {
+.sidebar,
+.content {
+  min-height: 0;
+  overflow: auto;
+}
+
+.sidebar {
+  padding: 18px 14px;
+  border-right: 1px solid var(--app-border);
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: color-mix(in srgb, var(--app-workspace-shell) 92%, transparent);
 }
 
-.hero-section {
+.content {
+  padding: 18px 22px 22px;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
 }
 
-.hero-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px;
-  border-radius: 16px;
-  background: linear-gradient(160deg, var(--app-accent-soft), var(--app-chip-bg));
-  border: 1px solid var(--app-chip-border);
+.sidebar-card,
+.editor-card,
+.preview-card,
+.scheme-card,
+.notice-card,
+.toolbar-card {
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-workspace-soft);
 }
 
-.hero-copy {
-  min-width: 0;
+.sidebar-card {
+  padding: 12px;
 }
 
-.hero-label {
+.sidebar-title {
+  padding: 4px 6px 2px;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--app-chip-text);
-}
-
-.hero-title {
-  margin-top: 6px;
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--app-text);
-}
-
-.hero-meta {
-  margin-top: 6px;
-  font-size: 12px;
   color: var(--app-text-soft);
 }
 
-.hero-actions {
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--app-text-soft);
+}
+
+.nav-card {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.action-feedback {
-  padding: 10px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  line-height: 1.5;
+.nav-btn {
+  min-height: 38px;
+  padding: 0 12px;
   border: 1px solid transparent;
-}
-
-.action-feedback.info {
-  background: var(--app-accent-soft);
-  border-color: var(--app-chip-border);
-  color: var(--app-chip-text);
-}
-
-.action-feedback.success {
-  background: var(--app-success-soft);
-  border-color: var(--app-success-border);
-  color: var(--app-success-text);
-}
-
-.action-feedback.error {
-  background: var(--app-danger-soft);
-  border-color: var(--app-danger-border);
-  color: var(--app-danger-text);
-}
-
-.section-tabs {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.section-tab {
-  height: 40px;
-  border: 1px solid var(--app-border);
-  border-radius: 12px;
-  background: var(--app-chip-bg);
+  border-radius: 10px;
+  background: transparent;
   color: var(--app-text);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
+  text-align: left;
   cursor: pointer;
   transition: all 0.18s ease;
 }
 
-.section-tab:hover { background: var(--app-accent-soft); }
-
-.section-tab:active {
-  transform: translateY(1px) scale(0.985);
-  background: var(--app-accent-strong);
+.nav-btn:hover {
+  background: var(--app-workspace-soft);
+  border-color: var(--app-border);
 }
 
-.section-tab.active {
-  background: var(--app-accent-strong);
+.nav-btn.active {
+  background: var(--app-accent-soft);
   border-color: var(--app-chip-border);
-  color: var(--app-text);
 }
 
-.section-heading {
+.sidebar-status-card {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.section-title {
+.sidebar-theme-name {
   font-size: 14px;
   font-weight: 700;
   color: var(--app-text);
 }
 
-.section-subtitle {
+.sidebar-theme-meta {
   font-size: 12px;
   color: var(--app-text-soft);
 }
 
-.settings-grid {
-  display: grid;
-  grid-template-columns: 1fr;
+.toolbar-card {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.toolbar-copy {
+  min-width: 0;
+}
+
+.toolbar-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--app-text);
+}
+
+.toolbar-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--app-text-soft);
+}
+
+.toolbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.toolbar-theme-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--app-text);
+}
+
+.toolbar-badge {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--app-accent-soft);
+  color: var(--app-chip-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.feedback-card {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.feedback-card.info {
+  background: var(--app-accent-soft);
+  color: var(--app-chip-text);
+}
+
+.feedback-card.success {
+  background: var(--app-success-soft);
+  color: var(--app-success-text);
+  border-color: var(--app-success-border);
+}
+
+.feedback-card.error {
+  background: var(--app-danger-soft);
+  color: var(--app-danger-text);
+  border-color: var(--app-danger-border);
+}
+
+.content-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--app-text);
+}
+
+.section-subtitle {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--app-text-soft);
+}
+
+.section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.scheme-list,
+.group-list {
+  display: flex;
+  flex-direction: column;
   gap: 14px;
 }
 
-.setting-card,
-.preview-card {
+.scheme-card,
+.editor-card,
+.preview-card,
+.notice-card {
   padding: 16px;
-  border-radius: 14px;
-  background: var(--app-workspace-shell);
-  border: 1px solid var(--app-border);
 }
 
 .scheme-card.active {
   border-color: var(--app-chip-border);
-  box-shadow: inset 0 0 0 1px var(--app-accent-soft);
-}
-
-.setting-info {
-  margin-bottom: 12px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent) 12%, transparent);
 }
 
 .scheme-card-head {
@@ -958,61 +980,132 @@ const resetApplicationTheme = () => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
 }
 
-.scheme-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 8px;
+.scheme-name,
+.card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--app-text);
+}
+
+.scheme-description,
+.card-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--app-text-soft);
+}
+
+.scheme-kind {
+  padding: 4px 10px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.04em;
 }
 
-.scheme-badge.built-in {
+.scheme-kind.built-in {
   background: var(--app-warning-soft);
   color: var(--app-warning-text);
 }
 
-.scheme-badge.custom {
+.scheme-kind.custom {
   background: var(--app-accent-soft);
   color: var(--app-chip-text);
 }
 
 .scheme-actions {
+  margin-top: 14px;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
-.wallpaper-actions {
+.inline-form {
+  margin-top: 14px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
 }
 
-.locked-hint {
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--app-warning-soft);
-  border: 1px solid var(--app-warning-border);
-  color: var(--app-warning-text);
+.field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: 16px;
+  align-items: center;
+}
+
+.field-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text);
+}
+
+.field-hint {
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.5;
+  color: var(--app-text-soft);
 }
 
-.setting-actions {
+.field-controls {
   display: flex;
-  justify-content: flex-start;
+  gap: 10px;
+  align-items: center;
 }
 
-.slider-row {
+.stacked-controls {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.slider-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  width: 100%;
+}
+
+.slider-inline {
+  display: flex;
   align-items: center;
+  gap: 10px;
+}
+
+.field-inline-label {
+  min-width: 40px;
+  font-size: 12px;
+  color: var(--app-text-soft);
+}
+
+.text-input {
+  flex: 1;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-workspace-shell);
+  color: var(--app-text);
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.color-picker {
+  width: 44px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
 }
 
 .slider-input {
@@ -1027,178 +1120,182 @@ const resetApplicationTheme = () => {
   color: var(--app-text);
 }
 
-.setting-label {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--app-text);
-}
-
-.setting-hint {
-  display: block;
-  margin-top: 4px;
+.notice-card {
+  background: var(--app-warning-soft);
+  border-color: var(--app-warning-border);
+  color: var(--app-warning-text);
   font-size: 12px;
-  color: var(--app-text-soft);
+  line-height: 1.6;
 }
 
-.setting-controls {
-  display: flex;
-  gap: 10px;
-  align-items: center;
+.section-block-head {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--app-border);
 }
 
-.color-picker {
-  width: 44px;
-  height: 36px;
-  border: none;
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
+.app-preview {
+  margin-top: 14px;
+  border: 1px solid;
+  border-radius: 16px;
+  overflow: hidden;
 }
 
-.color-input {
-  flex: 1;
-  height: 38px;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid var(--app-border);
-  background: var(--app-workspace-soft);
-  color: var(--app-text);
-  font-family: Consolas, "Courier New", monospace;
-}
-
-.preview-title {
+.app-preview-header,
+.app-preview-status {
+  padding: 12px 14px;
+  border-bottom: 1px solid;
   font-size: 13px;
-  font-weight: 600;
-  color: var(--app-text);
-  margin-bottom: 12px;
+  font-weight: 700;
 }
 
-.preview-surface {
-  border-radius: 12px;
+.app-preview-status {
+  border-bottom: none;
+  border-top: 1px solid;
+  font-weight: 600;
+}
+
+.app-preview-body {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+}
+
+.app-preview-sidebar,
+.app-preview-main {
+  min-height: 150px;
+  padding: 16px;
+  border-right: 1px solid;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app-preview-main {
+  border-right: none;
+}
+
+.preview-title-text {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.preview-note-text {
+  font-size: 12px;
+}
+
+.preview-pill {
+  align-self: flex-start;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.terminal-preview {
+  margin-top: 14px;
+  border-radius: 14px;
   padding: 18px 16px;
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 14px;
   display: flex;
   gap: 16px;
   align-items: center;
   flex-wrap: wrap;
+  font-family: Consolas, "Courier New", monospace;
 }
 
-.preview-mark {
-  background: transparent;
-  border-radius: 0.08em;
+.mark {
   padding: 0 0.08em;
+  border-radius: 0.08em;
 }
 
-.preview-mark.current {
+.mark.current {
   border-radius: 0.1em;
 }
 
-.advanced-toggle {
-  align-self: flex-start;
-  padding: 7px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--app-border);
-  background: var(--app-chip-bg);
-  color: var(--app-text);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.advanced-toggle:hover {
-  background: var(--app-accent-soft);
-}
-
-.line-grid {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.line-input {
-  min-width: 280px;
-}
-
-.range-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--app-text-soft);
-  font-size: 12px;
-}
-
-.modal-btn {
+.ui-btn {
   height: 40px;
-  padding: 0 18px;
-  border-radius: 10px;
+  padding: 0 16px;
+  border-radius: 12px;
   border: 1px solid transparent;
   cursor: pointer;
   font-weight: 600;
   transition: transform 0.12s ease, filter 0.12s ease, background-color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
 }
 
-.modal-btn:disabled {
+.ui-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.modal-btn.secondary {
-  background: var(--app-chip-bg);
+.ui-btn.secondary {
+  background: var(--app-workspace-shell);
   border-color: var(--app-border);
   color: var(--app-text);
 }
 
-.modal-btn.secondary:hover:not(:disabled) {
-  background: var(--app-accent-soft);
+.ui-btn.secondary:hover:not(:disabled) {
+  background: var(--app-chip-bg);
   border-color: var(--app-chip-border);
-  color: var(--app-text);
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--app-accent) 18%, transparent);
 }
 
-.modal-btn.danger {
+.ui-btn.primary {
+  background: var(--app-accent);
+  border-color: var(--app-chip-border);
+  color: var(--app-modal-bg);
+}
+
+.ui-btn.danger {
   background: var(--app-danger-soft);
   border-color: var(--app-danger-border);
   color: var(--app-danger-text);
 }
 
-.modal-btn.primary {
-  background: linear-gradient(135deg, var(--app-accent) 0%, color-mix(in srgb, var(--app-accent) 70%, #f59e0b) 100%);
-  color: var(--app-text);
+.ui-btn.primary:hover:not(:disabled),
+.ui-btn.danger:hover:not(:disabled) {
+  filter: brightness(1.03);
 }
 
-.modal-btn.primary:hover:not(:disabled),
-.modal-btn.danger:hover:not(:disabled) {
-  filter: brightness(1.06);
-}
-
-.modal-btn.secondary:active:not(:disabled),
-.modal-btn.primary:active:not(:disabled),
-.modal-btn.danger:active:not(:disabled) {
+.ui-btn:active:not(:disabled) {
   transform: translateY(1px) scale(0.985);
   filter: brightness(0.96);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 760px) {
   .modal-overlay {
     justify-content: center;
     padding: 20px;
   }
 
-  .modal {
-    width: min(560px, calc(100vw - 24px));
-    max-height: min(90vh, 900px);
+  .theme-window {
+    width: min(680px, calc(100vw - 24px));
+    max-height: min(92vh, 960px);
   }
 
-  .hero-card {
+  .window-body {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--app-border);
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-form,
+  .section-head,
+  .toolbar-card {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
   }
 
-  .section-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .app-preview-body {
+    grid-template-columns: 1fr;
+  }
+
+  .app-preview-sidebar {
+    border-right: none;
+    border-bottom: 1px solid;
   }
 }
 </style>
