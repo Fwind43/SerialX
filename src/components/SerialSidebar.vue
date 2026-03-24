@@ -163,8 +163,8 @@ const settingsSummary = computed(() => {
   height: 100%;
   overflow: hidden;
   background:
-    radial-gradient(circle at top right, rgba(87, 199, 255, 0.12), transparent 26%),
-    linear-gradient(180deg, rgba(14, 25, 35, 0.96), rgba(9, 18, 25, 0.98));
+    radial-gradient(circle at top right, var(--app-accent-soft), transparent 26%),
+    linear-gradient(180deg, var(--app-sidebar-shell), var(--app-sidebar-base));
 }
 
 .sidebar-title {
@@ -172,7 +172,7 @@ const settingsSummary = computed(() => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px 8px;
-  border-bottom: 1px solid rgba(132, 169, 193, 0.12);
+  border-bottom: 1px solid var(--app-border);
 }
 
 .title-copy {
@@ -185,13 +185,13 @@ const settingsSummary = computed(() => {
   font-size: 9px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #88a8bd;
+  color: var(--app-text-soft);
 }
 
 .title-text {
   font-size: 15px;
   font-weight: 600;
-  color: #f4fbff;
+  color: var(--app-text);
 }
 
 .section-header {
@@ -202,13 +202,11 @@ const settingsSummary = computed(() => {
   padding: 8px 12px;
   font-size: 11px;
   font-weight: 600;
-  color: #93acbf;
+  color: var(--app-text-soft);
   letter-spacing: 0.08em;
 }
 
-.section-meta {
-  color: #6f889a;
-}
+.section-meta { color: var(--app-text-soft); }
 
 .ports-section {
   flex: 1;
@@ -217,25 +215,23 @@ const settingsSummary = computed(() => {
   flex-direction: column;
   margin: 8px 10px 10px;
   border-radius: 12px;
-  border: 1px solid rgba(132, 169, 193, 0.08);
-  background: rgba(8, 17, 24, 0.42);
+  border: 1px solid var(--app-border);
+  background: var(--app-sidebar-soft);
 }
 
 .refresh-btn {
   margin-left: auto;
   padding: 4px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(126, 161, 183, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-  color: #a9c0d0;
+  border: 1px solid var(--app-border);
+  background: var(--app-chip-bg);
+  color: var(--app-chip-text);
   cursor: pointer;
   transition: all 0.18s ease;
   font-size: 11px;
 }
 
-.refresh-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
+.refresh-btn:hover { background: var(--app-accent-soft); }
 
 .ports-list {
   flex: 1;
@@ -251,7 +247,7 @@ const settingsSummary = computed(() => {
 }
 
 .ports-list::-webkit-scrollbar-thumb {
-  background: rgba(126, 161, 183, 0.22);
+  background: var(--app-border);
   border-radius: 999px;
 }
 
@@ -262,7 +258,7 @@ const settingsSummary = computed(() => {
   gap: 10px;
   padding: 28px 12px;
   text-align: center;
-  color: #7f99ac;
+  color: var(--app-text-soft);
   font-size: 13px;
 }
 
@@ -273,8 +269,8 @@ const settingsSummary = computed(() => {
   align-items: center;
   justify-content: center;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #b5c8d5;
+  background: var(--app-chip-bg);
+  color: var(--app-chip-text);
 }
 
 .port-item {
@@ -290,13 +286,13 @@ const settingsSummary = computed(() => {
 }
 
 .port-item:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.04);
+  background: var(--app-chip-bg);
+  border-color: var(--app-chip-border);
 }
 
 .port-item.selected {
-  background: rgba(87, 199, 255, 0.08);
-  border-color: rgba(87, 199, 255, 0.18);
+  background: var(--app-accent-soft);
+  border-color: var(--app-chip-border);
 }
 
 .port-item.selected::before {
@@ -307,21 +303,21 @@ const settingsSummary = computed(() => {
   bottom: 7px;
   width: 3px;
   border-radius: 999px;
-  background: #57c7ff;
+  background: var(--app-accent);
 }
 
 .port-icon {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #5d7586;
-  box-shadow: 0 0 0 5px rgba(93, 117, 134, 0.14);
+  background: var(--app-text-soft);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--app-text-soft) 18%, transparent);
   flex-shrink: 0;
 }
 
 .port-icon.active {
-  background: #52d7a6;
-  box-shadow: 0 0 0 5px rgba(82, 215, 166, 0.14);
+  background: var(--app-success);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--app-success) 18%, transparent);
 }
 
 .port-copy {
@@ -335,12 +331,12 @@ const settingsSummary = computed(() => {
 .port-path {
   font-size: 13px;
   font-weight: 700;
-  color: #dfeaf2;
+  color: var(--app-text);
 }
 
 .port-meta {
   font-size: 11px;
-  color: #8099ab;
+  color: var(--app-text-soft);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -354,27 +350,16 @@ const settingsSummary = computed(() => {
   text-overflow: ellipsis;
 }
 
-.port-notice.error {
-  color: #ffb8b1;
-}
-
-.port-notice.warning {
-  color: #ffd18a;
-}
-
-.port-notice.success {
-  color: #99f0c8;
-}
-
-.port-notice.info {
-  color: #8ccdf3;
-}
+.port-notice.error { color: var(--app-danger-text); }
+.port-notice.warning { color: var(--app-warning-text); }
+.port-notice.success { color: var(--app-success-text); }
+.port-notice.info { color: var(--app-chip-text); }
 
 .port-status-connected {
   padding: 3px 6px;
   border-radius: 999px;
-  background: rgba(82, 215, 166, 0.12);
-  color: #8df4ca;
+  background: var(--app-success-soft);
+  color: var(--app-success-text);
   font-size: 10px;
   font-weight: 600;
 }
@@ -383,35 +368,31 @@ const settingsSummary = computed(() => {
   flex-shrink: 0;
   padding: 4px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(87, 199, 255, 0.16);
-  background: rgba(87, 199, 255, 0.08);
-  color: #bfe9ff;
+  border: 1px solid var(--app-chip-border);
+  background: var(--app-accent-soft);
+  color: var(--app-chip-text);
   font-size: 10px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.18s ease;
 }
 
-.port-action-btn:hover {
-  background: rgba(87, 199, 255, 0.16);
-}
+.port-action-btn:hover { background: var(--app-accent-strong); }
 
 .port-action-btn.disconnect {
-  border-color: rgba(196, 43, 28, 0.16);
-  background: rgba(196, 43, 28, 0.08);
-  color: #ffccc6;
+  border-color: var(--app-danger-border);
+  background: var(--app-danger-soft);
+  color: var(--app-danger-text);
 }
 
-.port-action-btn.disconnect:hover {
-  background: rgba(196, 43, 28, 0.16);
-}
+.port-action-btn.disconnect:hover { background: color-mix(in srgb, var(--app-danger) 18%, transparent); }
 
 .settings-section {
   margin: 0 10px 10px;
   padding: 2px 0 0;
   border-radius: 12px;
-  border: 1px solid rgba(132, 169, 193, 0.08);
-  background: rgba(8, 17, 24, 0.38);
+  border: 1px solid var(--app-border);
+  background: var(--app-sidebar-soft);
 }
 
 .settings-header {
@@ -428,23 +409,21 @@ const settingsSummary = computed(() => {
 .settings-summary {
   font-size: 10px;
   letter-spacing: normal;
-  color: #6f889a;
+  color: var(--app-text-soft);
 }
 
 .settings-toggle {
   padding: 3px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(126, 161, 183, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-  color: #a9c0d0;
+  border: 1px solid var(--app-border);
+  background: var(--app-chip-bg);
+  color: var(--app-text);
   font-size: 10px;
   cursor: pointer;
   transition: all 0.18s ease;
 }
 
-.settings-toggle:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
+.settings-toggle:hover { background: var(--app-accent-soft); }
 
 .settings-grid {
   display: grid;
@@ -461,40 +440,40 @@ const settingsSummary = computed(() => {
 
 .setting-item label {
   font-size: 10px;
-  color: #8ea6b8;
+  color: var(--app-text-soft);
   letter-spacing: 0.08em;
 }
 
 .setting-select {
   padding: 7px 9px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(132, 169, 193, 0.1);
+  background: var(--app-workspace-soft);
+  border: 1px solid var(--app-border);
   color-scheme: dark;
-  color: #dbe8f1;
+  color: var(--app-text);
   border-radius: 9px;
   font-size: 11px;
   cursor: pointer;
 }
 
 .setting-select option {
-  background-color: #0f1922;
-  color: #e7f3fb;
+  background-color: var(--app-modal-bg);
+  color: var(--app-text);
 }
 
 .setting-select option:checked,
 .setting-select option:hover {
-  background-color: #173449;
-  color: #ffffff;
+  background-color: var(--app-accent-soft);
+  color: var(--app-text);
 }
 
 .setting-select:focus {
   outline: none;
-  border-color: rgba(87, 199, 255, 0.28);
-  box-shadow: 0 0 0 3px rgba(87, 199, 255, 0.12);
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 18%, transparent);
 }
 
 .theme-light.sidebar-container {
-  background: #ffffff;
+  background: var(--app-sidebar-base, var(--app-surface-base, #ffffff));
 }
 
 .theme-light .sidebar-title,
@@ -519,14 +498,14 @@ const settingsSummary = computed(() => {
 
 .theme-light .ports-section,
 .theme-light .settings-section {
-  background: #ffffff;
+  background: var(--app-sidebar-soft, var(--app-surface-soft, #ffffff));
 }
 
 .theme-light .refresh-btn,
 .theme-light .settings-toggle,
 .theme-light .setting-select,
 .theme-light .port-action-btn {
-  background: #ffffff;
+  background: var(--app-sidebar-soft, var(--app-surface-soft, #ffffff));
   border-color: rgba(0, 102, 153, 0.12);
   color: #1f2328;
 }
@@ -543,8 +522,8 @@ const settingsSummary = computed(() => {
 }
 
 .theme-light .port-icon {
-  background: #5c6b77;
-  box-shadow: 0 0 0 5px rgba(92, 107, 119, 0.12);
+  background: var(--app-text-soft);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--app-text-soft) 16%, transparent);
 }
 
 .theme-light .port-status-connected {
@@ -569,19 +548,19 @@ const settingsSummary = computed(() => {
 
 .theme-light .setting-select {
   color-scheme: light;
-  color: #1f2328;
-  background: #ffffff;
+  color: var(--app-text);
+  background: var(--app-workspace-soft);
 }
 
 .theme-light .setting-select option {
-  background-color: #ffffff;
-  color: #1f2328;
+  background-color: var(--app-modal-bg);
+  color: var(--app-text);
 }
 
 .theme-light .setting-select option:checked,
 .theme-light .setting-select option:hover {
-  background-color: #e8f3ff;
-  color: #1f2328;
+  background-color: var(--app-accent-soft);
+  color: var(--app-text);
 }
 
 .theme-light .ports-list::-webkit-scrollbar-thumb {

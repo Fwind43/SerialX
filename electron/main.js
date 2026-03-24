@@ -206,6 +206,36 @@ async function selectWallpaperFile() {
   }
 }
 
+function getMimeTypeFromFilePath(filePath) {
+  const ext = path.extname(filePath || '').toLowerCase()
+  const mimeMap = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.bmp': 'image/bmp'
+  }
+
+  return mimeMap[ext] || 'application/octet-stream'
+}
+
+async function readWallpaperDataUrl(filePath) {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) {
+      return { success: false, error: 'Wallpaper file not found' }
+    }
+
+    const data = fs.readFileSync(filePath)
+    return {
+      success: true,
+      dataUrl: `data:${getMimeTypeFromFilePath(filePath)};base64,${data.toString('base64')}`
+    }
+  } catch (error) {
+    safeErrorLog('[Wallpaper] Error reading wallpaper:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 // 通过注册表获取串口列表（兼容 com0com 等虚拟串口）
 function getPortsFromRegistry() {
   try {
@@ -463,7 +493,9 @@ class SerialManager {
 
 let mainWindow = null
 let converterWindow = null
+let appearanceWindow = null
 let serialManager = null
+let latestUiStateSnapshot = null
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -539,6 +571,69 @@ function createConverterWindow() {
   return converterWindow
 }
 
+function loadWindowRoute(targetWindow, hashRoute = '') {
+  if (process.env.NODE_ENV === 'development') {
+    const baseUrl = process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173'
+    const route = hashRoute ? `/#${hashRoute}` : ''
+    targetWindow.loadURL(`${baseUrl}${route}`)
+  } else {
+    targetWindow.loadFile(path.join(__dirname, '../out/renderer/index.html'), {
+      hash: hashRoute || undefined
+    })
+  }
+}
+
+function sendUiStateSnapshot(targetWindow, snapshot) {
+  if (!targetWindow || targetWindow.isDestroyed() || !snapshot) return
+  targetWindow.webContents.send('ui-state:update', snapshot)
+}
+
+function broadcastUiStateSnapshot(snapshot, sender = null) {
+  latestUiStateSnapshot = snapshot
+  const windows = [mainWindow, appearanceWindow]
+
+  windows.forEach((targetWindow) => {
+    if (!targetWindow || targetWindow.isDestroyed()) return
+    if (sender && targetWindow.webContents.id === sender.id) return
+    targetWindow.webContents.send('ui-state:update', snapshot)
+  })
+}
+
+function createAppearanceWindow() {
+  if (appearanceWindow && !appearanceWindow.isDestroyed()) {
+    appearanceWindow.focus()
+    return appearanceWindow
+  }
+
+  appearanceWindow = new BrowserWindow({
+    width: 620,
+    height: 900,
+    minWidth: 460,
+    minHeight: 620,
+    autoHideMenuBar: true,
+    title: 'SerialX 外观设置',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  loadWindowRoute(appearanceWindow, '/appearance')
+
+  appearanceWindow.webContents.on('did-finish-load', () => {
+    if (latestUiStateSnapshot) {
+      sendUiStateSnapshot(appearanceWindow, latestUiStateSnapshot)
+    }
+  })
+
+  appearanceWindow.on('closed', () => {
+    appearanceWindow = null
+  })
+
+  return appearanceWindow
+}
+
 app.whenReady().then(() => {
   serialManager = new SerialManager()
   createWindow()
@@ -577,6 +672,10 @@ app.whenReady().then(() => {
   // 打开进制转换工具窗口
   ipcMain.on('window:open-converter', () => {
     createConverterWindow()
+  })
+
+  ipcMain.on('window:open-appearance', () => {
+    createAppearanceWindow()
   })
 
   // 窗口控制
@@ -641,6 +740,19 @@ app.whenReady().then(() => {
 
   ipcMain.handle('wallpaper:select', async () => {
     return selectWallpaperFile()
+  })
+
+  ipcMain.handle('wallpaper:read-data-url', async (event, filePath) => {
+    return readWallpaperDataUrl(filePath)
+  })
+
+  ipcMain.handle('ui-state:get-latest', async () => {
+    return latestUiStateSnapshot
+  })
+
+  ipcMain.on('ui-state:push', (event, snapshot) => {
+    if (!snapshot || typeof snapshot !== 'object') return
+    broadcastUiStateSnapshot(snapshot, event.sender)
   })
 })
 

@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, computed, ref, onUnmounted } from 'vue'
+import { onMounted, computed, ref, onUnmounted, watch } from 'vue'
 import { useSerialStore } from './stores/serial'
 import SerialSidebar from './components/SerialSidebar.vue'
 import TerminalView from './components/TerminalView.vue'
@@ -11,12 +11,12 @@ import AppearanceSettingsModal from './components/AppearanceSettingsModal.vue'
 const serialStore = useSerialStore()
 
 const isConverterMode = computed(() => window.location.hash === '#/converter')
+const isAppearanceMode = computed(() => window.location.hash === '#/appearance')
 
 const showToolsMenu = ref(false)
 const showSettingsMenu = ref(false)
 const showCommandsModal = ref(false)
 const showCommandPalette = ref(false)
-const showAppearanceSettingsModal = ref(false)
 const isMaximized = ref(false)
 const settingsToast = ref({
   visible: false,
@@ -27,6 +27,7 @@ const settingsToast = ref({
 const showResetConfirm = ref(false)
 
 const appUiState = computed(() => serialStore.appUiState || {})
+const appTheme = computed(() => serialStore.appTheme || {})
 const isSidebarCollapsed = computed({
   get: () => appUiState.value.sidebarCollapsed ?? false,
   set: (value) => {
@@ -39,8 +40,42 @@ const wallpaperPath = computed(() => appUiState.value.wallpaperPath || '')
 const wallpaperEnabled = computed(() => Boolean(appUiState.value.wallpaperEnabled && wallpaperPath.value))
 const wallpaperOpacity = computed(() => {
   const value = Number(appUiState.value.wallpaperOpacity ?? 0.22)
-  return Number.isFinite(value) ? Math.min(0.45, Math.max(0.08, value)) : 0.22
+  return Number.isFinite(value) ? Math.min(0.6, Math.max(0.28, value)) : 0.36
 })
+const sidebarOpacity = computed(() => {
+  const value = Number(appUiState.value.sidebarOpacity ?? 0.42)
+  return Number.isFinite(value) ? Math.min(0.82, Math.max(0.04, value)) : 0.42
+})
+const workspaceOpacity = computed(() => {
+  const value = Number(appUiState.value.workspaceOpacity ?? 0.42)
+  return Number.isFinite(value) ? Math.min(0.82, Math.max(0.04, value)) : 0.42
+})
+const terminalOpacity = computed(() => {
+  const value = Number(appUiState.value.terminalOpacity ?? 0.34)
+  return Number.isFinite(value) ? Math.min(0.82, Math.max(0.04, value)) : 0.34
+})
+const wallpaperDataUrl = ref('')
+
+const hexToRgb = (color, fallback = { r: 255, g: 255, b: 255 }) => {
+  if (typeof color !== 'string') return fallback
+  const normalized = color.trim().replace('#', '')
+  const hex = normalized.length === 3
+    ? normalized.split('').map((char) => `${char}${char}`).join('')
+    : normalized
+
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return fallback
+
+  return {
+    r: Number.parseInt(hex.slice(0, 2), 16),
+    g: Number.parseInt(hex.slice(2, 4), 16),
+    b: Number.parseInt(hex.slice(4, 6), 16)
+  }
+}
+
+const rgbaFromHex = (color, alpha, fallback) => {
+  const { r, g, b } = hexToRgb(color, fallback)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
 
 let settingsToastTimer = null
 
@@ -109,53 +144,14 @@ const setThemeMode = (mode) => {
   showSettingsMessage(`已切换到${mode === 'dark' ? '深色' : '浅色'}模式`, 'success', '主题已更新')
 }
 
-const toFileUrl = (filePath) => {
-  if (!filePath) return ''
-  const normalized = filePath.replace(/\\/g, '/')
-  return encodeURI(`file:///${normalized.replace(/^([A-Za-z]):/, '$1:')}`)
-}
-
-const pickWallpaper = async () => {
-  showSettingsMenu.value = false
-  const result = await window.electronAPI?.selectWallpaper()
-  if (!result || result.canceled) return
-
-  if (!result.success) {
-    showSettingsMessage(`选择壁纸失败\n${result.error || '未知错误'}`, 'error', '壁纸未更新')
-    return
-  }
-
-  serialStore.updateAppUiState({
-    wallpaperEnabled: true,
-    wallpaperPath: result.filePath
-  })
-  showSettingsMessage(`已应用壁纸\n${result.filePath}`, 'success', '桌面背景已更新')
-}
-
-const toggleWallpaper = () => {
+const syncWallpaperDataUrl = async () => {
   if (!wallpaperPath.value) {
-    pickWallpaper()
+    wallpaperDataUrl.value = ''
     return
   }
 
-  serialStore.updateAppUiState({
-    wallpaperEnabled: !wallpaperEnabled.value
-  })
-  showSettingsMenu.value = false
-  showSettingsMessage(
-    wallpaperEnabled.value ? '已关闭自定义壁纸。' : '已启用自定义壁纸。',
-    'success',
-    wallpaperEnabled.value ? '壁纸已关闭' : '壁纸已启用'
-  )
-}
-
-const clearWallpaper = () => {
-  serialStore.updateAppUiState({
-    wallpaperEnabled: false,
-    wallpaperPath: ''
-  })
-  showSettingsMenu.value = false
-  showSettingsMessage('已清除当前自定义壁纸。', 'success', '壁纸已清除')
+  const result = await window.electronAPI?.readWallpaperDataUrl?.(wallpaperPath.value)
+  wallpaperDataUrl.value = result?.success ? result.dataUrl : ''
 }
 
 const formatImportedSettingsSummary = (result) => {
@@ -220,8 +216,12 @@ const openCommandsConfig = () => {
 }
 
 const openAppearanceSettings = () => {
-  showAppearanceSettingsModal.value = true
   showSettingsMenu.value = false
+  window.electronAPI?.openAppearanceWindow?.()
+}
+
+const closeAppearanceWindow = () => {
+  window.electronAPI?.closeWindow?.()
 }
 
 const exportSettings = async () => {
@@ -319,66 +319,163 @@ const handleClickOutside = (event) => {
 }
 
 const rootThemeVars = computed(() => {
-  const wallpaperVars = {
-    '--app-wallpaper-image': wallpaperEnabled.value ? `url("${toFileUrl(wallpaperPath.value)}")` : 'none',
-    '--app-wallpaper-opacity': wallpaperEnabled.value ? String(wallpaperOpacity.value) : '0'
+  const themeColors = {
+    background: appTheme.value.background || (themeMode.value === 'light' ? '#f6fbff' : '#08131b'),
+    headerBg: appTheme.value.headerBg || appTheme.value.shell || (themeMode.value === 'light' ? '#ffffff' : '#08131b'),
+    menuBg: appTheme.value.menuBg || appTheme.value.shell || (themeMode.value === 'light' ? '#ffffff' : '#151b22'),
+    sidebarShell: appTheme.value.sidebarShell || appTheme.value.shell || (themeMode.value === 'light' ? '#ffffff' : '#0a1219'),
+    sidebarSurface: appTheme.value.sidebarSurface || appTheme.value.surface || (themeMode.value === 'light' ? '#ffffff' : '#0c141c'),
+    workspaceShell: appTheme.value.workspaceShell || appTheme.value.shell || (themeMode.value === 'light' ? '#ffffff' : '#0a1219'),
+    workspaceSurface: appTheme.value.workspaceSurface || appTheme.value.surface || (themeMode.value === 'light' ? '#ffffff' : '#0c141c'),
+    statusBarBg: appTheme.value.statusBarBg || appTheme.value.shell || (themeMode.value === 'light' ? '#ffffff' : '#0a1219'),
+    text: appTheme.value.text || (themeMode.value === 'light' ? '#1f2328' : '#d9e6f2'),
+    textSoft: appTheme.value.textSoft || (themeMode.value === 'light' ? '#6b7785' : '#8fa5b6'),
+    border: appTheme.value.border || (themeMode.value === 'light' ? '#d5e6ef' : '#223847'),
+    accent: appTheme.value.accent || (themeMode.value === 'light' ? '#0078d4' : '#57c7ff'),
+    accentText: appTheme.value.accentText || (themeMode.value === 'light' ? '#005fb8' : '#b9ecff')
   }
 
   if (themeMode.value === 'light') {
+    const sidebarBaseOpacity = sidebarOpacity.value
+    const sidebarSoftOpacity = Math.min(0.9, sidebarBaseOpacity + 0.08)
+    const sidebarShellOpacity = Math.min(0.92, sidebarBaseOpacity + 0.1)
+    const workspaceBaseOpacity = workspaceOpacity.value
+    const workspaceSoftOpacity = Math.min(0.9, workspaceBaseOpacity + 0.08)
+    const workspaceStrongOpacity = Math.min(0.96, workspaceBaseOpacity + 0.14)
+    const headerOpacity = Math.min(0.96, workspaceBaseOpacity + 0.18)
+    const mainOpacity = Math.max(0.12, workspaceBaseOpacity - 0.14)
     return {
-      '--app-bg': '#f6fbff',
-      '--app-bg-gradient': 'linear-gradient(180deg, #f6fbff 0%, #f6fbff 100%)',
-      '--app-panel': 'rgba(255, 255, 255, 0.92)',
-      '--app-panel-strong': 'rgba(255, 255, 255, 1)',
-      '--app-border': 'rgba(0, 102, 153, 0.14)',
-      '--app-text': '#1f2328',
-      '--app-text-soft': '#6b7785',
-      '--app-header-bg': 'rgba(255, 255, 255, 0.96)',
-      '--app-main-bg': '#ffffff',
-      '--app-chip-bg': 'rgba(0, 120, 212, 0.1)',
-      '--app-chip-border': 'rgba(0, 120, 212, 0.16)',
-      '--app-chip-text': '#005fb8',
+      '--app-bg': themeColors.background,
+      '--app-bg-gradient': `linear-gradient(180deg, ${themeColors.background} 0%, ${themeColors.background} 100%)`,
+      '--app-sidebar-shell': wallpaperEnabled.value ? rgbaFromHex(themeColors.sidebarShell, sidebarShellOpacity, { r: 255, g: 255, b: 255 }) : rgbaFromHex(themeColors.sidebarShell, 0.92, { r: 255, g: 255, b: 255 }),
+      '--app-workspace-shell': wallpaperEnabled.value ? rgbaFromHex(themeColors.workspaceShell, workspaceBaseOpacity, { r: 255, g: 255, b: 255 }) : themeColors.workspaceShell,
+      '--app-workspace-shell-strong': wallpaperEnabled.value ? rgbaFromHex(themeColors.workspaceShell, workspaceStrongOpacity, { r: 255, g: 255, b: 255 }) : themeColors.workspaceShell,
+      '--app-sidebar-base': wallpaperEnabled.value ? rgbaFromHex(themeColors.sidebarSurface, sidebarBaseOpacity, { r: 255, g: 255, b: 255 }) : themeColors.sidebarSurface,
+      '--app-sidebar-soft': wallpaperEnabled.value ? rgbaFromHex(themeColors.sidebarSurface, sidebarSoftOpacity, { r: 255, g: 255, b: 255 }) : themeColors.sidebarSurface,
+      '--app-workspace-base': wallpaperEnabled.value ? rgbaFromHex(themeColors.workspaceSurface, workspaceBaseOpacity, { r: 255, g: 255, b: 255 }) : themeColors.workspaceSurface,
+      '--app-workspace-soft': wallpaperEnabled.value ? rgbaFromHex(themeColors.workspaceSurface, workspaceSoftOpacity, { r: 255, g: 255, b: 255 }) : themeColors.workspaceSurface,
+      '--app-terminal-opacity': wallpaperEnabled.value ? String(terminalOpacity.value) : '1',
+      '--app-border': rgbaFromHex(themeColors.border, 0.7, { r: 213, g: 230, b: 239 }),
+      '--app-text': themeColors.text,
+      '--app-text-soft': themeColors.textSoft,
+      '--app-accent': themeColors.accent,
+      '--app-header-bg': wallpaperEnabled.value ? rgbaFromHex(themeColors.headerBg, headerOpacity, { r: 255, g: 255, b: 255 }) : rgbaFromHex(themeColors.headerBg, 0.96, { r: 255, g: 255, b: 255 }),
+      '--app-main-bg': wallpaperEnabled.value ? rgbaFromHex(themeColors.workspaceShell, mainOpacity, { r: 255, g: 255, b: 255 }) : themeColors.workspaceShell,
+      '--app-chip-bg': rgbaFromHex(themeColors.accent, 0.1, { r: 0, g: 120, b: 212 }),
+      '--app-chip-border': rgbaFromHex(themeColors.accent, 0.16, { r: 0, g: 120, b: 212 }),
+      '--app-chip-text': themeColors.accentText,
       '--app-radial': 'none',
-      '--app-toast-bg': 'rgba(255, 255, 255, 0.98)',
-      ...wallpaperVars
+      '--app-toast-bg': rgbaFromHex(themeColors.workspaceShell, 0.98, { r: 255, g: 255, b: 255 }),
+      '--app-menu-bg': themeColors.menuBg,
+      '--app-status-bg': themeColors.statusBarBg,
+      '--app-overlay-bg': rgbaFromHex(themeColors.workspaceShell, 0.28, { r: 255, g: 255, b: 255 }),
+      '--app-overlay-strong': rgbaFromHex(themeColors.workspaceShell, 0.4, { r: 255, g: 255, b: 255 }),
+      '--app-modal-bg': rgbaFromHex(themeColors.workspaceShell, 0.98, { r: 255, g: 255, b: 255 }),
+      '--app-modal-soft': rgbaFromHex(themeColors.workspaceSurface, 0.96, { r: 255, g: 255, b: 255 }),
+      '--app-modal-border': rgbaFromHex(themeColors.border, 0.78, { r: 213, g: 230, b: 239 }),
+      '--app-shadow-lg': '0 24px 56px rgba(31, 35, 40, 0.16)',
+      '--app-accent-soft': rgbaFromHex(themeColors.accent, 0.1, { r: 0, g: 120, b: 212 }),
+      '--app-accent-strong': rgbaFromHex(themeColors.accent, 0.24, { r: 0, g: 120, b: 212 }),
+      '--app-success': '#1b9c6a',
+      '--app-success-soft': 'rgba(27, 156, 106, 0.12)',
+      '--app-success-border': 'rgba(27, 156, 106, 0.18)',
+      '--app-success-text': '#187354',
+      '--app-warning': '#c18512',
+      '--app-warning-soft': 'rgba(193, 133, 18, 0.12)',
+      '--app-warning-border': 'rgba(193, 133, 18, 0.18)',
+      '--app-warning-text': '#9a660d',
+      '--app-danger': '#c42b1c',
+      '--app-danger-soft': 'rgba(196, 43, 28, 0.1)',
+      '--app-danger-border': 'rgba(196, 43, 28, 0.18)',
+      '--app-danger-text': '#b2473d'
     }
   }
 
   return {
-    '--app-bg': '#08131b',
-    '--app-bg-gradient': 'linear-gradient(180deg, #09131b 0%, #08131b 100%)',
-    '--app-panel': 'rgba(10, 18, 25, 0.62)',
-    '--app-panel-strong': 'rgba(8, 15, 22, 0.94)',
-    '--app-border': 'rgba(125, 162, 186, 0.1)',
-    '--app-text': '#d9e6f2',
-    '--app-text-soft': '#8fa5b6',
-    '--app-header-bg': 'rgba(8, 15, 22, 0.72)',
-    '--app-main-bg': 'rgba(7, 15, 22, 0.22)',
-    '--app-chip-bg': 'rgba(87, 199, 255, 0.08)',
-    '--app-chip-border': 'rgba(87, 199, 255, 0.22)',
-    '--app-chip-text': '#bfe9ff',
-    '--app-radial': 'radial-gradient(circle at 50% 0%, rgba(87, 199, 255, 0.08), transparent 42%)',
-    '--app-toast-bg': 'rgba(8, 15, 22, 0.94)',
-    ...wallpaperVars
+    '--app-sidebar-base': wallpaperEnabled.value ? rgbaFromHex(themeColors.sidebarSurface, sidebarOpacity.value, { r: 12, g: 20, b: 28 }) : rgbaFromHex(themeColors.sidebarSurface, 0.62, { r: 12, g: 20, b: 28 }),
+    '--app-sidebar-soft': wallpaperEnabled.value ? rgbaFromHex(themeColors.sidebarSurface, Math.min(0.9, sidebarOpacity.value + 0.1), { r: 12, g: 20, b: 28 }) : rgbaFromHex(themeColors.sidebarSurface, 0.78, { r: 12, g: 20, b: 28 }),
+    '--app-sidebar-shell': wallpaperEnabled.value ? rgbaFromHex(themeColors.sidebarShell, Math.min(0.92, sidebarOpacity.value + 0.08), { r: 10, g: 18, b: 25 }) : rgbaFromHex(themeColors.sidebarShell, 0.62, { r: 10, g: 18, b: 25 }),
+    '--app-workspace-base': wallpaperEnabled.value ? rgbaFromHex(themeColors.workspaceSurface, workspaceOpacity.value, { r: 12, g: 20, b: 28 }) : rgbaFromHex(themeColors.workspaceSurface, 0.62, { r: 12, g: 20, b: 28 }),
+    '--app-workspace-soft': wallpaperEnabled.value ? rgbaFromHex(themeColors.workspaceSurface, Math.min(0.9, workspaceOpacity.value + 0.1), { r: 12, g: 20, b: 28 }) : rgbaFromHex(themeColors.workspaceSurface, 0.78, { r: 12, g: 20, b: 28 }),
+    '--app-workspace-shell': wallpaperEnabled.value ? rgbaFromHex(themeColors.workspaceShell, workspaceOpacity.value, { r: 10, g: 18, b: 25 }) : rgbaFromHex(themeColors.workspaceShell, 0.62, { r: 10, g: 18, b: 25 }),
+    '--app-workspace-shell-strong': wallpaperEnabled.value ? rgbaFromHex(themeColors.workspaceShell, Math.min(0.94, workspaceOpacity.value + 0.16), { r: 8, g: 15, b: 22 }) : rgbaFromHex(themeColors.workspaceShell, 0.94, { r: 8, g: 15, b: 22 }),
+    '--app-terminal-opacity': wallpaperEnabled.value ? String(terminalOpacity.value) : '1',
+    '--app-bg': themeColors.background,
+    '--app-bg-gradient': `linear-gradient(180deg, ${themeColors.background} 0%, ${themeColors.background} 100%)`,
+    '--app-border': rgbaFromHex(themeColors.border, 0.42, { r: 34, g: 56, b: 71 }),
+    '--app-text': themeColors.text,
+    '--app-text-soft': themeColors.textSoft,
+    '--app-accent': themeColors.accent,
+    '--app-header-bg': wallpaperEnabled.value ? rgbaFromHex(themeColors.headerBg, Math.min(0.88, workspaceOpacity.value + 0.12), { r: 8, g: 15, b: 22 }) : rgbaFromHex(themeColors.headerBg, 0.72, { r: 8, g: 15, b: 22 }),
+    '--app-main-bg': wallpaperEnabled.value ? rgbaFromHex(themeColors.workspaceShell, Math.max(0.1, workspaceOpacity.value - 0.18), { r: 7, g: 15, b: 22 }) : rgbaFromHex(themeColors.workspaceShell, 0.22, { r: 7, g: 15, b: 22 }),
+    '--app-chip-bg': rgbaFromHex(themeColors.accent, 0.08, { r: 87, g: 199, b: 255 }),
+    '--app-chip-border': rgbaFromHex(themeColors.accent, 0.22, { r: 87, g: 199, b: 255 }),
+    '--app-chip-text': themeColors.accentText,
+    '--app-radial': `radial-gradient(circle at 50% 0%, ${rgbaFromHex(themeColors.accent, 0.08, { r: 87, g: 199, b: 255 })}, transparent 42%)`,
+    '--app-toast-bg': rgbaFromHex(themeColors.workspaceShell, 0.94, { r: 8, g: 15, b: 22 }),
+    '--app-menu-bg': themeColors.menuBg,
+    '--app-status-bg': themeColors.statusBarBg,
+    '--app-overlay-bg': 'rgba(0, 0, 0, 0.58)',
+    '--app-overlay-strong': 'rgba(0, 0, 0, 0.72)',
+    '--app-modal-bg': rgbaFromHex(themeColors.workspaceShell, 0.96, { r: 8, g: 15, b: 22 }),
+    '--app-modal-soft': rgbaFromHex(themeColors.workspaceSurface, 0.88, { r: 12, g: 20, b: 28 }),
+    '--app-modal-border': rgbaFromHex(themeColors.border, 0.48, { r: 34, g: 56, b: 71 }),
+    '--app-shadow-lg': '0 24px 56px rgba(0, 0, 0, 0.32)',
+    '--app-accent-soft': rgbaFromHex(themeColors.accent, 0.12, { r: 87, g: 199, b: 255 }),
+    '--app-accent-strong': rgbaFromHex(themeColors.accent, 0.28, { r: 87, g: 199, b: 255 }),
+    '--app-success': '#52d7a6',
+    '--app-success-soft': 'rgba(82, 215, 166, 0.12)',
+    '--app-success-border': 'rgba(82, 215, 166, 0.2)',
+    '--app-success-text': '#9df2d0',
+    '--app-warning': '#ffc266',
+    '--app-warning-soft': 'rgba(255, 194, 102, 0.12)',
+    '--app-warning-border': 'rgba(255, 194, 102, 0.2)',
+    '--app-warning-text': '#ffdca8',
+    '--app-danger': '#e85454',
+    '--app-danger-soft': 'rgba(232, 84, 84, 0.12)',
+    '--app-danger-border': 'rgba(232, 84, 84, 0.22)',
+    '--app-danger-text': '#ffc8c8'
   }
 })
 
+watch(rootThemeVars, (vars) => {
+  if (typeof document === 'undefined') return
+  Object.entries(vars).forEach(([key, value]) => {
+    document.documentElement.style.setProperty(key, value)
+  })
+}, { immediate: true })
+
+const wallpaperLayerStyle = computed(() => ({
+  backgroundImage: wallpaperEnabled.value && wallpaperDataUrl.value ? `url("${wallpaperDataUrl.value}")` : 'none',
+  opacity: wallpaperEnabled.value ? String(wallpaperOpacity.value) : '0'
+}))
+
 onMounted(async () => {
-  serialStore.refreshPorts()
-  serialStore.loadCommonCommands()
   await serialStore.restoreSessionState()
+  await syncWallpaperDataUrl()
 
-  window.electronAPI?.onWindowMaximized(() => {
-    isMaximized.value = true
-  })
+  if (!isAppearanceMode.value && !isConverterMode.value) {
+    serialStore.refreshPorts()
+    serialStore.loadCommonCommands()
+  }
 
-  window.electronAPI?.onWindowUnmaximized(() => {
-    isMaximized.value = false
-  })
+  if (!isAppearanceMode.value) {
+    window.electronAPI?.onWindowMaximized(() => {
+      isMaximized.value = true
+    })
+
+    window.electronAPI?.onWindowUnmaximized(() => {
+      isMaximized.value = false
+    })
+  }
 
   window.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('serialx-send-command', handleSendCommand)
   document.addEventListener('click', handleClickOutside)
+})
+
+watch(wallpaperPath, () => {
+  syncWallpaperDataUrl()
 })
 
 onUnmounted(() => {
@@ -394,10 +491,11 @@ onUnmounted(() => {
 
 <template>
   <div
-    v-if="!isConverterMode"
-    :class="['app-container', `theme-${themeMode}`]"
+    v-if="!isConverterMode && !isAppearanceMode"
+    :class="['app-container', `theme-${themeMode}`, { 'wallpaper-active': wallpaperEnabled }]"
     :style="rootThemeVars"
   >
+    <div class="app-wallpaper-layer" :style="wallpaperLayerStyle"></div>
     <header class="app-header">
       <div class="header-left">
         <div class="menubar-items">
@@ -435,41 +533,6 @@ onUnmounted(() => {
                   </svg>
                 </span>
                 <span class="dropdown-text">浅色模式</span>
-              </div>
-              <div class="dropdown-divider"></div>
-              <div class="dropdown-section-label">桌面背景</div>
-              <div class="dropdown-item" @click="pickWallpaper">
-                <span class="dropdown-icon" aria-hidden="true">
-                  <svg viewBox="0 0 16 16" width="16" height="16">
-                    <path d="M2 3h12v10H2z" fill="none" stroke="currentColor" stroke-width="1.2" />
-                    <circle cx="5.2" cy="6" r="1.1" fill="currentColor" />
-                    <path d="m4 11 2.6-2.8 2.1 2 1.6-1.6L12 11" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </span>
-                <span class="dropdown-text">{{ wallpaperPath ? '更换壁纸' : '选择壁纸' }}</span>
-              </div>
-              <div
-                v-if="wallpaperPath"
-                class="dropdown-item"
-                :class="{ selected: wallpaperEnabled }"
-                @click="toggleWallpaper"
-              >
-                <span class="dropdown-icon" aria-hidden="true">
-                  <svg viewBox="0 0 16 16" width="16" height="16">
-                    <path d="M8 2.5A4.5 4.5 0 1 0 12.5 7 4.5 4.5 0 0 0 8 2.5Zm0 1.4A3.1 3.1 0 1 1 4.9 7 3.1 3.1 0 0 1 8 3.9Z" fill="currentColor" />
-                    <path d="M8 1v2M8 13v2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" />
-                  </svg>
-                </span>
-                <span class="dropdown-text">{{ wallpaperEnabled ? '关闭壁纸' : '启用壁纸' }}</span>
-              </div>
-              <div v-if="wallpaperPath" class="dropdown-item danger" @click="clearWallpaper">
-                <span class="dropdown-icon" aria-hidden="true">
-                  <svg viewBox="0 0 16 16" width="16" height="16">
-                    <path d="M5 4h6l-.5 8h-5z" fill="none" stroke="currentColor" stroke-width="1.2" />
-                    <path d="M4 4h8M6 4V2h4v2" fill="none" stroke="currentColor" stroke-width="1.2" />
-                  </svg>
-                </span>
-                <span class="dropdown-text">清除壁纸</span>
               </div>
               <div class="dropdown-divider"></div>
               <div class="dropdown-section-label">外观与命令</div>
@@ -631,12 +694,15 @@ onUnmounted(() => {
     </div>
 
     <CommandsModal v-model:show="showCommandsModal" />
-    <AppearanceSettingsModal v-model:show="showAppearanceSettingsModal" />
     <CommandPalette v-model="showCommandPalette" />
   </div>
 
-  <div v-else class="converter-only">
+  <div v-else-if="isConverterMode" class="converter-only">
     <DataConverter standalone />
+  </div>
+
+  <div v-else class="appearance-only">
+    <AppearanceSettingsModal :show="true" standalone @update:show="closeAppearanceWindow" />
   </div>
 </template>
 
@@ -651,16 +717,15 @@ onUnmounted(() => {
   position: relative;
 }
 
-.app-container::before {
-  content: '';
+.app-wallpaper-layer {
   position: absolute;
   inset: 0;
-  background-image: var(--app-wallpaper-image);
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  opacity: var(--app-wallpaper-opacity);
+  transition: opacity 0.2s ease;
   pointer-events: none;
+  z-index: 0;
 }
 
 .app-container::after {
@@ -670,6 +735,43 @@ onUnmounted(() => {
   background: var(--app-radial);
   opacity: 0.9;
   pointer-events: none;
+  z-index: 1;
+}
+
+.wallpaper-active ::v-deep(.theme-light.sidebar-container) {
+  background: transparent !important;
+  backdrop-filter: none !important;
+}
+
+.wallpaper-active ::v-deep(.theme-light .ports-section),
+.wallpaper-active ::v-deep(.theme-light .settings-section),
+.wallpaper-active ::v-deep(.theme-light .refresh-btn),
+.wallpaper-active ::v-deep(.theme-light .settings-toggle),
+.wallpaper-active ::v-deep(.theme-light .setting-select),
+.wallpaper-active ::v-deep(.theme-light .port-action-btn) {
+  background: color-mix(in srgb, var(--app-workspace-shell) 74%, transparent) !important;
+}
+
+.wallpaper-active ::v-deep(.theme-light.terminal-shell),
+.wallpaper-active ::v-deep(.theme-light .content-container),
+.wallpaper-active ::v-deep(.theme-light .tab-header-section),
+.wallpaper-active ::v-deep(.theme-light.serial-panel),
+.wallpaper-active ::v-deep(.theme-light .panel-header),
+.wallpaper-active ::v-deep(.theme-light .filter-panel),
+.wallpaper-active ::v-deep(.theme-light .send-console) {
+  background: color-mix(in srgb, var(--app-workspace-shell) 42%, transparent) !important;
+  backdrop-filter: blur(14px);
+}
+
+.wallpaper-active ::v-deep(.theme-light.terminal-shell),
+.wallpaper-active ::v-deep(.theme-light .content-container),
+.wallpaper-active ::v-deep(.theme-light .split-pane-group) {
+  background: transparent !important;
+  backdrop-filter: none !important;
+}
+
+.wallpaper-active ::v-deep(.theme-light .split-pane-group) {
+  border-color: rgba(0, 102, 153, 0.12) !important;
 }
 
 .app-header {
@@ -734,13 +836,13 @@ onUnmounted(() => {
 }
 
 .menubar-item:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--app-chip-bg);
+  border-color: var(--app-chip-border);
 }
 
 .theme-light .menubar-item:hover {
-  background-color: rgba(21, 82, 123, 0.08);
-  border-color: rgba(21, 82, 123, 0.08);
+  background-color: var(--app-accent-soft);
+  border-color: var(--app-chip-border);
 }
 
 .menubar-label {
@@ -754,14 +856,17 @@ onUnmounted(() => {
   top: 100%;
   left: 0;
   min-width: 228px;
-  background: var(--app-panel-strong);
+  background: var(--app-menu-bg);
   border: 1px solid var(--app-border);
   border-radius: 12px;
   padding: 8px;
-  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--app-shadow-lg);
   z-index: 1000;
   margin-top: 6px;
-  backdrop-filter: blur(14px);
+}
+
+.theme-light .menubar-dropdown {
+  border-color: rgba(0, 102, 153, 0.16);
 }
 
 .dropdown-section-label {
@@ -791,16 +896,47 @@ onUnmounted(() => {
 
 .dropdown-item:hover,
 .dropdown-item.selected {
-  background-color: rgba(87, 199, 255, 0.12);
+  background-color: var(--app-accent-soft);
 }
 
 .theme-light .dropdown-item:hover,
 .theme-light .dropdown-item.selected {
-  background-color: rgba(29, 118, 176, 0.1);
+  background-color: var(--app-accent-soft);
 }
 
 .dropdown-item.danger:hover {
-  background-color: rgba(196, 43, 28, 0.14);
+  background-color: var(--app-danger-soft);
+}
+
+.dropdown-slider {
+  padding: 10px 12px 8px;
+  border-radius: 10px;
+}
+
+.dropdown-slider-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.dropdown-slider-label,
+.dropdown-slider-value {
+  font-size: 12px;
+  color: var(--app-text);
+}
+
+.dropdown-slider-value {
+  color: var(--app-text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.dropdown-range {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--app-accent);
+  cursor: pointer;
 }
 
 .dropdown-icon {
@@ -868,7 +1004,7 @@ onUnmounted(() => {
   height: 30px;
   border: none;
   outline: none;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--app-chip-bg);
   color: var(--app-text);
   cursor: pointer;
   border-radius: 8px;
@@ -876,21 +1012,21 @@ onUnmounted(() => {
 }
 
 .window-btn:hover {
-  background-color: rgba(87, 199, 255, 0.12);
-  color: #ffffff;
+  background-color: var(--app-accent-soft);
+  color: var(--app-text);
 }
 
 .theme-light .window-btn:hover {
-  background-color: rgba(21, 82, 123, 0.1);
+  background-color: var(--app-accent-soft);
 }
 
 .window-btn.maximize-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--app-chip-border);
 }
 
 .window-btn.close-btn:hover {
-  background-color: #e81123;
-  color: #ffffff;
+  background-color: var(--app-danger);
+  color: var(--app-text);
 }
 
 .window-btn:active {
@@ -915,7 +1051,7 @@ onUnmounted(() => {
   width: 272px;
   min-width: 200px;
   max-width: 420px;
-  background: var(--app-panel);
+  background: var(--app-sidebar-shell);
   border: 1px solid var(--app-border);
   border-radius: 16px;
   display: flex;
@@ -956,7 +1092,7 @@ onUnmounted(() => {
   height: 52px;
   border: 1px solid var(--app-border);
   border-radius: 999px;
-  background: var(--app-panel-strong);
+  background: var(--app-workspace-shell-strong);
   color: var(--app-text-soft);
   cursor: pointer;
   transition: all 0.18s ease;
@@ -966,7 +1102,7 @@ onUnmounted(() => {
 
 .sidebar-toggle:hover {
   color: var(--app-text);
-  background: var(--app-panel);
+  background: var(--app-workspace-shell);
 }
 
 .sidebar-toggle-icon {
@@ -999,7 +1135,7 @@ onUnmounted(() => {
   gap: 8px;
   padding: 6px 10px;
   border-radius: 999px;
-  background: var(--app-panel);
+  background: var(--app-status-bg);
   border: 1px solid var(--app-border);
   color: var(--app-text);
   backdrop-filter: blur(8px);
@@ -1017,13 +1153,13 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #748a99;
-  box-shadow: 0 0 0 4px rgba(94, 116, 132, 0.16);
+  background: var(--app-text-soft);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-text-soft) 18%, transparent);
 }
 
 .status-dot.online {
-  background: #52d7a6;
-  box-shadow: 0 0 0 4px rgba(82, 215, 166, 0.12);
+  background: var(--app-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-success) 16%, transparent);
 }
 
 .status-value {
@@ -1045,16 +1181,16 @@ onUnmounted(() => {
   border-radius: 14px;
   border: 1px solid var(--app-border);
   background: var(--app-toast-bg);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--app-shadow-lg);
   backdrop-filter: blur(16px);
 }
 
 .settings-toast.success {
-  border-color: rgba(82, 215, 166, 0.24);
+  border-color: var(--app-success-border);
 }
 
 .settings-toast.error {
-  border-color: rgba(232, 84, 84, 0.26);
+  border-color: var(--app-danger-border);
 }
 
 .toast-copy {
@@ -1081,7 +1217,7 @@ onUnmounted(() => {
   height: 28px;
   border: none;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--app-chip-bg);
   color: var(--app-text);
   cursor: pointer;
   flex-shrink: 0;
@@ -1094,7 +1230,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--app-overlay-bg);
   backdrop-filter: blur(6px);
 }
 
@@ -1102,7 +1238,7 @@ onUnmounted(() => {
   width: min(420px, calc(100vw - 32px));
   padding: 20px;
   border-radius: 16px;
-  background: var(--app-panel-strong);
+  background: var(--app-workspace-shell-strong);
   border: 1px solid var(--app-border);
   box-shadow: 0 24px 56px rgba(0, 0, 0, 0.22);
 }
@@ -1138,15 +1274,15 @@ onUnmounted(() => {
 }
 
 .confirm-btn.secondary {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--app-chip-bg);
   border-color: var(--app-border);
   color: var(--app-text);
 }
 
 .confirm-btn.danger {
-  background: rgba(196, 43, 28, 0.14);
-  border-color: rgba(196, 43, 28, 0.2);
-  color: #d7594d;
+  background: var(--app-danger-soft);
+  border-color: var(--app-danger-border);
+  color: var(--app-danger-text);
 }
 
 .toast-fade-enter-active,
@@ -1164,6 +1300,13 @@ onUnmounted(() => {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
+}
+
+.appearance-only {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--app-bg-gradient);
 }
 
 </style>

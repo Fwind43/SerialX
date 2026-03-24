@@ -9,6 +9,8 @@ export const useSerialStore = defineStore('serial', () => {
       return {
         terminalBackground: '#f5fbff',
         terminalForeground: '#173447',
+        fontSize: 13,
+        fontWeight: '400',
         cursorColor: '#1d80c9',
         selectionColor: 'rgba(0, 120, 212, 0.34)',
         searchMatchColor: 'rgba(122, 184, 235, 0.8)',
@@ -22,6 +24,8 @@ export const useSerialStore = defineStore('serial', () => {
     return {
       terminalBackground: '#11161c',
       terminalForeground: '#d7e0ea',
+      fontSize: 13,
+      fontWeight: '400',
       cursorColor: '#8bd3ff',
       selectionColor: 'rgba(139, 211, 255, 0.24)',
       searchMatchColor: 'rgba(255, 241, 118, 0.78)',
@@ -33,6 +37,105 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   const createDefaultTerminalAppearance = () => createTerminalAppearancePreset('dark')
+  const createAppThemePreset = (mode = 'dark') => {
+    if (mode === 'light') {
+      return {
+        background: '#f6fbff',
+        headerBg: '#ffffff',
+        menuBg: '#ffffff',
+        sidebarShell: '#ffffff',
+        sidebarSurface: '#ffffff',
+        workspaceShell: '#ffffff',
+        workspaceSurface: '#ffffff',
+        statusBarBg: '#ffffff',
+        text: '#1f2328',
+        textSoft: '#6b7785',
+        border: '#d5e6ef',
+        accent: '#0078d4',
+        accentText: '#005fb8'
+      }
+    }
+
+    return {
+      background: '#08131b',
+      headerBg: '#08131b',
+      menuBg: '#151b22',
+      sidebarShell: '#0a1219',
+      sidebarSurface: '#0c141c',
+      workspaceShell: '#0a1219',
+      workspaceSurface: '#0c141c',
+      statusBarBg: '#0a1219',
+      text: '#d9e6f2',
+      textSoft: '#8fa5b6',
+      border: '#223847',
+      accent: '#57c7ff',
+      accentText: '#bfe9ff'
+    }
+  }
+  const createDefaultAppTheme = () => createAppThemePreset('dark')
+  const createDefaultCustomAppearancePresets = () => []
+  const normalizeThemeSchemeId = (mode = '', fallbackMode = 'dark') => {
+    if (typeof mode === 'string' && (mode === 'preset-light' || mode === 'preset-dark' || mode.startsWith('custom:'))) {
+      return mode
+    }
+
+    return `preset-${fallbackMode === 'light' ? 'light' : 'dark'}`
+  }
+  const buildAppUiStateWithThemeScheme = (state = {}) => {
+    const themeMode = state.themeMode === 'light' ? 'light' : 'dark'
+    const activeThemeSchemeId = normalizeThemeSchemeId(
+      state.activeThemeSchemeId || state.terminalAppearanceMode || state.appThemeMode,
+      themeMode
+    )
+
+    return {
+      ...state,
+      themeMode,
+      activeThemeSchemeId,
+      terminalAppearanceMode: activeThemeSchemeId,
+      appThemeMode: activeThemeSchemeId
+    }
+  }
+  const normalizeCustomAppearancePresets = (presets = []) => (
+    Array.isArray(presets)
+      ? presets
+          .filter((preset) => preset && typeof preset === 'object' && typeof preset.id === 'string')
+          .map((preset) => ({
+            id: preset.id,
+            name: typeof preset.name === 'string' && preset.name.trim() ? preset.name.trim() : '自定义方案',
+            sourceMode: normalizeThemeSchemeId(preset.sourceMode || 'preset-dark'),
+            appTheme: {
+              ...createDefaultAppTheme(),
+              ...(preset.appTheme && typeof preset.appTheme === 'object' ? preset.appTheme : {})
+            },
+            baseAppTheme: {
+              ...createDefaultAppTheme(),
+              ...(preset.baseAppTheme && typeof preset.baseAppTheme === 'object'
+                ? preset.baseAppTheme
+                : preset.appTheme && typeof preset.appTheme === 'object'
+                  ? preset.appTheme
+                  : {})
+            },
+            appearance: {
+              ...createDefaultTerminalAppearance(),
+              ...(preset.appearance && typeof preset.appearance === 'object' ? preset.appearance : {})
+            },
+            baseAppearance: {
+              ...createDefaultTerminalAppearance(),
+              ...(preset.baseAppearance && typeof preset.baseAppearance === 'object'
+                ? preset.baseAppearance
+                : preset.appearance && typeof preset.appearance === 'object'
+                  ? preset.appearance
+                  : {})
+            }
+          }))
+      : []
+  )
+  const parseCustomAppearanceMode = (mode = '') => (
+    typeof mode === 'string' && mode.startsWith('custom:')
+      ? mode.slice('custom:'.length)
+      : null
+  )
   const resolveTerminalAppearanceForMode = (mode, appearance = {}) => {
     const presetMode = mode === 'preset-light' ? 'light' : mode === 'preset-dark' ? 'dark' : null
     if (presetMode) {
@@ -42,6 +145,17 @@ export const useSerialStore = defineStore('serial', () => {
     return {
       ...createDefaultTerminalAppearance(),
       ...appearance
+    }
+  }
+  const resolveAppThemeForMode = (mode, theme = {}) => {
+    const presetMode = mode === 'preset-light' ? 'light' : mode === 'preset-dark' ? 'dark' : null
+    if (presetMode) {
+      return createAppThemePreset(presetMode)
+    }
+
+    return {
+      ...createDefaultAppTheme(),
+      ...theme
     }
   }
 
@@ -60,10 +174,16 @@ export const useSerialStore = defineStore('serial', () => {
   const createDefaultAppUiState = () => ({
     sidebarCollapsed: false,
     themeMode: 'dark',
+    activeThemeSchemeId: 'preset-dark',
     terminalAppearanceMode: 'preset-dark',
+    appThemeMode: 'preset-dark',
     wallpaperEnabled: false,
     wallpaperPath: '',
-    wallpaperOpacity: 0.22
+    wallpaperOpacity: 0.22,
+    containerOpacity: 0.42,
+    sidebarOpacity: 0.42,
+    workspaceOpacity: 0.42,
+    terminalOpacity: 0.34
   })
 
   const createDefaultCommonCommands = () => ([
@@ -101,20 +221,100 @@ export const useSerialStore = defineStore('serial', () => {
 
   // 每个串口的控制设置（独立配置）
   const portControlSettings = ref(new Map()) // path -> { isAutoScroll: boolean, isLoopSend: boolean, loopInterval: number, loopMaxCount: number, hexSend: boolean, packetTimeout: number }
+  const appTheme = ref(createDefaultAppTheme())
   const terminalAppearance = ref(createDefaultTerminalAppearance())
+  const customAppearancePresets = ref(createDefaultCustomAppearancePresets())
   const workspaceLayout = ref(createDefaultWorkspaceLayout())
   const appUiState = ref(createDefaultAppUiState())
+  let isApplyingExternalUiSnapshot = false
 
   const persistUiPreferencesToConfig = async () => {
     try {
       if (!window?.electronAPI?.loadConfig || !window?.electronAPI?.saveConfig) return
       const config = await window.electronAPI.loadConfig()
       config.appUiState = JSON.parse(JSON.stringify(appUiState.value))
+      config.appTheme = JSON.parse(JSON.stringify(appTheme.value))
       config.terminalAppearance = JSON.parse(JSON.stringify(terminalAppearance.value))
+      config.customAppearancePresets = JSON.parse(JSON.stringify(customAppearancePresets.value))
       await window.electronAPI.saveConfig(config)
     } catch (error) {
       console.error('[Store] Error saving UI preferences:', error)
     }
+  }
+
+  const buildUiSyncSnapshot = () => ({
+    appUiState: JSON.parse(JSON.stringify(appUiState.value)),
+    appTheme: JSON.parse(JSON.stringify(appTheme.value)),
+    terminalAppearance: JSON.parse(JSON.stringify(terminalAppearance.value)),
+    customAppearancePresets: JSON.parse(JSON.stringify(customAppearancePresets.value))
+  })
+
+  const pushUiSyncSnapshot = () => {
+    if (isApplyingExternalUiSnapshot) return
+    window?.electronAPI?.pushUiStateSnapshot?.(buildUiSyncSnapshot())
+  }
+
+  const applyExternalUiSyncSnapshot = (snapshot = {}) => {
+    if (!snapshot || typeof snapshot !== 'object') return
+
+    const nextAppUiState = snapshot.appUiState && typeof snapshot.appUiState === 'object'
+      ? buildAppUiStateWithThemeScheme({
+          ...createDefaultAppUiState(),
+          ...snapshot.appUiState
+        })
+      : null
+    const nextAppTheme = (snapshot.appTheme && typeof snapshot.appTheme === 'object') || nextAppUiState
+      ? resolveAppThemeForMode(
+          nextAppUiState?.activeThemeSchemeId || appUiState.value.activeThemeSchemeId,
+          {
+            ...appTheme.value,
+            ...(snapshot.appTheme || {})
+          }
+        )
+      : null
+
+    const nextAppearance = (snapshot.terminalAppearance && typeof snapshot.terminalAppearance === 'object') || nextAppUiState
+      ? resolveTerminalAppearanceForMode(
+          nextAppUiState?.activeThemeSchemeId || appUiState.value.activeThemeSchemeId,
+          {
+            ...terminalAppearance.value,
+            ...(snapshot.terminalAppearance || {})
+          }
+        )
+      : null
+    const nextCustomAppearancePresets = normalizeCustomAppearancePresets(snapshot.customAppearancePresets)
+
+    isApplyingExternalUiSnapshot = true
+
+    if (nextAppUiState) {
+      appUiState.value = nextAppUiState
+    }
+
+    if (nextAppTheme) {
+      appTheme.value = nextAppTheme
+    }
+
+    if (snapshot.customAppearancePresets) {
+      customAppearancePresets.value = nextCustomAppearancePresets
+    }
+
+    if (nextAppearance) {
+      terminalAppearance.value = nextAppearance
+    }
+
+    isApplyingExternalUiSnapshot = false
+  }
+
+  const setupUiSyncListeners = () => {
+    window?.electronAPI?.onUiStateSnapshot?.((snapshot) => {
+      applyExternalUiSyncSnapshot(snapshot)
+    })
+
+    window?.electronAPI?.getLatestUiStateSnapshot?.().then((snapshot) => {
+      if (snapshot) {
+        applyExternalUiSyncSnapshot(snapshot)
+      }
+    }).catch(() => {})
   }
 
   // 获取串口控制设置
@@ -248,17 +448,200 @@ export const useSerialStore = defineStore('serial', () => {
     saveSessionState()
   }
 
+  const getActiveThemeSchemeId = () => normalizeThemeSchemeId(
+    appUiState.value.activeThemeSchemeId || appUiState.value.terminalAppearanceMode || appUiState.value.appThemeMode,
+    appUiState.value.themeMode || 'dark'
+  )
+
+  const getThemeSchemeById = (schemeId = getActiveThemeSchemeId()) => {
+    const normalizedSchemeId = normalizeThemeSchemeId(schemeId, appUiState.value.themeMode || 'dark')
+    const presetMode = normalizedSchemeId === 'preset-light'
+      ? 'light'
+      : normalizedSchemeId === 'preset-dark'
+        ? 'dark'
+        : null
+
+    if (presetMode) {
+      return {
+        id: normalizedSchemeId,
+        kind: 'built-in',
+        name: presetMode === 'light' ? '浅色默认' : '深色默认',
+        sourceMode: normalizedSchemeId,
+        appTheme: createAppThemePreset(presetMode),
+        baseAppTheme: createAppThemePreset(presetMode),
+        appearance: createTerminalAppearancePreset(presetMode),
+        baseAppearance: createTerminalAppearancePreset(presetMode)
+      }
+    }
+
+    const presetId = parseCustomAppearanceMode(normalizedSchemeId)
+    const preset = presetId
+      ? customAppearancePresets.value.find((item) => item.id === presetId)
+      : null
+
+    return preset
+      ? {
+          ...preset,
+          kind: 'custom'
+        }
+      : null
+  }
+
+  const applyThemeSchemeState = (schemeId) => {
+    const scheme = getThemeSchemeById(schemeId)
+    if (!scheme) return false
+
+    terminalAppearance.value = resolveTerminalAppearanceForMode(schemeId, scheme.appearance)
+    appTheme.value = resolveAppThemeForMode(schemeId, scheme.appTheme)
+    appUiState.value = buildAppUiStateWithThemeScheme({
+      ...appUiState.value,
+      activeThemeSchemeId: schemeId
+    })
+    return true
+  }
+
+  const isBuiltInThemeScheme = (schemeId = getActiveThemeSchemeId()) => (
+    schemeId === 'preset-light' || schemeId === 'preset-dark'
+  )
+
   const updateTerminalAppearance = (updates) => {
+    const schemeId = getActiveThemeSchemeId()
+    const customPresetId = parseCustomAppearanceMode(schemeId)
+    if (isBuiltInThemeScheme(schemeId)) {
+      return false
+    }
     terminalAppearance.value = {
       ...terminalAppearance.value,
       ...updates
     }
-    appUiState.value = {
-      ...appUiState.value,
-      terminalAppearanceMode: 'custom'
+
+    if (customPresetId) {
+      customAppearancePresets.value = customAppearancePresets.value.map((preset) => (
+        preset.id === customPresetId
+          ? {
+              ...preset,
+              appearance: {
+                ...preset.appearance,
+                ...updates
+              }
+            }
+          : preset
+      ))
     }
     saveSessionState()
     persistUiPreferencesToConfig()
+    pushUiSyncSnapshot()
+    return true
+  }
+
+  const updateAppTheme = (updates) => {
+    const schemeId = getActiveThemeSchemeId()
+    const customPresetId = parseCustomAppearanceMode(schemeId)
+    if (isBuiltInThemeScheme(schemeId)) {
+      return false
+    }
+    appTheme.value = {
+      ...appTheme.value,
+      ...updates
+    }
+
+    if (customPresetId) {
+      customAppearancePresets.value = customAppearancePresets.value.map((preset) => (
+        preset.id === customPresetId
+          ? {
+              ...preset,
+              appTheme: {
+                ...preset.appTheme,
+                ...updates
+              }
+            }
+          : preset
+      ))
+    }
+    saveSessionState()
+    persistUiPreferencesToConfig()
+    pushUiSyncSnapshot()
+    return true
+  }
+
+  const resetAppTheme = (mode = null) => {
+    const schemeId = mode
+      ? normalizeThemeSchemeId(
+          mode === 'light' || mode === 'dark' ? `preset-${mode}` : mode,
+          appUiState.value.themeMode || 'dark'
+        )
+      : getActiveThemeSchemeId()
+    const scheme = getThemeSchemeById(schemeId)
+    if (!scheme) return false
+
+    if (scheme.kind === 'custom') {
+      appTheme.value = { ...scheme.baseAppTheme }
+      customAppearancePresets.value = customAppearancePresets.value.map((preset) => (
+        preset.id === scheme.id
+          ? {
+              ...preset,
+              appTheme: { ...preset.baseAppTheme }
+            }
+          : preset
+      ))
+    } else {
+      appTheme.value = createAppThemePreset(schemeId === 'preset-light' ? 'light' : 'dark')
+      appUiState.value = buildAppUiStateWithThemeScheme({
+        ...appUiState.value,
+        activeThemeSchemeId: schemeId
+      })
+    }
+    saveSessionState()
+    persistUiPreferencesToConfig()
+    pushUiSyncSnapshot()
+    return true
+  }
+
+  const applyThemeScheme = (schemeId) => {
+    const applied = applyThemeSchemeState(schemeId)
+    if (!applied) {
+      return false
+    }
+    saveSessionState()
+    persistUiPreferencesToConfig()
+    pushUiSyncSnapshot()
+    return true
+  }
+
+  const createThemeScheme = (name, sourceSchemeId = getActiveThemeSchemeId()) => {
+    const normalizedName = typeof name === 'string' && name.trim() ? name.trim() : `自定义方案 ${customAppearancePresets.value.length + 1}`
+    const sourceScheme = getThemeSchemeById(sourceSchemeId)
+    if (!sourceScheme) return null
+
+    const nextPreset = {
+      id: `appearance-${Date.now()}`,
+      name: normalizedName,
+      sourceMode: sourceScheme.kind === 'built-in'
+        ? sourceScheme.id
+        : sourceScheme.sourceMode || sourceScheme.id,
+      appTheme: { ...sourceScheme.appTheme },
+      baseAppTheme: { ...sourceScheme.appTheme },
+      appearance: { ...sourceScheme.appearance },
+      baseAppearance: { ...sourceScheme.appearance }
+    }
+
+    customAppearancePresets.value = [...customAppearancePresets.value, nextPreset]
+    applyThemeSchemeState(`custom:${nextPreset.id}`)
+    saveSessionState()
+    persistUiPreferencesToConfig()
+    pushUiSyncSnapshot()
+    return nextPreset
+  }
+
+  const removeThemeScheme = (presetId) => {
+    if (!presetId) return
+    customAppearancePresets.value = customAppearancePresets.value.filter((preset) => preset.id !== presetId)
+    if (getActiveThemeSchemeId() === `custom:${presetId}`) {
+      applyThemeSchemeState(`preset-${appUiState.value.themeMode === 'light' ? 'light' : 'dark'}`)
+    }
+    saveSessionState()
+    persistUiPreferencesToConfig()
+    pushUiSyncSnapshot()
   }
 
   const isTerminalAppearancePreset = (mode, appearance = terminalAppearance.value) => {
@@ -269,33 +652,90 @@ export const useSerialStore = defineStore('serial', () => {
   const applyThemeMode = (mode) => {
     const nextMode = mode === 'light' ? 'light' : 'dark'
     const previousMode = appUiState.value.themeMode || 'dark'
-    const currentAppearanceMode = appUiState.value.terminalAppearanceMode || `preset-${previousMode}`
+    const currentSchemeId = getActiveThemeSchemeId()
     const followsCurrentPreset =
-      currentAppearanceMode === `preset-${previousMode}` ||
+      currentSchemeId === `preset-${previousMode}` ||
       isTerminalAppearancePreset(previousMode)
 
-    appUiState.value = {
+    appUiState.value = buildAppUiStateWithThemeScheme({
       ...appUiState.value,
       themeMode: nextMode,
-      terminalAppearanceMode: followsCurrentPreset ? `preset-${nextMode}` : currentAppearanceMode
-    }
+      activeThemeSchemeId: followsCurrentPreset ? `preset-${nextMode}` : currentSchemeId
+    })
 
     if (followsCurrentPreset) {
       terminalAppearance.value = createTerminalAppearancePreset(nextMode)
+      appTheme.value = createAppThemePreset(nextMode)
     }
 
     saveSessionState()
     persistUiPreferencesToConfig()
+    pushUiSyncSnapshot()
   }
 
-  const resetTerminalAppearance = (mode = appUiState.value.themeMode || 'dark') => {
-    terminalAppearance.value = createTerminalAppearancePreset(mode)
-    appUiState.value = {
-      ...appUiState.value,
-      terminalAppearanceMode: `preset-${mode === 'light' ? 'light' : 'dark'}`
+  const resetTerminalAppearance = (mode = null) => {
+    const schemeId = mode
+      ? normalizeThemeSchemeId(
+          mode === 'light' || mode === 'dark' ? `preset-${mode}` : mode,
+          appUiState.value.themeMode || 'dark'
+        )
+      : getActiveThemeSchemeId()
+    const scheme = getThemeSchemeById(schemeId)
+    if (!scheme) return false
+
+    if (scheme.kind === 'custom') {
+      terminalAppearance.value = { ...scheme.baseAppearance }
+      customAppearancePresets.value = customAppearancePresets.value.map((preset) => (
+        preset.id === scheme.id
+          ? {
+              ...preset,
+              appearance: { ...preset.baseAppearance }
+            }
+          : preset
+      ))
+    } else {
+      terminalAppearance.value = createTerminalAppearancePreset(schemeId === 'preset-light' ? 'light' : 'dark')
+      appUiState.value = buildAppUiStateWithThemeScheme({
+        ...appUiState.value,
+        activeThemeSchemeId: schemeId
+      })
     }
     saveSessionState()
     persistUiPreferencesToConfig()
+    pushUiSyncSnapshot()
+    return true
+  }
+
+  const resetThemeScheme = () => {
+    const schemeId = getActiveThemeSchemeId()
+    const scheme = getThemeSchemeById(schemeId)
+    if (!scheme) return false
+
+    if (scheme.kind === 'custom') {
+      terminalAppearance.value = { ...scheme.baseAppearance }
+      appTheme.value = { ...scheme.baseAppTheme }
+      customAppearancePresets.value = customAppearancePresets.value.map((preset) => (
+        preset.id === scheme.id
+          ? {
+              ...preset,
+              appearance: { ...preset.baseAppearance },
+              appTheme: { ...preset.baseAppTheme }
+            }
+          : preset
+      ))
+    } else {
+      terminalAppearance.value = createTerminalAppearancePreset(schemeId === 'preset-light' ? 'light' : 'dark')
+      appTheme.value = createAppThemePreset(schemeId === 'preset-light' ? 'light' : 'dark')
+      appUiState.value = buildAppUiStateWithThemeScheme({
+        ...appUiState.value,
+        activeThemeSchemeId: schemeId
+      })
+    }
+
+    saveSessionState()
+    persistUiPreferencesToConfig()
+    pushUiSyncSnapshot()
+    return true
   }
 
   const updateWorkspaceLayout = (layout = {}) => {
@@ -318,12 +758,13 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   const updateAppUiState = (updates = {}) => {
-    appUiState.value = {
+    appUiState.value = buildAppUiStateWithThemeScheme({
       ...appUiState.value,
       ...updates
-    }
+    })
     saveSessionState()
     persistUiPreferencesToConfig()
+    pushUiSyncSnapshot()
   }
 
   const buildSettingsSnapshot = () => ({
@@ -333,7 +774,9 @@ export const useSerialStore = defineStore('serial', () => {
     portDisplaySettings: Object.fromEntries(portDisplaySettings.value),
     portControlSettings: Object.fromEntries(portControlSettings.value),
     commonCommands: JSON.parse(JSON.stringify(commonCommands.value)),
+    appTheme: { ...appTheme.value },
     terminalAppearance: { ...terminalAppearance.value },
+    customAppearancePresets: JSON.parse(JSON.stringify(customAppearancePresets.value)),
     workspaceLayout: JSON.parse(JSON.stringify(workspaceLayout.value)),
     selectedPort: selectedPort.value,
     appUiState: { ...appUiState.value }
@@ -429,10 +872,10 @@ export const useSerialStore = defineStore('serial', () => {
       ...(snapshot.workspaceLayout || {})
     }
     selectedPort.value = typeof snapshot.selectedPort === 'string' ? snapshot.selectedPort : null
-    appUiState.value = {
+    appUiState.value = buildAppUiStateWithThemeScheme({
       ...createDefaultAppUiState(),
       ...(snapshot.appUiState || {})
-    }
+    })
     defaultSettings.value = {
       ...createDefaultSettings(),
       ...(snapshot.defaultSettings || {})
@@ -474,6 +917,14 @@ export const useSerialStore = defineStore('serial', () => {
       throw new Error('终端外观设置格式无效')
     }
 
+    if (snapshot.appTheme && typeof snapshot.appTheme !== 'object') {
+      throw new Error('应用主题设置格式无效')
+    }
+
+    if (snapshot.customAppearancePresets && !Array.isArray(snapshot.customAppearancePresets)) {
+      throw new Error('终端外观方案格式无效')
+    }
+
     if (snapshot.workspaceLayout && typeof snapshot.workspaceLayout !== 'object') {
       throw new Error('工作区布局格式无效')
     }
@@ -500,19 +951,19 @@ export const useSerialStore = defineStore('serial', () => {
     }
     portDisplaySettings.value = new Map(Object.entries(snapshot.portDisplaySettings || {}))
     portControlSettings.value = new Map(Object.entries(snapshot.portControlSettings || {}))
-    terminalAppearance.value = {
-      ...createDefaultTerminalAppearance(),
-      ...(snapshot.terminalAppearance || {})
-    }
+    const nextAppUiState = buildAppUiStateWithThemeScheme({
+      ...createDefaultAppUiState(),
+      ...(snapshot.appUiState || {})
+    })
+    appTheme.value = resolveAppThemeForMode(nextAppUiState.activeThemeSchemeId, snapshot.appTheme || {})
+    terminalAppearance.value = resolveTerminalAppearanceForMode(nextAppUiState.activeThemeSchemeId, snapshot.terminalAppearance || {})
+    customAppearancePresets.value = normalizeCustomAppearancePresets(snapshot.customAppearancePresets)
     workspaceLayout.value = {
       ...createDefaultWorkspaceLayout(),
       ...(snapshot.workspaceLayout || {})
     }
     selectedPort.value = typeof snapshot.selectedPort === 'string' ? snapshot.selectedPort : null
-    appUiState.value = {
-      ...createDefaultAppUiState(),
-      ...(snapshot.appUiState || {})
-    }
+    appUiState.value = nextAppUiState
     commonCommands.value = Array.isArray(snapshot.commonCommands)
       ? JSON.parse(JSON.stringify(snapshot.commonCommands))
       : createDefaultCommonCommands()
@@ -527,7 +978,9 @@ export const useSerialStore = defineStore('serial', () => {
       portDisplaySettings: {},
       portControlSettings: {},
       commonCommands: createDefaultCommonCommands(),
+      appTheme: createDefaultAppTheme(),
       terminalAppearance: createDefaultTerminalAppearance(),
+      customAppearancePresets: createDefaultCustomAppearancePresets(),
       workspaceLayout: createDefaultWorkspaceLayout(),
       selectedPort: null,
       appUiState: createDefaultAppUiState()
@@ -542,7 +995,9 @@ export const useSerialStore = defineStore('serial', () => {
         portDisplaySettings: Object.fromEntries(portDisplaySettings.value),
         portControlSettings: Object.fromEntries(portControlSettings.value),
         commonCommands: commonCommands.value,
+        appTheme: appTheme.value,
         terminalAppearance: terminalAppearance.value,
+        customAppearancePresets: customAppearancePresets.value,
         workspaceLayout: workspaceLayout.value,
         selectedPort: selectedPort.value,
         appUiState: appUiState.value
@@ -572,15 +1027,24 @@ export const useSerialStore = defineStore('serial', () => {
           commonCommands.value = state.commonCommands
         }
         const nextAppUiState = state.appUiState && typeof state.appUiState === 'object'
-          ? {
+          ? buildAppUiStateWithThemeScheme({
               ...createDefaultAppUiState(),
               ...state.appUiState
-            }
+            })
           : null
+        if (state.appTheme || nextAppUiState) {
+          appTheme.value = resolveAppThemeForMode(
+            nextAppUiState?.activeThemeSchemeId || appUiState.value.activeThemeSchemeId,
+            state.appTheme || {}
+          )
+        }
+        if (state.customAppearancePresets) {
+          customAppearancePresets.value = normalizeCustomAppearancePresets(state.customAppearancePresets)
+        }
 
         if (state.terminalAppearance || nextAppUiState) {
           terminalAppearance.value = resolveTerminalAppearanceForMode(
-            nextAppUiState?.terminalAppearanceMode,
+            nextAppUiState?.activeThemeSchemeId,
             state.terminalAppearance
           )
         }
@@ -601,26 +1065,37 @@ export const useSerialStore = defineStore('serial', () => {
       if (window?.electronAPI?.loadConfig) {
         const config = await window.electronAPI.loadConfig()
         const nextConfigUiState = config?.appUiState && typeof config.appUiState === 'object'
-          ? {
+          ? buildAppUiStateWithThemeScheme({
               ...createDefaultAppUiState(),
               ...appUiState.value,
               ...config.appUiState
-            }
+            })
           : null
 
         if (nextConfigUiState) {
           appUiState.value = nextConfigUiState
         }
+        if (config?.appTheme || nextConfigUiState) {
+          appTheme.value = resolveAppThemeForMode(
+            nextConfigUiState?.activeThemeSchemeId || appUiState.value.activeThemeSchemeId,
+            config?.appTheme || {}
+          )
+        }
         if (config?.terminalAppearance || nextConfigUiState) {
           terminalAppearance.value = resolveTerminalAppearanceForMode(
-            nextConfigUiState?.terminalAppearanceMode || appUiState.value.terminalAppearanceMode,
+            nextConfigUiState?.activeThemeSchemeId || appUiState.value.activeThemeSchemeId,
             {
               ...terminalAppearance.value,
               ...(config?.terminalAppearance || {})
             }
           )
         }
+        if (config?.customAppearancePresets) {
+          customAppearancePresets.value = normalizeCustomAppearancePresets(config.customAppearancePresets)
+        }
       }
+
+      pushUiSyncSnapshot()
     } catch (error) {
       console.error('[Store] Error restoring session state:', error)
     }
@@ -1422,6 +1897,11 @@ export const useSerialStore = defineStore('serial', () => {
 
   // 必须在 setupEventListeners 调用前绑定 this
   setupEventListeners()
+  setupUiSyncListeners()
+
+  const applyTerminalAppearanceMode = applyThemeScheme
+  const createCustomTerminalAppearancePreset = createThemeScheme
+  const removeCustomTerminalAppearancePreset = removeThemeScheme
 
   return {
     // State
@@ -1435,8 +1915,12 @@ export const useSerialStore = defineStore('serial', () => {
     defaultSettings,
     logs,
     commonCommands,
+    appTheme,
     terminalAppearance,
+    customAppearancePresets,
     createTerminalAppearancePreset,
+    getActiveThemeSchemeId,
+    getThemeSchemeById,
     applyThemeMode,
     workspaceLayout,
     appUiState,
@@ -1462,7 +1946,16 @@ export const useSerialStore = defineStore('serial', () => {
     resetPortStats,
     getPortControlSettings,
     updatePortControlSettings,
+    updateAppTheme,
     updateTerminalAppearance,
+    applyThemeScheme,
+    createThemeScheme,
+    removeThemeScheme,
+    resetThemeScheme,
+    applyTerminalAppearanceMode,
+    createCustomTerminalAppearancePreset,
+    removeCustomTerminalAppearancePreset,
+    resetAppTheme,
     resetTerminalAppearance,
     updateWorkspaceLayout,
     updateAppUiState,

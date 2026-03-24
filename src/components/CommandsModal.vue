@@ -167,7 +167,7 @@ const closeModal = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--app-overlay-strong);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -182,14 +182,14 @@ const closeModal = () => {
 }
 
 .modal {
-  background: linear-gradient(145deg, #2d2d30 0%, #1e1e1e 100%);
-  border: 1px solid rgba(62, 62, 66, 0.8);
+  background: linear-gradient(145deg, var(--app-modal-bg) 0%, var(--app-modal-soft) 100%);
+  border: 1px solid var(--app-modal-border);
   border-radius: 16px;
   padding: 24px;
   min-width: 480px;
   max-width: 600px;
   max-height: 80vh;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--app-shadow-lg);
   animation: slideIn 0.3s ease;
   display: flex;
   flex-direction: column;
@@ -212,13 +212,13 @@ const closeModal = () => {
   align-items: center;
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 1px solid rgba(62, 62, 66, 0.5);
+  border-bottom: 1px solid var(--app-border);
 }
 
 .modal-title {
   font-size: 18px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--app-text);
   letter-spacing: 0.5px;
 }
 
@@ -228,9 +228,9 @@ const closeModal = () => {
   justify-content: center;
   width: 32px;
   height: 32px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #858585;
+  background: var(--app-chip-bg);
+  border: 1px solid var(--app-chip-border);
+  color: var(--app-text-soft);
   cursor: pointer;
   font-size: 18px;
   border-radius: 8px;
@@ -238,9 +238,9 @@ const closeModal = () => {
 }
 
 .modal-close:hover {
-  background: rgba(196, 43, 28, 0.3);
-  border-color: rgba(196, 43, 28, 0.5);
-  color: #ffffff;
+  background: var(--app-danger-soft);
+  border-color: var(--app-danger-border);
+  color: var(--app-text);
   transform: rotate(90deg);
 }
 
@@ -262,8 +262,8 @@ const closeModal = () => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  background: rgba(30, 30, 30, 0.6);
-  border: 1px solid rgba(62, 62, 66, 0.6);
+  background: var(--app-workspace-shell);
+  border: 1px solid var(--app-border);
   border-radius: 8px;
   transition: all 0.2s;
 }
@@ -284,14 +284,14 @@ const closeModal = () => {
 .command-name {
   font-size: 13px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--app-text);
 }
 
 .command-code {
   font-size: 11px;
   font-family: 'Consolas', 'Monaco', monospace;
-  color: #4ec9b0;
-  background: rgba(78, 201, 176, 0.1);
+  color: var(--app-success-text);
+  background: var(--app-success-soft);
   padding: 2px 6px;
   border-radius: 4px;
   align-self: flex-start;
@@ -317,26 +317,26 @@ const closeModal = () => {
 }
 
 .action-btn.toggle.enabled {
-  background: linear-gradient(135deg, #4ec9b0 0%, #45b8a0 100%);
-  color: #1e1e1e;
-  box-shadow: 0 2px 8px rgba(78, 201, 176, 0.3);
+  background: linear-gradient(135deg, var(--app-success) 0%, color-mix(in srgb, var(--app-success) 82%, black) 100%);
+  color: var(--app-modal-bg);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--app-success) 34%, transparent);
 }
 
 .action-btn.toggle.disabled {
-  background: #3e3e42;
-  color: #858585;
+  background: var(--app-workspace-soft);
+  color: var(--app-text-soft);
 }
 
 .action-btn.edit {
-  background: linear-gradient(135deg, #569cd6 0%, #4a8dc7 100%);
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(86, 156, 214, 0.3);
+  background: linear-gradient(135deg, var(--app-accent) 0%, color-mix(in srgb, var(--app-accent) 78%, black) 100%);
+  color: var(--app-text);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--app-accent) 34%, transparent);
 }
 
 .action-btn.delete {
-  background: linear-gradient(135deg, #c42b1c 0%, #a82518 100%);
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(196, 43, 28, 0.3);
+  background: linear-gradient(135deg, var(--app-danger) 0%, color-mix(in srgb, var(--app-danger) 82%, black) 100%);
+  color: var(--app-text);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--app-danger) 32%, transparent);
 }
 
 .action-btn:hover {
@@ -350,10 +350,10 @@ const closeModal = () => {
   justify-content: center;
   width: 100%;
   padding: 10px 16px;
-  background: linear-gradient(135deg, #4ec9b0 0%, #45b8a0 100%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, var(--app-success) 0%, color-mix(in srgb, var(--app-success) 82%, black) 100%);
+  border: 1px solid var(--app-success-border);
   border-radius: 8px;
-  color: #1e1e1e;
+  color: var(--app-modal-bg);
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
@@ -362,14 +362,14 @@ const closeModal = () => {
 
 .add-command-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(78, 201, 176, 0.4);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--app-success) 40%, transparent);
 }
 
 .modal-footer {
   display: flex;
   justify-content: flex-end;
   padding-top: 16px;
-  border-top: 1px solid rgba(62, 62, 66, 0.5);
+  border-top: 1px solid var(--app-border);
 }
 
 .modal-btn {
@@ -383,15 +383,15 @@ const closeModal = () => {
 }
 
 .modal-btn.close {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  background: linear-gradient(135deg, var(--app-accent) 0%, color-mix(in srgb, var(--app-accent) 65%, #6a54a8) 100%);
+  border: 1px solid var(--app-chip-border);
+  color: var(--app-text);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--app-accent) 34%, transparent);
 }
 
 .modal-btn.close:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--app-accent) 46%, transparent);
 }
 
 /* 编辑弹窗 */
@@ -401,7 +401,7 @@ const closeModal = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--app-overlay-strong);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -418,7 +418,7 @@ const closeModal = () => {
 
 .form-group label {
   font-size: 12px;
-  color: #858585;
+  color: var(--app-text-soft);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -426,10 +426,10 @@ const closeModal = () => {
 
 .form-input {
   padding: 12px 14px;
-  background: rgba(30, 30, 30, 0.8);
-  border: 1px solid rgba(62, 62, 66, 0.8);
+  background: var(--app-workspace-shell);
+  border: 1px solid var(--app-border);
   border-radius: 8px;
-  color: #ffffff;
+  color: var(--app-text);
   font-size: 14px;
   font-family: 'Consolas', 'Monaco', monospace;
   transition: all 0.2s;
@@ -437,35 +437,35 @@ const closeModal = () => {
 
 .form-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
-  background: rgba(30, 30, 30, 1);
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 18%, transparent);
+  background: var(--app-modal-bg);
 }
 
 .form-input::placeholder {
-  color: #555;
+  color: var(--app-text-soft);
 }
 
 .modal-btn.cancel {
   background: transparent;
-  border-color: rgba(62, 62, 66, 0.8);
-  color: #cccccc;
+  border-color: var(--app-border);
+  color: var(--app-text);
 }
 
 .modal-btn.cancel:hover {
-  background: rgba(62, 62, 66, 0.5);
-  border-color: rgba(85, 85, 85, 0.8);
+  background: var(--app-workspace-soft);
+  border-color: var(--app-border);
 }
 
 .modal-btn.save {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  background: linear-gradient(135deg, var(--app-accent) 0%, color-mix(in srgb, var(--app-accent) 65%, #6a54a8) 100%);
+  border: 1px solid var(--app-chip-border);
+  color: var(--app-text);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--app-accent) 34%, transparent);
 }
 
 .modal-btn.save:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--app-accent) 46%, transparent);
 }
 </style>

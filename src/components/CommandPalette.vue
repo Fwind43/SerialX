@@ -126,7 +126,7 @@ const selectCommand = (cmd) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--app-overlay-bg);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -150,10 +150,10 @@ const selectCommand = (cmd) => {
   width: 500px;
   max-width: 90vw;
   max-height: 400px;
-  background: linear-gradient(145deg, #2d2d30 0%, #1e1e1e 100%);
-  border: 1px solid rgba(62, 62, 66, 0.8);
+  background: linear-gradient(145deg, var(--app-modal-bg) 0%, var(--app-modal-soft) 100%);
+  border: 1px solid var(--app-modal-border);
   border-radius: 12px;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--app-shadow-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -164,8 +164,8 @@ const selectCommand = (cmd) => {
   align-items: center;
   gap: 12px;
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(62, 62, 66, 0.5);
-  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-workspace-shell);
 }
 
 .palette-icon {
@@ -177,14 +177,12 @@ const selectCommand = (cmd) => {
   background: transparent;
   border: none;
   outline: none;
-  color: #ffffff;
+  color: var(--app-text);
   font-size: 16px;
   font-family: inherit;
 }
 
-.palette-input::placeholder {
-  color: #555;
-}
+.palette-input::placeholder { color: var(--app-text-soft); }
 
 .palette-body {
   flex: 1;
@@ -206,24 +204,24 @@ const selectCommand = (cmd) => {
 
 .command-item:hover,
 .command-item.selected {
-  background: rgba(102, 126, 234, 0.2);
+  background: var(--app-accent-soft);
 }
 
 .command-item.selected {
-  background: rgba(102, 126, 234, 0.3);
-  border: 1px solid rgba(102, 126, 234, 0.4);
+  background: var(--app-accent-strong);
+  border: 1px solid var(--app-chip-border);
 }
 
 .command-name {
   font-size: 14px;
-  color: #cccccc;
+  color: var(--app-text);
   font-weight: 500;
 }
 
 .command-value {
   font-size: 12px;
-  color: #667eea;
-  background: rgba(102, 126, 234, 0.15);
+  color: var(--app-chip-text);
+  background: var(--app-chip-bg);
   padding: 4px 8px;
   border-radius: 4px;
   font-family: 'Consolas', monospace;
@@ -235,7 +233,7 @@ const selectCommand = (cmd) => {
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
-  color: #555;
+  color: var(--app-text-soft);
 }
 
 .no-commands-icon {
@@ -252,8 +250,8 @@ const selectCommand = (cmd) => {
   justify-content: center;
   gap: 20px;
   padding: 12px 16px;
-  border-top: 1px solid rgba(62, 62, 66, 0.5);
-  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid var(--app-border);
+  background: var(--app-workspace-shell);
 }
 
 .shortcut-hint {
@@ -261,16 +259,16 @@ const selectCommand = (cmd) => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #666;
+  color: var(--app-text-soft);
 }
 
 kbd {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--app-chip-bg);
+  border: 1px solid var(--app-chip-border);
   border-radius: 4px;
   padding: 2px 6px;
   font-size: 11px;
   font-family: inherit;
-  color: #999;
+  color: var(--app-chip-text);
 }
 </style>

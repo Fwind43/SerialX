@@ -28,42 +28,44 @@ const debounceTimer = ref(null)
 
 const themeMode = computed(() => serialStore.appUiState?.themeMode || 'dark')
 const isDarkMode = computed(() => themeMode.value === 'dark')
+const appTheme = computed(() => serialStore.appTheme || {})
 
 const themeVars = computed(() => {
+  const theme = appTheme.value
   if (isDarkMode.value) {
     return {
-      '--converter-bg': 'linear-gradient(180deg, #0f1720 0%, #131c25 100%)',
-      '--converter-panel': 'rgba(18, 27, 36, 0.92)',
-      '--converter-panel-strong': 'rgba(11, 19, 27, 0.96)',
-      '--converter-panel-soft': 'rgba(22, 33, 44, 0.82)',
-      '--converter-border': 'rgba(136, 176, 201, 0.14)',
-      '--converter-text': '#d9e4ee',
-      '--converter-text-soft': '#8ea6b7',
-      '--converter-title': '#f4f8fb',
-      '--converter-accent': '#78c3ff',
-      '--converter-accent-strong': '#3496ff',
+      '--converter-bg': `linear-gradient(180deg, ${theme.background || '#0f1720'} 0%, ${theme.workspaceShell || '#131c25'} 100%)`,
+      '--converter-panel': 'var(--app-workspace-base)',
+      '--converter-panel-strong': 'var(--app-workspace-shell-strong)',
+      '--converter-panel-soft': 'var(--app-workspace-soft)',
+      '--converter-border': 'var(--app-border)',
+      '--converter-text': 'var(--app-text)',
+      '--converter-text-soft': 'var(--app-text-soft)',
+      '--converter-title': 'var(--app-text)',
+      '--converter-accent': 'var(--app-accent)',
+      '--converter-accent-strong': 'var(--app-chip-text)',
       '--converter-shadow': '0 20px 40px rgba(0, 0, 0, 0.28)',
-      '--converter-input-bg': 'rgba(9, 16, 23, 0.82)',
-      '--converter-scroll-track': '#15212c',
-      '--converter-scroll-thumb': '#355064'
+      '--converter-input-bg': 'var(--app-workspace-shell)',
+      '--converter-scroll-track': 'var(--app-workspace-shell)',
+      '--converter-scroll-thumb': 'var(--app-border)'
     }
   }
 
   return {
-    '--converter-bg': 'linear-gradient(180deg, #f4f7fb 0%, #e7eef6 100%)',
-    '--converter-panel': 'rgba(255, 255, 255, 0.92)',
-    '--converter-panel-strong': 'rgba(248, 251, 255, 0.97)',
-    '--converter-panel-soft': 'rgba(235, 242, 249, 0.9)',
-    '--converter-border': 'rgba(54, 91, 115, 0.16)',
-    '--converter-text': '#183040',
-    '--converter-text-soft': '#5f7787',
-    '--converter-title': '#0f2230',
-    '--converter-accent': '#1b7bc4',
-    '--converter-accent-strong': '#115f9d',
+    '--converter-bg': `linear-gradient(180deg, ${theme.background || '#f4f7fb'} 0%, ${theme.workspaceShell || '#e7eef6'} 100%)`,
+    '--converter-panel': 'var(--app-workspace-base)',
+    '--converter-panel-strong': 'var(--app-workspace-shell-strong)',
+    '--converter-panel-soft': 'var(--app-workspace-soft)',
+    '--converter-border': 'var(--app-border)',
+    '--converter-text': 'var(--app-text)',
+    '--converter-text-soft': 'var(--app-text-soft)',
+    '--converter-title': 'var(--app-text)',
+    '--converter-accent': 'var(--app-accent)',
+    '--converter-accent-strong': 'var(--app-chip-text)',
     '--converter-shadow': '0 18px 34px rgba(59, 87, 111, 0.12)',
-    '--converter-input-bg': 'rgba(247, 250, 253, 0.98)',
-    '--converter-scroll-track': '#dce7f0',
-    '--converter-scroll-thumb': '#9eb5c7'
+    '--converter-input-bg': 'var(--app-workspace-shell)',
+    '--converter-scroll-track': 'var(--app-workspace-shell)',
+    '--converter-scroll-thumb': 'var(--app-border)'
   }
 })
 
@@ -631,9 +633,9 @@ const clearAll = () => {
 }
 
 .window-titlebar-close:hover {
-  background: rgba(196, 43, 28, 0.14);
-  border-color: rgba(196, 43, 28, 0.18);
-  color: #c42b1c;
+  background: var(--app-danger-soft);
+  border-color: var(--app-danger-border);
+  color: var(--app-danger-text);
 }
 
 .window-titlebar-close:focus-visible {

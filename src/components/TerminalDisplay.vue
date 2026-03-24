@@ -47,6 +47,11 @@ const terminalAppearance = computed(() => serialStore.terminalAppearance)
 const portLogs = computed(() => serialStore.getPortLogs(props.portPath))
 const themeMode = computed(() => serialStore.appUiState?.themeMode || 'dark')
 const terminalAppearanceMode = computed(() => serialStore.appUiState?.terminalAppearanceMode || 'preset-dark')
+const wallpaperEnabled = computed(() => Boolean(serialStore.appUiState?.wallpaperEnabled && serialStore.appUiState?.wallpaperPath))
+const terminalOpacity = computed(() => {
+  const value = Number(serialStore.appUiState?.terminalOpacity ?? 0.34)
+  return Number.isFinite(value) ? Math.min(0.82, Math.max(0.04, value)) : 0.34
+})
 
 const isUsingLightPreset = computed(() => (
   themeMode.value === 'light' && terminalAppearanceMode.value === 'preset-light'
@@ -82,7 +87,7 @@ const effectiveSelectionStyle = computed(() => {
       inactiveBackground: `rgba(${r}, ${g}, ${b}, 0.18)`,
       foreground: undefined,
       outline: `rgba(${r}, ${g}, ${b}, 0.38)`,
-      shadow: `inset 0 0 0 1px rgba(${r}, ${g}, ${b}, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.2)`
+      shadow: `inset 0 0 0 1px rgba(${r}, ${g}, ${b}, 0.38), inset 0 1px 0 rgba(${r}, ${g}, ${b}, 0.14)`
     }
   }
 
@@ -124,9 +129,28 @@ const effectiveSearchPalette = computed(() => {
 })
 
 const terminalCssVars = computed(() => ({
-  '--terminal-background': terminalAppearance.value.terminalBackground,
+  '--terminal-background': wallpaperEnabled.value
+    ? (
+        themeMode.value === 'light'
+          ? `rgba(245, 251, 255, ${Math.max(0.02, terminalOpacity.value - 0.08)})`
+          : `rgba(17, 22, 28, ${Math.max(0.02, terminalOpacity.value)})`
+      )
+    : terminalAppearance.value.terminalBackground,
+  '--terminal-surface-bg': wallpaperEnabled.value
+    ? (
+        themeMode.value === 'light'
+          ? `rgba(${lightForegroundRgb.value.r}, ${lightForegroundRgb.value.g}, ${lightForegroundRgb.value.b}, ${Math.max(0.02, terminalOpacity.value * 0.08)})`
+          : `rgba(9, 16, 22, ${Math.max(0.02, terminalOpacity.value - 0.06)})`
+      )
+    : terminalAppearance.value.terminalBackground,
   '--terminal-foreground': terminalAppearance.value.terminalForeground,
-  '--terminal-frame-bg': themeMode.value === 'light' ? '#ffffff' : 'rgba(7, 13, 18, 0.22)',
+  '--terminal-frame-bg': wallpaperEnabled.value
+    ? (
+        themeMode.value === 'light'
+          ? `rgba(${lightForegroundRgb.value.r}, ${lightForegroundRgb.value.g}, ${lightForegroundRgb.value.b}, ${Math.max(0.02, terminalOpacity.value * 0.06)})`
+          : `rgba(7, 13, 18, ${Math.max(0.02, terminalOpacity.value - 0.16)})`
+      )
+    : (themeMode.value === 'light' ? '#ffffff' : 'rgba(7, 13, 18, 0.22)'),
   '--terminal-frame-border': themeMode.value === 'light' ? 'rgba(0, 102, 153, 0.12)' : 'rgba(255, 255, 255, 0.04)',
   '--terminal-selection-bg': effectiveSelectionStyle.value.background,
   '--terminal-selection-outline': effectiveSelectionStyle.value.outline,
@@ -140,6 +164,16 @@ const terminalCssVars = computed(() => ({
   '--search-current-match-shadow': effectiveSearchPalette.value.activeMatchShadow,
   '--search-line-highlight': terminalAppearance.value.searchLineHighlightColor
 }))
+
+const resolvedFontSize = computed(() => {
+  const value = Number(terminalAppearance.value.fontSize ?? 13)
+  return Number.isFinite(value) ? Math.min(24, Math.max(10, value)) : 13
+})
+
+const resolvedFontWeight = computed(() => {
+  const value = String(terminalAppearance.value.fontWeight ?? '400')
+  return ['300', '400', '500', '600', '700'].includes(value) ? value : '400'
+})
 
 const focusSearchInput = () => {
   nextTick(() => {
@@ -390,6 +424,10 @@ const clearSearch = () => {
 const applyTerminalAppearance = () => {
   if (!terminal) return
   terminal.options.theme = getTerminalTheme()
+  terminal.options.fontSize = resolvedFontSize.value
+  terminal.options.fontWeight = resolvedFontWeight.value
+  terminal.options.fontWeightBold = resolvedFontWeight.value === '700' ? '800' : '700'
+  fitAddon?.fit()
   refreshSearchResults()
 }
 
@@ -641,8 +679,10 @@ const initTerminal = () => {
 
   terminal = new Terminal({
     allowProposedApi: true,
-    fontSize: 13,
+    fontSize: resolvedFontSize.value,
     fontFamily: 'Consolas, "Courier New", monospace',
+    fontWeight: resolvedFontWeight.value,
+    fontWeightBold: resolvedFontWeight.value === '700' ? '800' : '700',
     theme: getTerminalTheme(),
     scrollback: 1000,
     convertEol: true,
@@ -853,7 +893,7 @@ defineExpose({
   flex: 1;
   overflow: hidden;
   position: relative;
-  background-color: var(--terminal-background);
+  background-color: var(--terminal-surface-bg);
   min-height: 0;
   width: 100%;
   display: flex;
@@ -877,14 +917,19 @@ defineExpose({
   padding-top: 50px;
 }
 
+.terminal-container {
+  --terminal-scrollbar-width: 14px;
+}
+
 .terminal-container ::v-deep(.xterm-viewport) {
-  width: auto !important;
+  width: 100% !important;
   background-color: var(--terminal-background) !important;
   border-left: none !important;
+  pointer-events: auto !important;
 }
 
 .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar) {
-  width: 14px !important;
+  width: var(--terminal-scrollbar-width) !important;
 }
 
 .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-track) {
@@ -917,11 +962,11 @@ defineExpose({
 }
 
 .terminal-container ::v-deep(.xterm .xterm-screen),
-.terminal-container ::v-deep(.xterm .xterm-screen-canvas),
+.terminal-container ::v-deep(.xterm .xterm-screen canvas),
 .terminal-container ::v-deep(.xterm .xterm-rows),
 .terminal-container ::v-deep(.xterm .xterm-scroll-area) {
-  width: 100% !important;
-  max-width: 100% !important;
+  width: calc(100% - var(--terminal-scrollbar-width)) !important;
+  max-width: calc(100% - var(--terminal-scrollbar-width)) !important;
 }
 
 .terminal-container ::v-deep(.xterm-rows > div) {
@@ -977,9 +1022,9 @@ defineExpose({
   z-index: 100;
   padding: 5px 6px;
   border-radius: 999px;
-  border: 1px solid rgba(126, 161, 183, 0.12);
-  background: rgba(12, 21, 28, 0.9);
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--app-border);
+  background: var(--app-modal-bg);
+  box-shadow: var(--app-shadow-lg);
   backdrop-filter: blur(12px);
 }
 
@@ -995,8 +1040,8 @@ defineExpose({
   padding: 0 8px;
   height: 24px;
   border-radius: 999px;
-  background: rgba(87, 199, 255, 0.08);
-  color: #a9dfff;
+  background: var(--app-accent-soft);
+  color: var(--app-chip-text);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -1006,21 +1051,21 @@ defineExpose({
   width: 180px;
   height: 24px;
   padding: 0 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(126, 161, 183, 0.08);
+  background: var(--app-workspace-shell);
+  border: 1px solid var(--app-border);
   border-radius: 999px;
-  color: #dce8f0;
+  color: var(--app-text);
   font-size: 12px;
   font-family: Consolas, "Monaco", monospace;
   outline: none;
 }
 
 .search-input:focus {
-  border-color: rgba(87, 199, 255, 0.24);
+  border-color: var(--app-accent);
 }
 
 .search-input::placeholder {
-  color: #6f889a;
+  color: var(--app-text-soft);
 }
 
 .search-controls {
@@ -1033,7 +1078,7 @@ defineExpose({
   min-width: 52px;
   padding: 0 2px;
   text-align: right;
-  color: #8ea6b8;
+  color: var(--app-text-soft);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -1044,10 +1089,10 @@ defineExpose({
   justify-content: center;
   width: 24px;
   height: 24px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(126, 161, 183, 0.08);
+  background: var(--app-chip-bg);
+  border: 1px solid var(--app-border);
   border-radius: 999px;
-  color: #dce8f0;
+  color: var(--app-text);
   cursor: pointer;
   font-size: 11px;
   padding: 0;
@@ -1055,13 +1100,13 @@ defineExpose({
 }
 
 .search-btn:hover {
-  background: rgba(87, 199, 255, 0.12);
-  border-color: rgba(87, 199, 255, 0.18);
+  background: var(--app-accent-soft);
+  border-color: var(--app-chip-border);
 }
 
 .search-btn.close:hover {
-  background: rgba(196, 43, 28, 0.18);
-  border-color: rgba(196, 43, 28, 0.22);
+  background: var(--app-danger-soft);
+  border-color: var(--app-danger-border);
 }
 
 .context-menu {
@@ -1069,9 +1114,9 @@ defineExpose({
   min-width: 148px;
   padding: 6px;
   border-radius: 10px;
-  background: rgba(17, 25, 33, 0.96);
-  border: 1px solid rgba(126, 161, 183, 0.14);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+  background: var(--app-modal-bg);
+  border: 1px solid var(--app-modal-border);
+  box-shadow: var(--app-shadow-lg);
   backdrop-filter: blur(14px);
   z-index: 10000;
   animation: fadeIn 0.14s ease;
@@ -1094,7 +1139,7 @@ defineExpose({
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  color: #d8e5ee;
+  color: var(--app-text);
   font-size: 12px;
   border-radius: 8px;
   cursor: pointer;
@@ -1102,8 +1147,8 @@ defineExpose({
 }
 
 .context-menu-item:hover {
-  background: rgba(87, 199, 255, 0.14);
-  color: #ffffff;
+  background: var(--app-accent-soft);
+  color: var(--app-text);
 }
 
 .context-menu-item.disabled {
@@ -1113,17 +1158,17 @@ defineExpose({
 
 .context-menu-item.disabled:hover {
   background: transparent;
-  color: #d8e5ee;
+  color: var(--app-text);
 }
 
 .context-menu-item.danger:hover {
-  background: rgba(196, 43, 28, 0.86);
+  background: var(--app-danger);
 }
 
 .context-menu-divider {
   height: 1px;
   margin: 6px 2px;
-  background: rgba(126, 161, 183, 0.18);
+  background: var(--app-border);
 }
 
 .menu-icon {
@@ -1153,12 +1198,12 @@ defineExpose({
 }
 
 .theme-light .terminal-container ::v-deep(.xterm-viewport::-webkit-scrollbar-corner) {
-  background: #ffffff !important;
+  background: var(--app-modal-bg) !important;
 }
 
 .theme-light .search-widget,
 .theme-light .context-menu {
-  background: #ffffff;
+  background: var(--app-modal-bg);
   border-color: rgba(0, 102, 153, 0.14);
   box-shadow: 0 12px 28px rgba(31, 35, 40, 0.08);
 }
@@ -1171,7 +1216,7 @@ defineExpose({
 .theme-light .search-input,
 .theme-light .search-btn,
 .theme-light .context-menu-item {
-  background: #ffffff;
+  background: var(--app-modal-bg);
   border-color: rgba(0, 102, 153, 0.12);
   color: #1f2328;
 }

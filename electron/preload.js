@@ -20,9 +20,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportWorkspaceSnapshot: (payload) => ipcRenderer.invoke('workspace:export', payload),
   importWorkspaceSnapshot: () => ipcRenderer.invoke('workspace:import'),
   selectWallpaper: () => ipcRenderer.invoke('wallpaper:select'),
+  readWallpaperDataUrl: (filePath) => ipcRenderer.invoke('wallpaper:read-data-url', filePath),
+  pushUiStateSnapshot: (snapshot) => ipcRenderer.send('ui-state:push', snapshot),
+  getLatestUiStateSnapshot: () => ipcRenderer.invoke('ui-state:get-latest'),
 
   // Window Operations
   openConverterWindow: () => ipcRenderer.send('window:open-converter'),
+  openAppearanceWindow: () => ipcRenderer.send('window:open-appearance'),
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   unmaximizeWindow: () => ipcRenderer.send('window:unmaximize'),
@@ -34,6 +38,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onWindowUnmaximized: (callback) => {
     ipcRenderer.on('window:unmaximized', callback)
+  },
+  onUiStateSnapshot: (callback) => {
+    ipcRenderer.removeAllListeners('ui-state:update')
+    ipcRenderer.on('ui-state:update', (event, snapshot) => callback(snapshot))
   },
 
   // Serial Data Events (from main to renderer) - 数据包含串口路径

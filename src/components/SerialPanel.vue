@@ -606,7 +606,7 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: rgba(7, 13, 18, 0.86);
+  background: var(--app-workspace-shell);
   overflow: hidden;
 }
 
@@ -616,8 +616,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  background: rgba(10, 19, 27, 0.52);
-  border-bottom: 1px solid rgba(126, 161, 183, 0.12);
+  background: var(--app-workspace-soft);
+  border-bottom: 1px solid var(--app-border);
   flex-shrink: 0;
 }
 
@@ -632,8 +632,8 @@ onUnmounted(() => {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #57c7ff;
-  box-shadow: 0 0 0 5px rgba(87, 199, 255, 0.14);
+  background: var(--app-accent);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--app-accent) 18%, transparent);
   flex-shrink: 0;
 }
 
@@ -647,12 +647,12 @@ onUnmounted(() => {
 .port-path {
   font-size: 15px;
   font-weight: 700;
-  color: #f4fbff;
+  color: var(--app-text);
 }
 
 .port-baud {
   font-size: 11px;
-  color: #94adbf;
+  color: var(--app-text-soft);
 }
 
 .loop-send-status {
@@ -660,8 +660,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 5px 9px;
-  background: rgba(255, 183, 77, 0.08);
-  border: 1px solid rgba(255, 183, 77, 0.18);
+  background: var(--app-warning-soft);
+  border: 1px solid var(--app-warning-border);
   border-radius: 999px;
 }
 
@@ -669,19 +669,19 @@ onUnmounted(() => {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #ffc266;
-  box-shadow: 0 0 0 4px rgba(255, 194, 102, 0.16);
+  background: var(--app-warning);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-warning) 18%, transparent);
 }
 
 .loop-indicator.paused {
-  background: #8c9eae;
-  box-shadow: 0 0 0 4px rgba(140, 158, 174, 0.16);
+  background: var(--app-text-soft);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-text-soft) 18%, transparent);
 }
 
 .loop-count {
   font-size: 11px;
   font-weight: 600;
-  color: #ffdca8;
+  color: var(--app-warning-text);
 }
 
 .panel-actions {
@@ -699,8 +699,8 @@ onUnmounted(() => {
   gap: 4px;
   padding: 6px 8px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(126, 161, 183, 0.12);
+  background: var(--app-chip-bg);
+  border: 1px solid var(--app-border);
   cursor: pointer;
   user-select: none;
 }
@@ -712,18 +712,18 @@ onUnmounted(() => {
 }
 
 .stats-line.tx {
-  color: #83ddff;
+  color: var(--app-chip-text);
 }
 
 .stats-line.rx {
-  color: #bce8a4;
+  color: var(--app-success-text);
 }
 
 .action-btn {
   padding: 7px 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(126, 161, 183, 0.12);
-  color: #d3e2ec;
+  background: var(--app-chip-bg);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
   border-radius: 10px;
   cursor: pointer;
   font-size: 11px;
@@ -732,25 +732,25 @@ onUnmounted(() => {
 }
 
 .action-btn:hover {
-  background: rgba(87, 199, 255, 0.12);
-  border-color: rgba(87, 199, 255, 0.18);
+  background: var(--app-accent-soft);
+  border-color: var(--app-chip-border);
 }
 
 .action-btn.disconnect:hover {
-  background: rgba(196, 43, 28, 0.18);
-  border-color: rgba(196, 43, 28, 0.22);
+  background: var(--app-danger-soft);
+  border-color: var(--app-danger-border);
 }
 
 .action-btn.filter.active {
-  background: rgba(87, 199, 255, 0.18);
-  border-color: rgba(87, 199, 255, 0.22);
-  color: #f4fbff;
+  background: var(--app-accent-strong);
+  border-color: var(--app-chip-border);
+  color: var(--app-text);
 }
 
 .filter-panel {
   padding: 10px 12px 12px;
-  background: rgba(10, 19, 27, 0.4);
-  border-bottom: 1px solid rgba(126, 161, 183, 0.12);
+  background: var(--app-workspace-soft);
+  border-bottom: 1px solid var(--app-border);
 }
 
 .filter-toolbar {
@@ -770,8 +770,8 @@ onUnmounted(() => {
   gap: 12px;
   padding: 6px 10px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(126, 161, 183, 0.08);
+  background: var(--app-chip-bg);
+  border: 1px solid var(--app-border);
 }
 
 .inline-group.disabled {
@@ -784,27 +784,27 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  color: #dce8f0;
+  color: var(--app-text);
 }
 
 .option-checkbox input,
 .mode-radio input {
-  accent-color: #57c7ff;
+  accent-color: var(--app-accent);
 }
 
 .option-text,
 .mode-text,
 .target-label {
   font-size: 12px;
-  color: #dce8f0;
+  color: var(--app-text);
 }
 
 .pattern-input {
   width: 100%;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(126, 161, 183, 0.12);
-  color: #dce8f0;
+  background: var(--app-chip-bg);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
   border-radius: 10px;
   font-size: 13px;
   font-family: Consolas, "Monaco", monospace;
@@ -812,8 +812,8 @@ onUnmounted(() => {
 
 .pattern-input:focus {
   outline: none;
-  border-color: rgba(87, 199, 255, 0.22);
-  box-shadow: 0 0 0 3px rgba(87, 199, 255, 0.1);
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 18%, transparent);
 }
 
 .pattern-input:disabled {
@@ -825,8 +825,8 @@ onUnmounted(() => {
   margin-top: 12px;
   padding: 8px 10px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  color: #93acbf;
+  background: var(--app-chip-bg);
+  color: var(--app-text-soft);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -834,8 +834,8 @@ onUnmounted(() => {
 .send-console {
   position: relative;
   padding: 10px 12px 12px;
-  background: rgba(10, 18, 25, 0.48);
-  border-top: 1px solid rgba(126, 161, 183, 0.12);
+  background: var(--app-workspace-soft);
+  border-top: 1px solid var(--app-border);
   flex-shrink: 0;
 }
 
@@ -849,9 +849,9 @@ onUnmounted(() => {
 .send-input {
   flex: 1;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(126, 161, 183, 0.12);
-  color: #ffffff;
+  background: var(--app-chip-bg);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
   border-radius: 10px;
   font-size: 13px;
   font-family: Consolas, "Monaco", monospace;
@@ -859,30 +859,30 @@ onUnmounted(() => {
 }
 
 .send-input.hex-invalid {
-  border-color: rgba(196, 43, 28, 0.38);
-  box-shadow: 0 0 0 3px rgba(196, 43, 28, 0.1);
+  border-color: var(--app-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-danger) 18%, transparent);
 }
 
 .send-input.send-error {
-  border-color: rgba(196, 43, 28, 0.32);
+  border-color: var(--app-danger-border);
 }
 
 .send-input::placeholder {
-  color: #698193;
+  color: var(--app-text-soft);
 }
 
 .send-input:focus {
   outline: none;
-  border-color: rgba(87, 199, 255, 0.24);
-  box-shadow: 0 0 0 4px rgba(87, 199, 255, 0.1);
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent) 18%, transparent);
 }
 
 .send-button {
   padding: 10px 18px;
-  background: #1495e1;
-  border: 1px solid rgba(87, 199, 255, 0.12);
+  background: var(--app-accent);
+  border: 1px solid var(--app-chip-border);
   border-radius: 10px;
-  color: #ffffff;
+  color: var(--app-text);
   font-weight: 800;
   cursor: pointer;
   font-size: 13px;
@@ -895,8 +895,8 @@ onUnmounted(() => {
 }
 
 .send-button:disabled {
-  background: rgba(255, 255, 255, 0.06);
-  color: #688093;
+  background: var(--app-workspace-soft);
+  color: var(--app-text-soft);
   cursor: not-allowed;
   box-shadow: none;
 }
@@ -922,15 +922,15 @@ onUnmounted(() => {
 }
 
 .send-feedback.error {
-  color: #ffb8b1;
-  background: rgba(196, 43, 28, 0.14);
-  border-color: rgba(196, 43, 28, 0.22);
+  color: var(--app-danger-text);
+  background: var(--app-danger-soft);
+  border-color: var(--app-danger-border);
 }
 
 .send-feedback.success {
-  color: #99f0c8;
-  background: rgba(32, 145, 92, 0.14);
-  border-color: rgba(32, 145, 92, 0.2);
+  color: var(--app-success-text);
+  background: var(--app-success-soft);
+  border-color: var(--app-success-border);
 }
 
 .send-feedback.notice {
@@ -939,27 +939,27 @@ onUnmounted(() => {
 }
 
 .send-feedback.notice.error {
-  color: #ffb8b1;
-  background: rgba(196, 43, 28, 0.14);
-  border-color: rgba(196, 43, 28, 0.22);
+  color: var(--app-danger-text);
+  background: var(--app-danger-soft);
+  border-color: var(--app-danger-border);
 }
 
 .send-feedback.notice.warning {
-  color: #ffd18a;
-  background: rgba(196, 137, 43, 0.14);
-  border-color: rgba(196, 137, 43, 0.2);
+  color: var(--app-warning-text);
+  background: var(--app-warning-soft);
+  border-color: var(--app-warning-border);
 }
 
 .send-feedback.notice.success {
-  color: #99f0c8;
-  background: rgba(32, 145, 92, 0.14);
-  border-color: rgba(32, 145, 92, 0.2);
+  color: var(--app-success-text);
+  background: var(--app-success-soft);
+  border-color: var(--app-success-border);
 }
 
 .send-feedback.notice.info {
-  color: #8ccdf3;
-  background: rgba(46, 115, 161, 0.14);
-  border-color: rgba(46, 115, 161, 0.22);
+  color: var(--app-chip-text);
+  background: var(--app-accent-soft);
+  border-color: var(--app-chip-border);
 }
 
 .send-options {
@@ -978,9 +978,9 @@ onUnmounted(() => {
 .quick-command-btn {
   padding: 6px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(87, 199, 255, 0.14);
-  background: rgba(87, 199, 255, 0.07);
-  color: #c7edff;
+  border: 1px solid var(--app-chip-border);
+  background: var(--app-accent-soft);
+  color: var(--app-chip-text);
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -988,8 +988,8 @@ onUnmounted(() => {
 }
 
 .quick-command-btn:hover:not(:disabled) {
-  background: rgba(87, 199, 255, 0.14);
-  border-color: rgba(87, 199, 255, 0.24);
+  background: var(--app-accent-strong);
+  border-color: var(--app-accent);
 }
 
 .quick-command-btn:disabled {
@@ -1000,11 +1000,11 @@ onUnmounted(() => {
 .command-select {
   height: 34px;
   padding: 0 34px 0 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(126, 161, 183, 0.12);
+  background: var(--app-workspace-soft);
+  border: 1px solid var(--app-border);
   border-radius: 10px;
   color-scheme: dark;
-  color: #f4fbff;
+  color: var(--app-text);
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
@@ -1025,24 +1025,24 @@ onUnmounted(() => {
 }
 
 .command-select:hover:not(:disabled) {
-  border-color: rgba(87, 199, 255, 0.2);
+  border-color: var(--app-accent);
 }
 
 .command-select:focus {
   outline: none;
-  border-color: rgba(87, 199, 255, 0.26);
-  box-shadow: 0 0 0 3px rgba(87, 199, 255, 0.1);
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 18%, transparent);
 }
 
 .command-select option {
-  background-color: #0f1922;
-  color: #e7f3fb;
+  background-color: var(--app-modal-bg);
+  color: var(--app-text);
 }
 
 .command-select option:checked,
 .command-select option:hover {
-  background-color: #173449;
-  color: #ffffff;
+  background-color: var(--app-accent-soft);
+  color: var(--app-text);
 }
 
 .command-select:disabled {
@@ -1065,14 +1065,14 @@ onUnmounted(() => {
   gap: 6px;
   padding: 4px 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(126, 161, 183, 0.12);
+  background: var(--app-chip-bg);
+  border: 1px solid var(--app-border);
   cursor: pointer;
   user-select: none;
 }
 
 .checkbox-label input[type='checkbox'] {
-  accent-color: #57c7ff;
+  accent-color: var(--app-accent);
   width: 12px;
   height: 12px;
   cursor: pointer;
@@ -1091,21 +1091,21 @@ onUnmounted(() => {
 }
 
 .loop-start-btn {
-  background: rgba(87, 199, 255, 0.14);
-  color: #bfe9ff;
-  border-color: rgba(87, 199, 255, 0.18);
+  background: var(--app-accent-soft);
+  color: var(--app-chip-text);
+  border-color: var(--app-chip-border);
 }
 
 .loop-pause-btn {
-  background: rgba(255, 183, 77, 0.14);
-  color: #ffe1af;
-  border-color: rgba(255, 183, 77, 0.18);
+  background: var(--app-warning-soft);
+  color: var(--app-warning-text);
+  border-color: var(--app-warning-border);
 }
 
 .loop-stop-btn {
-  background: rgba(196, 43, 28, 0.14);
-  color: #ffd5d1;
-  border-color: rgba(196, 43, 28, 0.18);
+  background: var(--app-danger-soft);
+  color: var(--app-danger-text);
+  border-color: var(--app-danger-border);
 }
 
 .advanced-summary {
@@ -1115,19 +1115,19 @@ onUnmounted(() => {
   min-width: 0;
   padding: 5px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(126, 161, 183, 0.08);
+  background: var(--app-chip-bg);
+  border: 1px solid var(--app-border);
 }
 
 .advanced-summary-label {
   font-size: 10px;
   letter-spacing: 0.08em;
-  color: #8ea6b8;
+  color: var(--app-text-soft);
 }
 
 .advanced-summary-value {
   font-size: 11px;
-  color: #c7d7e3;
+  color: var(--app-text);
   white-space: nowrap;
 }
 
@@ -1135,9 +1135,9 @@ onUnmounted(() => {
   margin-left: auto;
   padding: 6px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(126, 161, 183, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-  color: #9fb6c7;
+  border: 1px solid var(--app-border);
+  background: var(--app-chip-bg);
+  color: var(--app-text-soft);
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
@@ -1146,8 +1146,8 @@ onUnmounted(() => {
 
 .advanced-toggle:hover,
 .advanced-toggle.active {
-  background: rgba(255, 255, 255, 0.06);
-  color: #dce8f0;
+  background: var(--app-accent-soft);
+  color: var(--app-text);
 }
 
 .advanced-options {
@@ -1161,52 +1161,52 @@ onUnmounted(() => {
   gap: 6px;
   padding: 6px 8px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(126, 161, 183, 0.08);
-  color: #dce8f0;
+  background: var(--app-chip-bg);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
 }
 
 .packet-timeout {
-  background: rgba(87, 199, 255, 0.04);
-  border-color: rgba(87, 199, 255, 0.12);
+  background: var(--app-accent-soft);
+  border-color: var(--app-chip-border);
   padding-right: 6px;
 }
 
 .packet-label {
-  color: #a9c3d5;
+  color: var(--app-chip-text);
   font-weight: 600;
 }
 
 .interval-label {
-  color: #94adbf;
+  color: var(--app-text-soft);
   font-size: 12px;
 }
 
 .interval-input {
   width: 62px;
   padding: 6px 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(126, 161, 183, 0.12);
-  color: #dce8f0;
+  background: var(--app-workspace-soft);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
   border-radius: 10px;
   font-size: 12px;
   text-align: center;
 }
 
 .interval-unit {
-  color: #94adbf;
+  color: var(--app-text-soft);
   font-size: 12px;
 }
 
 .theme-light.serial-panel {
-  background: #ffffff;
+  background: var(--app-surface-base, #ffffff);
   color: #1f2328;
 }
 
 .theme-light .panel-header,
 .theme-light .filter-panel,
 .theme-light .send-console {
-  background: #ffffff;
+  background: var(--app-surface-soft, #ffffff);
   border-color: rgba(0, 102, 153, 0.12);
 }
 
@@ -1247,7 +1247,7 @@ onUnmounted(() => {
 .theme-light .pattern-input,
 .theme-light .send-input,
 .theme-light .interval-input {
-  background-color: #ffffff;
+  background-color: var(--app-surface-soft, #ffffff);
   border-color: rgba(0, 102, 153, 0.12);
   color: #1f2328;
 }
@@ -1336,14 +1336,14 @@ onUnmounted(() => {
 }
 
 .theme-light .command-select option {
-  background-color: #ffffff;
-  color: #1f2328;
+  background-color: var(--app-modal-bg);
+  color: var(--app-text);
 }
 
 .theme-light .command-select option:checked,
 .theme-light .command-select option:hover {
-  background-color: #e8f3ff;
-  color: #1f2328;
+  background-color: var(--app-accent-soft);
+  color: var(--app-text);
 }
 
 .theme-light .loop-start-btn {
@@ -1365,7 +1365,7 @@ onUnmounted(() => {
 }
 
 .theme-light .packet-timeout {
-  background: #ffffff;
+  background: var(--app-surface-soft, #ffffff);
   border-color: rgba(0, 102, 153, 0.12);
 }
 </style>
