@@ -531,6 +531,9 @@ function createWindow() {
   }
 
   mainWindow.on('closed', () => {
+    if (appearanceWindow && !appearanceWindow.isDestroyed()) {
+      appearanceWindow.close()
+    }
     mainWindow = null
   })
 }
@@ -601,6 +604,10 @@ function broadcastUiStateSnapshot(snapshot, sender = null) {
 
 function createAppearanceWindow() {
   if (appearanceWindow && !appearanceWindow.isDestroyed()) {
+    if (appearanceWindow.isMinimized()) {
+      appearanceWindow.restore()
+    }
+    appearanceWindow.show()
     appearanceWindow.focus()
     return appearanceWindow
   }
@@ -611,6 +618,7 @@ function createAppearanceWindow() {
     minWidth: 960,
     minHeight: 680,
     autoHideMenuBar: true,
+    parent: mainWindow || undefined,
     title: 'SerialX 外观设置',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -625,6 +633,13 @@ function createAppearanceWindow() {
     if (latestUiStateSnapshot) {
       sendUiStateSnapshot(appearanceWindow, latestUiStateSnapshot)
     }
+  })
+
+  appearanceWindow.webContents.on('render-process-gone', () => {
+    if (appearanceWindow && !appearanceWindow.isDestroyed()) {
+      appearanceWindow.destroy()
+    }
+    appearanceWindow = null
   })
 
   appearanceWindow.on('closed', () => {

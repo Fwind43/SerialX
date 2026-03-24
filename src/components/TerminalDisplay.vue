@@ -581,15 +581,18 @@ const openSearchFromContextMenu = () => {
   openSearch()
 }
 
-const selectAll = () => {
-  if (terminal?.element) {
-    const range = document.createRange()
-    range.selectNodeContents(terminal.element)
-    const selection = window.getSelection()
-    selection?.removeAllRanges()
-    selection?.addRange(range)
+const selectAllTerminal = (closeMenu = false) => {
+  if (!terminal) return
+  terminal.focus()
+  terminal.selectAll()
+  selectedText.value = terminal.getSelection()?.trim() || ''
+  if (closeMenu) {
+    showContextMenu.value = false
   }
-  showContextMenu.value = false
+}
+
+const selectAll = () => {
+  selectAllTerminal(true)
 }
 
 const clearTerminalLogs = () => {
@@ -671,6 +674,13 @@ const handleKeyDown = (event) => {
     event.preventDefault()
     event.stopPropagation()
     openSearch()
+    return
+  }
+
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && serialStore.selectedPort === props.portPath) {
+    event.preventDefault()
+    event.stopPropagation()
+    selectAllTerminal()
   }
 }
 
@@ -703,6 +713,10 @@ const initTerminal = () => {
   terminal.attachCustomKeyEventHandler((event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && terminal?.hasSelection()) {
       copySelection()
+      return false
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+      selectAllTerminal()
       return false
     }
     return true

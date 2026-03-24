@@ -152,6 +152,11 @@ const setThemeMode = (mode) => {
 }
 
 const syncWallpaperDataUrl = async () => {
+  if (isAppearanceMode.value) {
+    wallpaperDataUrl.value = ''
+    return
+  }
+
   if (!wallpaperPath.value) {
     wallpaperDataUrl.value = ''
     return
@@ -619,7 +624,6 @@ onUnmounted(() => {
           <span class="app-title">SerialX</span>
           <span class="app-subtitle">串口调试工作台</span>
         </div>
-        <span class="app-version-chip">v0.0.6-dev</span>
       </div>
 
       <div class="header-right window-controls">
@@ -981,19 +985,6 @@ onUnmounted(() => {
   color: var(--app-text-soft);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-}
-
-.app-version-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--app-chip-border);
-  background: var(--app-chip-bg);
-  color: var(--app-chip-text);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
 }
 
 .window-controls {

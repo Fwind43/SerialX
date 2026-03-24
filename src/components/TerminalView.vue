@@ -22,8 +22,10 @@ const paneRefs = ref([])
 const contentContainer = ref(null)
 
 const draggedData = ref(null)
+const draggedPaneIndex = ref(-1)
 const dropZoneIndex = ref(-1)
 const dropPosition = ref('')
+const paneDropIndex = ref(-1)
 const isDraggingSeparator = ref(false)
 const draggingSeparatorIndex = ref(-1)
 const separatorStartX = ref(0)
@@ -294,6 +296,22 @@ const removeEmptyPane = (paneIndex) => {
   syncPaneLayout()
 }
 
+const movePane = (sourceIndex, targetIndex) => {
+  if (sourceIndex === targetIndex) return
+  if (sourceIndex < 0 || targetIndex < 0) return
+  if (sourceIndex >= splitPanes.value.length || targetIndex >= splitPanes.value.length) return
+
+  const movedPane = splitPanes.value.splice(sourceIndex, 1)[0]
+  splitPanes.value.splice(targetIndex, 0, movedPane)
+
+  if (paneWidths.value.length === splitPanes.value.length) {
+    const movedWidth = paneWidths.value.splice(sourceIndex, 1)[0]
+    paneWidths.value.splice(targetIndex, 0, movedWidth)
+  }
+
+  syncPaneLayout()
+}
+
 const handleContentDragOver = (event, paneIndex) => {
   event.preventDefault()
   if (!draggedData.value) return
@@ -356,6 +374,42 @@ const handleDragStart = (event, paneIndex, port) => {
   event.dataTransfer.effectAllowed = 'move'
 }
 
+const handlePaneDragStart = (event, paneIndex) => {
+  draggedPaneIndex.value = paneIndex
+  event.dataTransfer.setData('application/x-pane-index', String(paneIndex))
+  event.dataTransfer.effectAllowed = 'move'
+}
+
+const handlePaneDragOver = (event, paneIndex) => {
+  if (draggedPaneIndex.value === -1) return
+  event.preventDefault()
+  paneDropIndex.value = paneIndex
+  event.dataTransfer.dropEffect = 'move'
+}
+
+const handlePaneDrop = (event, targetPaneIndex) => {
+  event.preventDefault()
+  if (draggedPaneIndex.value === -1) return
+
+  movePane(draggedPaneIndex.value, targetPaneIndex)
+  draggedPaneIndex.value = -1
+  paneDropIndex.value = -1
+}
+
+const handlePaneDragLeave = (event, paneIndex) => {
+  if (draggedPaneIndex.value === -1) return
+  const nextTarget = event.relatedTarget
+  if (nextTarget && event.currentTarget.contains(nextTarget)) return
+  if (paneDropIndex.value === paneIndex) {
+    paneDropIndex.value = -1
+  }
+}
+
+const handlePaneDragEnd = () => {
+  draggedPaneIndex.value = -1
+  paneDropIndex.value = -1
+}
+
 const handleTabListDragOver = (event) => {
   event.preventDefault()
   event.dataTransfer.dropEffect = 'move'
@@ -397,6 +451,8 @@ const handleDragEnd = () => {
   draggedData.value = null
   dropZoneIndex.value = -1
   dropPosition.value = ''
+  draggedPaneIndex.value = -1
+  paneDropIndex.value = -1
 }
 
 const handleSeparatorMouseDown = (event, index) => {
@@ -485,8 +541,11 @@ onUnmounted(() => {
 
         <div
           :ref="(element) => setPaneRef(element, paneIndex)"
-          class="split-pane-group"
+          :class="['split-pane-group', { 'pane-drop-target': paneDropIndex === paneIndex }]"
           :style="paneWidths.length === splitPanes.length ? { flex: `0 0 ${Math.floor(paneWidths[paneIndex])}px` } : null"
+          @dragover="handlePaneDragOver($event, paneIndex)"
+          @drop="handlePaneDrop($event, paneIndex)"
+          @dragleave="handlePaneDragLeave($event, paneIndex)"
         >
           <div class="tab-header-section">
             <div class="tab-list">
@@ -504,9 +563,21 @@ onUnmounted(() => {
                 <span class="tab-close" @click.stop="disconnectPort(port)">×</span>
               </div>
             </div>
-            <button class="pane-split-btn" title="向右拆分" @click.stop="splitPane(paneIndex)">
-              拆分
-            </button>
+            <div class="pane-actions">
+              <button
+                v-if="splitPanes.length > 1"
+                class="pane-drag-handle"
+                title="拖动调换分屏位置"
+                draggable="true"
+                @dragstart="handlePaneDragStart($event, paneIndex)"
+                @dragend="handlePaneDragEnd"
+              >
+                ⋮⋮
+              </button>
+              <button class="pane-split-btn" title="向右拆分" @click.stop="splitPane(paneIndex)">
+                拆分
+              </button>
+            </div>
           </div>
 
           <div
@@ -565,6 +636,11 @@ onUnmounted(() => {
   border: 1px solid var(--app-border);
 }
 
+.split-pane-group.pane-drop-target {
+  border-color: var(--app-accent-strong);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-accent-strong) 38%, transparent);
+}
+
 .split-separator {
   width: 6px;
   flex-shrink: 0;
@@ -593,6 +669,14 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--app-border);
   flex-shrink: 0;
   height: 40px;
+}
+
+.pane-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 8px;
+  flex-shrink: 0;
 }
 
 .tab-list {
@@ -671,7 +755,6 @@ onUnmounted(() => {
 }
 
 .pane-split-btn {
-  margin-right: 8px;
   padding: 6px 10px;
   border-radius: 10px;
   border: 1px solid var(--app-border);
@@ -683,6 +766,30 @@ onUnmounted(() => {
 }
 
 .pane-split-btn:hover { background: var(--app-accent-soft); }
+
+.pane-drag-handle {
+  min-width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  border: 1px solid var(--app-border);
+  background: var(--app-chip-bg);
+  color: var(--app-text-soft);
+  cursor: grab;
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: -1px;
+  transition: all 0.18s ease;
+}
+
+.pane-drag-handle:hover {
+  background: var(--app-accent-soft);
+  color: var(--app-text);
+}
+
+.pane-drag-handle:active {
+  cursor: grabbing;
+  transform: translateY(1px);
+}
 
 .split-pane {
   flex: 1;
