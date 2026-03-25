@@ -206,6 +206,7 @@ export const useSerialStore = defineStore('serial', () => {
     splitPanes: [{ tabs: [], activeTab: '' }],
     paneWidths: []
   })
+  const createDefaultSavedWorkspaceSnapshots = () => []
 
   const createDefaultAppUiState = () => ({
     sidebarCollapsed: false,
@@ -213,6 +214,7 @@ export const useSerialStore = defineStore('serial', () => {
     activeThemeSchemeId: 'preset-dark',
     terminalAppearanceMode: 'preset-dark',
     appThemeMode: 'preset-dark',
+    activeWorkspaceSnapshotId: '',
     wallpaperEnabled: false,
     wallpaperPath: '',
     wallpaperOpacity: 0.22,
@@ -222,11 +224,25 @@ export const useSerialStore = defineStore('serial', () => {
     terminalOpacity: 0.34
   })
 
-  const createDefaultCommonCommands = () => ([
-    { id: 1, name: '复位', command: 'RESET', enabled: true },
-    { id: 2, name: '状态查询', command: 'STATUS?', enabled: true },
-    { id: 3, name: '版本信息', command: 'VERSION', enabled: true },
-    { id: 4, name: '帮助', command: 'HELP', enabled: true }
+  const normalizeCommonCommands = (commands = []) => (
+    Array.isArray(commands)
+      ? commands
+          .filter((cmd) => cmd && typeof cmd === 'object')
+          .map((cmd, index) => ({
+            id: cmd.id ?? Date.now() + index,
+            name: typeof cmd.name === 'string' && cmd.name.trim() ? cmd.name.trim() : `命令 ${index + 1}`,
+            command: typeof cmd.command === 'string' ? cmd.command : '',
+            group: typeof cmd.group === 'string' && cmd.group.trim() ? cmd.group.trim() : '默认',
+            enabled: cmd.enabled !== false
+          }))
+      : []
+  )
+
+  const createDefaultCommonCommands = () => normalizeCommonCommands([
+    { id: 1, name: '复位', command: 'RESET', group: '设备控制', enabled: true },
+    { id: 2, name: '状态查询', command: 'STATUS?', group: '查询', enabled: true },
+    { id: 3, name: '版本信息', command: 'VERSION', group: '查询', enabled: true },
+    { id: 4, name: '帮助', command: 'HELP', group: '查询', enabled: true }
   ])
 
   // State
@@ -238,6 +254,7 @@ export const useSerialStore = defineStore('serial', () => {
   const portLogs = ref(new Map())  // path -> log array
   const portSettings = ref(new Map()) // path -> settings object
   const portSendingData = ref(new Map()) // path -> sending data string
+  const portSendHistory = ref(new Map()) // path -> string[]
   const portFilters = ref(new Map()) // path -> { enabled, mode, matchMode, pattern } mode: 'discard', matchMode: 'keyword' | 'regex'
 
   // 当前选中的串口设置（用于新建连接）
@@ -261,8 +278,29 @@ export const useSerialStore = defineStore('serial', () => {
   const terminalAppearance = ref(createDefaultTerminalAppearance())
   const customAppearancePresets = ref(createDefaultCustomAppearancePresets())
   const workspaceLayout = ref(createDefaultWorkspaceLayout())
+  const savedWorkspaceSnapshots = ref(createDefaultSavedWorkspaceSnapshots())
   const appUiState = ref(createDefaultAppUiState())
   let isApplyingExternalUiSnapshot = false
+
+  const syncWorkspaceSnapshotSelection = (preferredSnapshotId = null) => {
+    const snapshotIds = new Set(savedWorkspaceSnapshots.value.map((item) => item.id))
+    const currentSnapshotId = typeof appUiState.value.activeWorkspaceSnapshotId === 'string'
+      ? appUiState.value.activeWorkspaceSnapshotId
+      : ''
+    const nextSnapshotId = typeof preferredSnapshotId === 'string'
+      ? (snapshotIds.has(preferredSnapshotId) ? preferredSnapshotId : '')
+      : (snapshotIds.has(currentSnapshotId) ? currentSnapshotId : '')
+
+    if (currentSnapshotId === nextSnapshotId) {
+      return false
+    }
+
+    appUiState.value = buildAppUiStateWithThemeScheme({
+      ...appUiState.value,
+      activeWorkspaceSnapshotId: nextSnapshotId
+    })
+    return true
+  }
 
   const persistUiPreferencesToConfig = async () => {
     try {
@@ -272,6 +310,7 @@ export const useSerialStore = defineStore('serial', () => {
       config.appTheme = JSON.parse(JSON.stringify(appTheme.value))
       config.terminalAppearance = JSON.parse(JSON.stringify(terminalAppearance.value))
       config.customAppearancePresets = JSON.parse(JSON.stringify(customAppearancePresets.value))
+      config.savedWorkspaceSnapshots = JSON.parse(JSON.stringify(savedWorkspaceSnapshots.value))
       await window.electronAPI.saveConfig(config)
     } catch (error) {
       console.error('[Store] Error saving UI preferences:', error)
@@ -282,7 +321,8 @@ export const useSerialStore = defineStore('serial', () => {
     appUiState: JSON.parse(JSON.stringify(appUiState.value)),
     appTheme: JSON.parse(JSON.stringify(appTheme.value)),
     terminalAppearance: JSON.parse(JSON.stringify(terminalAppearance.value)),
-    customAppearancePresets: JSON.parse(JSON.stringify(customAppearancePresets.value))
+    customAppearancePresets: JSON.parse(JSON.stringify(customAppearancePresets.value)),
+    savedWorkspaceSnapshots: JSON.parse(JSON.stringify(savedWorkspaceSnapshots.value))
   })
 
   const pushUiSyncSnapshot = () => {
@@ -375,11 +415,17 @@ export const useSerialStore = defineStore('serial', () => {
   // 更新串口控制设置
   const updatePortControlSettings = (portPath, updates) => {
     const current = getPortControlSettings(portPath)
-    portControlSettings.value.set(portPath, { ...current, ...updates })
+    const normalizedUpdates = { ...updates }
+
+    if ('loopInterval' in normalizedUpdates) {
+      normalizedUpdates.loopInterval = Math.max(1, Number(normalizedUpdates.loopInterval) || 1000)
+    }
+
+    portControlSettings.value.set(portPath, { ...current, ...normalizedUpdates })
     // 配置变更时自动保存
     saveSessionState()
 
-    if (portLoopSendTimers.has(portPath) && ('loopInterval' in updates || 'loopStartDelay' in updates || 'loopMaxCount' in updates || 'loopFailureLimit' in updates || 'hexSend' in updates)) {
+    if (portLoopSendTimers.has(portPath) && ('loopInterval' in normalizedUpdates || 'loopStartDelay' in normalizedUpdates || 'loopMaxCount' in normalizedUpdates || 'loopFailureLimit' in normalizedUpdates || 'hexSend' in normalizedUpdates)) {
       restartLoopSendForPort(portPath, { preserveCount: true, silent: true })
     }
   }
@@ -796,6 +842,7 @@ export const useSerialStore = defineStore('serial', () => {
     appTheme: { ...appTheme.value },
     terminalAppearance: { ...terminalAppearance.value },
     customAppearancePresets: JSON.parse(JSON.stringify(customAppearancePresets.value)),
+    savedWorkspaceSnapshots: JSON.parse(JSON.stringify(savedWorkspaceSnapshots.value)),
     workspaceLayout: JSON.parse(JSON.stringify(workspaceLayout.value)),
     selectedPort: selectedPort.value,
     appUiState: { ...appUiState.value }
@@ -828,6 +875,66 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  const buildPortPlainTextExport = (portPath) => {
+    const logsForPort = getPortLogs(portPath)
+    const displaySettings = getPortDisplaySettings(portPath)
+    const lines = logsForPort.map((log) => {
+      const prefix = `[${log.timestamp}] [${String(log.type || 'info').toUpperCase()}]`
+      let content = typeof log.pureData === 'string' && log.pureData.length
+        ? log.pureData
+        : log.message
+
+      if (displaySettings.hexReceive && typeof log.hexData === 'string' && log.hexData.length) {
+        const asciiSuffix = displaySettings.showAscii
+          ? ` [${log.hexData.split(' ').map((value) => {
+              const code = Number.parseInt(value, 16)
+              return code >= 32 && code <= 126 ? String.fromCharCode(code) : '.'
+            }).join('')}]`
+          : ''
+
+        content = `${log.hexData}${asciiSuffix}`
+      }
+
+      return `${prefix} ${content ?? ''}`
+    })
+
+    return lines.join('\n')
+  }
+
+  const getAllExportablePortPaths = () => {
+    const portPaths = new Set([
+      ...portLogs.value.keys(),
+      ...openPorts.value.keys()
+    ])
+
+    return Array.from(portPaths)
+      .filter((portPath) => typeof portPath === 'string' && portPath)
+      .sort((left, right) => left.localeCompare(right, 'zh-CN'))
+  }
+
+  const buildAllPortLogExport = () => {
+    const portPaths = getAllExportablePortPaths()
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      portCount: portPaths.length,
+      ports: portPaths.map((portPath) => buildPortLogExport(portPath))
+    }
+  }
+
+  const buildAllPortPlainTextExport = () => {
+    const portPaths = getAllExportablePortPaths()
+    const blocks = portPaths.map((portPath) => {
+      const content = buildPortPlainTextExport(portPath)
+      return [
+        `===== ${portPath} =====`,
+        content || '[无日志]'
+      ].join('\n')
+    })
+
+    return blocks.join('\n\n')
+  }
+
   const buildWorkspaceSnapshot = () => ({
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -838,8 +945,170 @@ export const useSerialStore = defineStore('serial', () => {
     portDisplaySettings: Object.fromEntries(portDisplaySettings.value),
     portControlSettings: Object.fromEntries(portControlSettings.value),
     portFilters: Object.fromEntries(portFilters.value),
-    portSendingData: Object.fromEntries(portSendingData.value)
+    portSendingData: Object.fromEntries(portSendingData.value),
+    portSendHistory: Object.fromEntries(portSendHistory.value)
   })
+
+  const sortObjectKeys = (value) => {
+    if (Array.isArray(value)) {
+      return value.map((item) => sortObjectKeys(item))
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.keys(value)
+        .sort((left, right) => left.localeCompare(right, 'zh-CN'))
+        .reduce((result, key) => {
+          result[key] = sortObjectKeys(value[key])
+          return result
+        }, {})
+    }
+
+    return value
+  }
+
+  const normalizeWorkspaceSnapshotForComparison = (snapshot = {}) => ({
+    selectedPort: typeof snapshot.selectedPort === 'string' || snapshot.selectedPort === null
+      ? snapshot.selectedPort
+      : null,
+    workspaceLayout: sortObjectKeys(snapshot.workspaceLayout || createDefaultWorkspaceLayout()),
+    appUiState: sortObjectKeys({
+      ...(snapshot.appUiState || {}),
+      activeWorkspaceSnapshotId: ''
+    }),
+    defaultSettings: sortObjectKeys(snapshot.defaultSettings || createDefaultSettings()),
+    portDisplaySettings: sortObjectKeys(snapshot.portDisplaySettings || {}),
+    portControlSettings: sortObjectKeys(snapshot.portControlSettings || {}),
+    portFilters: sortObjectKeys(snapshot.portFilters || {}),
+    portSendingData: sortObjectKeys(snapshot.portSendingData || {}),
+    portSendHistory: sortObjectKeys(snapshot.portSendHistory || {})
+  })
+
+  const areWorkspaceSnapshotsEquivalent = (leftSnapshot = {}, rightSnapshot = {}) => (
+    JSON.stringify(normalizeWorkspaceSnapshotForComparison(leftSnapshot)) ===
+    JSON.stringify(normalizeWorkspaceSnapshotForComparison(rightSnapshot))
+  )
+
+  const syncActiveWorkspaceSnapshotState = () => {
+    const activeSnapshotId = typeof appUiState.value.activeWorkspaceSnapshotId === 'string'
+      ? appUiState.value.activeWorkspaceSnapshotId
+      : ''
+    if (!activeSnapshotId) return false
+
+    const activeSnapshot = savedWorkspaceSnapshots.value.find((item) => item.id === activeSnapshotId)
+    if (!activeSnapshot?.snapshot) {
+      return syncWorkspaceSnapshotSelection('')
+    }
+
+    const matchesCurrentState = areWorkspaceSnapshotsEquivalent(activeSnapshot.snapshot, buildWorkspaceSnapshot())
+    if (matchesCurrentState) return false
+
+    return syncWorkspaceSnapshotSelection('')
+  }
+
+  const normalizeSavedWorkspaceSnapshots = (snapshots = []) => (
+    Array.isArray(snapshots)
+      ? snapshots
+          .filter((item) => item && typeof item === 'object')
+          .map((item) => ({
+            id: typeof item.id === 'string' && item.id ? item.id : `workspace-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : '未命名工作区',
+            createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
+            snapshot: item.snapshot && typeof item.snapshot === 'object' ? item.snapshot : buildWorkspaceSnapshot()
+          }))
+      : []
+  )
+
+  const saveNamedWorkspaceSnapshot = async (name = '') => {
+    const snapshotName = typeof name === 'string' && name.trim()
+      ? name.trim()
+      : `工作区快照 ${new Date().toLocaleString('zh-CN', { hour12: false })}`
+
+    const nextSnapshot = {
+      id: `workspace-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: snapshotName,
+      createdAt: new Date().toISOString(),
+      snapshot: buildWorkspaceSnapshot()
+    }
+
+    savedWorkspaceSnapshots.value = [nextSnapshot, ...savedWorkspaceSnapshots.value].slice(0, 8)
+    syncWorkspaceSnapshotSelection(nextSnapshot.id)
+    await saveSessionState()
+    await persistUiPreferencesToConfig()
+    return nextSnapshot
+  }
+
+  const applySavedWorkspaceSnapshot = async (snapshotId = '') => {
+    const targetSnapshot = savedWorkspaceSnapshots.value.find((item) => item.id === snapshotId)
+    if (!targetSnapshot?.snapshot) {
+      throw new Error('未找到对应的工作区快照')
+    }
+
+    await applyWorkspaceSnapshot(targetSnapshot.snapshot)
+    syncWorkspaceSnapshotSelection(snapshotId)
+    return targetSnapshot
+  }
+
+  const overwriteSavedWorkspaceSnapshot = async (snapshotId = '') => {
+    let updatedSnapshot = null
+
+    savedWorkspaceSnapshots.value = savedWorkspaceSnapshots.value.map((item) => {
+      if (item.id !== snapshotId) {
+        return item
+      }
+
+      updatedSnapshot = {
+        ...item,
+        createdAt: new Date().toISOString(),
+        snapshot: buildWorkspaceSnapshot()
+      }
+      return updatedSnapshot
+    })
+
+    if (!updatedSnapshot) {
+      throw new Error('未找到对应的工作区快照')
+    }
+
+    syncWorkspaceSnapshotSelection(snapshotId)
+    await saveSessionState()
+    await persistUiPreferencesToConfig()
+    return updatedSnapshot
+  }
+
+  const renameSavedWorkspaceSnapshot = async (snapshotId = '', name = '') => {
+    const nextName = typeof name === 'string' && name.trim() ? name.trim() : ''
+    if (!nextName) {
+      throw new Error('请输入有效的快照名称')
+    }
+
+    let renamedSnapshot = null
+    savedWorkspaceSnapshots.value = savedWorkspaceSnapshots.value.map((item) => {
+      if (item.id !== snapshotId) {
+        return item
+      }
+
+      renamedSnapshot = {
+        ...item,
+        name: nextName
+      }
+      return renamedSnapshot
+    })
+
+    if (!renamedSnapshot) {
+      throw new Error('未找到对应的工作区快照')
+    }
+
+    await saveSessionState()
+    await persistUiPreferencesToConfig()
+    return renamedSnapshot
+  }
+
+  const removeSavedWorkspaceSnapshot = async (snapshotId = '') => {
+    const wasActiveSnapshot = appUiState.value.activeWorkspaceSnapshotId === snapshotId
+    savedWorkspaceSnapshots.value = savedWorkspaceSnapshots.value.filter((item) => item.id !== snapshotId)
+    syncWorkspaceSnapshotSelection(wasActiveSnapshot ? (savedWorkspaceSnapshots.value[0]?.id ?? '') : null)
+    await saveSessionState()
+    await persistUiPreferencesToConfig()
+  }
 
   const validateWorkspaceSnapshot = (snapshot = {}) => {
     if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
@@ -881,6 +1150,10 @@ export const useSerialStore = defineStore('serial', () => {
     if (snapshot.portSendingData && typeof snapshot.portSendingData !== 'object') {
       throw new Error('发送草稿格式无效')
     }
+
+    if (snapshot.portSendHistory && typeof snapshot.portSendHistory !== 'object') {
+      throw new Error('发送历史格式无效')
+    }
   }
 
   const applyWorkspaceSnapshot = async (snapshot = {}) => {
@@ -903,6 +1176,8 @@ export const useSerialStore = defineStore('serial', () => {
     portControlSettings.value = new Map(Object.entries(snapshot.portControlSettings || {}))
     portFilters.value = new Map(Object.entries(snapshot.portFilters || {}))
     portSendingData.value = new Map(Object.entries(snapshot.portSendingData || {}))
+    portSendHistory.value = new Map(Object.entries(snapshot.portSendHistory || {}))
+    syncWorkspaceSnapshotSelection()
 
     await saveSessionState()
   }
@@ -944,6 +1219,10 @@ export const useSerialStore = defineStore('serial', () => {
       throw new Error('终端外观方案格式无效')
     }
 
+    if (snapshot.savedWorkspaceSnapshots && !Array.isArray(snapshot.savedWorkspaceSnapshots)) {
+      throw new Error('工作区快照列表格式无效')
+    }
+
     if (snapshot.workspaceLayout && typeof snapshot.workspaceLayout !== 'object') {
       throw new Error('工作区布局格式无效')
     }
@@ -977,14 +1256,16 @@ export const useSerialStore = defineStore('serial', () => {
     appTheme.value = resolveAppThemeForMode(nextAppUiState.activeThemeSchemeId, snapshot.appTheme || {})
     terminalAppearance.value = resolveTerminalAppearanceForMode(nextAppUiState.activeThemeSchemeId, snapshot.terminalAppearance || {})
     customAppearancePresets.value = normalizeCustomAppearancePresets(snapshot.customAppearancePresets)
+    savedWorkspaceSnapshots.value = normalizeSavedWorkspaceSnapshots(snapshot.savedWorkspaceSnapshots)
     workspaceLayout.value = {
       ...createDefaultWorkspaceLayout(),
       ...(snapshot.workspaceLayout || {})
     }
     selectedPort.value = typeof snapshot.selectedPort === 'string' ? snapshot.selectedPort : null
     appUiState.value = nextAppUiState
+    syncWorkspaceSnapshotSelection()
     commonCommands.value = Array.isArray(snapshot.commonCommands)
-      ? JSON.parse(JSON.stringify(snapshot.commonCommands))
+      ? normalizeCommonCommands(JSON.parse(JSON.stringify(snapshot.commonCommands)))
       : createDefaultCommonCommands()
 
     await saveSessionState()
@@ -1000,6 +1281,7 @@ export const useSerialStore = defineStore('serial', () => {
       appTheme: createDefaultAppTheme(),
       terminalAppearance: createDefaultTerminalAppearance(),
       customAppearancePresets: createDefaultCustomAppearancePresets(),
+      savedWorkspaceSnapshots: createDefaultSavedWorkspaceSnapshots(),
       workspaceLayout: createDefaultWorkspaceLayout(),
       selectedPort: null,
       appUiState: createDefaultAppUiState()
@@ -1009,6 +1291,7 @@ export const useSerialStore = defineStore('serial', () => {
   // 保存会话状态到本地存储
   const saveSessionState = async () => {
     try {
+      syncActiveWorkspaceSnapshotState()
       const state = {
         defaultSettings: defaultSettings.value,
         portDisplaySettings: Object.fromEntries(portDisplaySettings.value),
@@ -1017,9 +1300,11 @@ export const useSerialStore = defineStore('serial', () => {
         appTheme: appTheme.value,
         terminalAppearance: terminalAppearance.value,
         customAppearancePresets: customAppearancePresets.value,
+        savedWorkspaceSnapshots: savedWorkspaceSnapshots.value,
         workspaceLayout: workspaceLayout.value,
         selectedPort: selectedPort.value,
-        appUiState: appUiState.value
+        appUiState: appUiState.value,
+        portSendHistory: Object.fromEntries(portSendHistory.value)
       }
       localStorage.setItem('serialx-session-state', JSON.stringify(state))
     } catch (error) {
@@ -1043,7 +1328,10 @@ export const useSerialStore = defineStore('serial', () => {
           portControlSettings.value = new Map(Object.entries(state.portControlSettings))
         }
         if (state.commonCommands) {
-          commonCommands.value = state.commonCommands
+          commonCommands.value = normalizeCommonCommands(state.commonCommands)
+        }
+        if (state.portSendHistory) {
+          portSendHistory.value = new Map(Object.entries(state.portSendHistory))
         }
         const nextAppUiState = state.appUiState && typeof state.appUiState === 'object'
           ? buildAppUiStateWithThemeScheme({
@@ -1059,6 +1347,9 @@ export const useSerialStore = defineStore('serial', () => {
         }
         if (state.customAppearancePresets) {
           customAppearancePresets.value = normalizeCustomAppearancePresets(state.customAppearancePresets)
+        }
+        if (state.savedWorkspaceSnapshots) {
+          savedWorkspaceSnapshots.value = normalizeSavedWorkspaceSnapshots(state.savedWorkspaceSnapshots)
         }
 
         if (state.terminalAppearance || nextAppUiState) {
@@ -1112,8 +1403,12 @@ export const useSerialStore = defineStore('serial', () => {
         if (config?.customAppearancePresets) {
           customAppearancePresets.value = normalizeCustomAppearancePresets(config.customAppearancePresets)
         }
+        if (config?.savedWorkspaceSnapshots) {
+          savedWorkspaceSnapshots.value = normalizeSavedWorkspaceSnapshots(config.savedWorkspaceSnapshots)
+        }
       }
 
+      syncWorkspaceSnapshotSelection()
       const didSyncBuiltInPreset = syncBuiltInThemeSchemeState()
       if (didSyncBuiltInPreset) {
         await saveSessionState()
@@ -1134,7 +1429,7 @@ export const useSerialStore = defineStore('serial', () => {
     try {
       const config = await window.electronAPI.loadConfig()
       if (config.commonCommands && config.commonCommands.length > 0) {
-        commonCommands.value = config.commonCommands
+        commonCommands.value = normalizeCommonCommands(config.commonCommands)
       } else {
         // 使用默认配置
         commonCommands.value = createDefaultCommonCommands()
@@ -1200,8 +1495,52 @@ export const useSerialStore = defineStore('serial', () => {
     return portSendingData.value.get(portPath) || ''
   }
 
+  const getPortSendHistory = (portPath) => {
+    return portSendHistory.value.get(portPath) || []
+  }
+
   const setPortSendingData = (portPath, data) => {
     portSendingData.value.set(portPath, data)
+  }
+
+  const recordPortSendHistory = (portPath, data) => {
+    if (!portPath || typeof data !== 'string') return
+    const trimmed = data.trim()
+    if (!trimmed) return
+
+    const currentHistory = portSendHistory.value.get(portPath) || []
+    const nextHistory = [trimmed, ...currentHistory.filter((item) => item !== trimmed)].slice(0, 12)
+    portSendHistory.value.set(portPath, nextHistory)
+    saveSessionState()
+  }
+
+  const removePortSendHistoryItem = (portPath, item) => {
+    if (!portPath || typeof item !== 'string') return false
+
+    const currentHistory = portSendHistory.value.get(portPath) || []
+    const trimmed = item.trim()
+    if (!trimmed || !currentHistory.length) return false
+
+    const nextHistory = currentHistory.filter((historyItem) => historyItem !== trimmed)
+    if (nextHistory.length === currentHistory.length) return false
+
+    if (nextHistory.length > 0) {
+      portSendHistory.value.set(portPath, nextHistory)
+    } else {
+      portSendHistory.value.delete(portPath)
+    }
+
+    saveSessionState()
+    return true
+  }
+
+  const clearPortSendHistory = (portPath) => {
+    if (!portPath) return false
+    if (!portSendHistory.value.has(portPath)) return false
+
+    portSendHistory.value.delete(portPath)
+    saveSessionState()
+    return true
   }
 
   // 获取/设置过滤器
@@ -1520,6 +1859,7 @@ export const useSerialStore = defineStore('serial', () => {
           rawBytes,
           message: logData
         } : null
+        recordPortSendHistory(targetPort, logData)
         addPortLog(targetPort, logData, 'tx', logData_raw)
         return { success: true }
       } else {
@@ -1548,7 +1888,7 @@ export const useSerialStore = defineStore('serial', () => {
 
     const portControl = getPortControlSettings(portPath)
     const interval = delayOverride === null
-      ? Math.max(100, Number(portControl.loopInterval) || 1000)
+      ? Math.max(1, Number(portControl.loopInterval) || 1000)
       : Math.max(0, Number(delayOverride) || 0)
     const timer = setTimeout(async () => {
       await runLoopSendIteration(portPath)
@@ -1658,7 +1998,7 @@ export const useSerialStore = defineStore('serial', () => {
       const currentCount = portLoopSendCounts.get(targetPort) || 0
       addPortLog(
         targetPort,
-        `循环发送已启动（间隔：${Math.max(100, Number(currentControl.loopInterval) || 1000)}ms${Math.max(0, Number(currentControl.loopStartDelay) || 0) > 0 ? `，启动延时：${Math.max(0, Number(currentControl.loopStartDelay) || 0)}ms` : ''}${currentControl.loopMaxCount > 0 ? `，上限：${currentControl.loopMaxCount} 次` : ''}${currentControl.loopFailureLimit > 0 ? `，失败阈值：${currentControl.loopFailureLimit} 次` : ''}${currentCount > 0 ? `，从第 ${currentCount + 1} 次继续` : ''}）`,
+        `循环发送已启动（间隔：${Math.max(1, Number(currentControl.loopInterval) || 1000)}ms${Math.max(0, Number(currentControl.loopStartDelay) || 0) > 0 ? `，启动延时：${Math.max(0, Number(currentControl.loopStartDelay) || 0)}ms` : ''}${currentControl.loopMaxCount > 0 ? `，上限：${currentControl.loopMaxCount} 次` : ''}${currentControl.loopFailureLimit > 0 ? `，失败阈值：${currentControl.loopFailureLimit} 次` : ''}${currentCount > 0 ? `，从第 ${currentCount + 1} 次继续` : ''}）`,
         'info'
       )
     }
@@ -1855,11 +2195,12 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   // 常用命令操作
-  const addCommonCommand = (name, command) => {
+  const addCommonCommand = (name, command, group = '默认') => {
     commonCommands.value.push({
       id: Date.now(),
       name,
       command,
+      group,
       enabled: true
     })
   }
@@ -1936,6 +2277,7 @@ export const useSerialStore = defineStore('serial', () => {
     portLogs,
     portSettings,
     portSendingData,
+    portSendHistory,
     portFilters,
     defaultSettings,
     logs,
@@ -1943,6 +2285,7 @@ export const useSerialStore = defineStore('serial', () => {
     appTheme,
     terminalAppearance,
     customAppearancePresets,
+    savedWorkspaceSnapshots,
     createTerminalAppearancePreset,
     getActiveThemeSchemeId,
     getThemeSchemeById,
@@ -1960,6 +2303,9 @@ export const useSerialStore = defineStore('serial', () => {
     getPortNotice,
     getPortSettings,
     getPortSendingData,
+    getPortSendHistory,
+    removePortSendHistoryItem,
+    clearPortSendHistory,
     setPortSendingData,
     getPortFilters,
     setPortFilters,
@@ -1986,9 +2332,17 @@ export const useSerialStore = defineStore('serial', () => {
     updateAppUiState,
     buildSettingsSnapshot,
     buildPortLogExport,
+    buildPortPlainTextExport,
+    buildAllPortLogExport,
+    buildAllPortPlainTextExport,
     buildWorkspaceSnapshot,
+    saveNamedWorkspaceSnapshot,
+    renameSavedWorkspaceSnapshot,
+    overwriteSavedWorkspaceSnapshot,
     applySettingsSnapshot,
     applyWorkspaceSnapshot,
+    applySavedWorkspaceSnapshot,
+    removeSavedWorkspaceSnapshot,
     resetAppSettings,
     // Hex 工具函数
     hexToBytes,

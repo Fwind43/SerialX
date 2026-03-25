@@ -14,9 +14,33 @@ const props = defineProps({
 const emit = defineEmits(['update:show'])
 
 // 编辑命令表单
-const editingCommand = ref({ name: '', command: '', id: null })
+const editingCommand = ref({ name: '', command: '', group: '默认', id: null })
 const isEditing = ref(false)
 const showEditModalInner = ref(false)
+const searchQuery = ref('')
+const normalizedSearchQuery = computed(() => searchQuery.value.trim().toLowerCase())
+const groupedCommands = computed(() => {
+  const groups = new Map()
+  serialStore.commonCommands
+    .filter((cmd) => {
+      if (!normalizedSearchQuery.value) return true
+      const haystack = [
+        cmd.name,
+        cmd.command,
+        cmd.group || '默认'
+      ].join(' ').toLowerCase()
+      return haystack.includes(normalizedSearchQuery.value)
+    })
+    .forEach((cmd) => {
+    const key = cmd.group || '默认'
+    if (!groups.has(key)) {
+      groups.set(key, [])
+    }
+    groups.get(key).push(cmd)
+    })
+  return Array.from(groups.entries()).map(([group, commands]) => ({ group, commands }))
+})
+const visibleCommandCount = computed(() => groupedCommands.value.reduce((sum, group) => sum + group.commands.length, 0))
 
 // 编辑弹窗显示状态
 const showEditModal = computed(() => {
@@ -25,7 +49,7 @@ const showEditModal = computed(() => {
 
 const closeEditModal = () => {
   isEditing.value = false
-  editingCommand.value = { name: '', command: '', id: null }
+  editingCommand.value = { name: '', command: '', group: '默认', id: null }
   showEditModalInner.value = false
 }
 
@@ -35,7 +59,7 @@ const openCommandManager = (cmd = null) => {
     editingCommand.value = { ...cmd }
     isEditing.value = true
   } else {
-    editingCommand.value = { name: '', command: '', id: null }
+    editingCommand.value = { name: '', command: '', group: '默认', id: null }
     isEditing.value = false
   }
   showEditModalInner.value = true
@@ -48,10 +72,11 @@ const saveCommand = () => {
   if (isEditing.value) {
     serialStore.updateCommonCommand(editingCommand.value.id, {
       name: editingCommand.value.name,
-      command: editingCommand.value.command
+      command: editingCommand.value.command,
+      group: editingCommand.value.group
     })
   } else {
-    serialStore.addCommonCommand(editingCommand.value.name, editingCommand.value.command)
+    serialStore.addCommonCommand(editingCommand.value.name, editingCommand.value.command, editingCommand.value.group)
   }
   closeEditModal()
 }
@@ -66,6 +91,19 @@ const toggleCommand = (id) => {
   serialStore.toggleCommandEnabled(id)
 }
 
+const duplicateCommand = (cmd) => {
+  if (!cmd?.name || !cmd?.command) return
+  serialStore.addCommonCommand(`${cmd.name} 副本`, cmd.command, cmd.group || '默认')
+}
+
+const setCommandGroupEnabled = (commands, enabled) => {
+  commands.forEach((cmd) => {
+    if (cmd.enabled !== enabled) {
+      serialStore.updateCommonCommand(cmd.id, { enabled })
+    }
+  })
+}
+
 // 关闭弹窗
 const closeModal = () => {
   emit('update:show', false)
@@ -76,42 +114,87 @@ const closeModal = () => {
   <div v-if="show" class="modal-overlay" @click.self="closeModal">
     <div class="modal">
       <div class="modal-header">
-        <span class="modal-title">⚡ 常用命令配置</span>
+        <div class="modal-title-group">
+          <span class="modal-title">⚡ 常用命令配置</span>
+          <span class="modal-subtitle">
+            {{ visibleCommandCount }} / {{ serialStore.commonCommands.length }} 条命令
+          </span>
+        </div>
         <button @click="closeModal" class="modal-close">✕</button>
       </div>
       <div class="modal-body">
+        <div class="toolbar-row">
+          <input
+            v-model="searchQuery"
+            type="text"
+            class="search-input"
+            placeholder="搜索名称、命令内容或分组"
+          />
+        </div>
         <div class="commands-list">
-          <div
-            v-for="cmd in serialStore.commonCommands"
-            :key="cmd.id"
-            :class="['command-item', { disabled: !cmd.enabled }]"
-          >
-            <div class="command-info">
-              <span class="command-name">{{ cmd.name }}</span>
-              <code class="command-code">{{ cmd.command }}</code>
+          <div v-if="visibleCommandCount === 0" class="empty-state">
+            {{ normalizedSearchQuery ? '没有匹配的命令' : '还没有常用命令' }}
+          </div>
+          <div v-for="groupBlock in groupedCommands" :key="groupBlock.group" class="command-group">
+            <div class="command-group-header">
+              <div class="command-group-title-row">
+                <div class="command-group-title">{{ groupBlock.group }}</div>
+                <span class="command-group-count">{{ groupBlock.commands.length }} 条</span>
+              </div>
+              <div class="command-group-actions">
+                <button
+                  class="group-action-btn"
+                  @click="setCommandGroupEnabled(groupBlock.commands, true)"
+                >
+                  全部启用
+                </button>
+                <button
+                  class="group-action-btn"
+                  @click="setCommandGroupEnabled(groupBlock.commands, false)"
+                >
+                  全部禁用
+                </button>
+              </div>
             </div>
-            <div class="command-actions">
-              <button
-                @click="toggleCommand(cmd.id)"
-                :class="['action-btn', 'toggle', cmd.enabled ? 'enabled' : 'disabled']"
-                :title="cmd.enabled ? '禁用' : '启用'"
-              >
-                {{ cmd.enabled ? '✓' : '○' }}
-              </button>
-              <button
-                @click="openCommandManager(cmd)"
-                class="action-btn edit"
-                title="编辑"
-              >
-                ✎
-              </button>
-              <button
-                @click="deleteCommand(cmd.id)"
-                class="action-btn delete"
-                title="删除"
-              >
-                ✕
-              </button>
+            <div
+              v-for="cmd in groupBlock.commands"
+              :key="cmd.id"
+              :class="['command-item', { disabled: !cmd.enabled }]"
+            >
+              <div class="command-info">
+                <span class="command-name">{{ cmd.name }}</span>
+                <code class="command-code">{{ cmd.command }}</code>
+              </div>
+              <div class="command-actions">
+                <button
+                  @click="toggleCommand(cmd.id)"
+                  :class="['action-btn', 'toggle', cmd.enabled ? 'enabled' : 'disabled']"
+                  :title="cmd.enabled ? '禁用' : '启用'"
+                >
+                  {{ cmd.enabled ? '✓' : '○' }}
+                </button>
+                <button
+                  @click="openCommandManager(cmd)"
+                  class="action-btn edit"
+                  title="编辑"
+                >
+                  ✎
+                </button>
+                <button
+                  @click="duplicateCommand(cmd)"
+                  class="action-btn duplicate"
+                  title="复制"
+                >
+                  ⧉
+                </button>
+                <button
+                  @click="deleteCommand(cmd.id)"
+                  class="action-btn delete"
+                  title="删除"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -148,6 +231,15 @@ const closeModal = () => {
               type="text"
               class="form-input"
               placeholder="例：RESET、STATUS?"
+            />
+          </div>
+          <div class="form-group">
+            <label>命令分组</label>
+            <input
+              v-model="editingCommand.group"
+              type="text"
+              class="form-input"
+              placeholder="例：查询、设备控制、自定义"
             />
           </div>
         </div>
@@ -222,6 +314,17 @@ const closeModal = () => {
   letter-spacing: 0.5px;
 }
 
+.modal-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modal-subtitle {
+  font-size: 12px;
+  color: var(--app-text-soft);
+}
+
 .modal-close {
   display: flex;
   align-items: center;
@@ -253,8 +356,103 @@ const closeModal = () => {
 .commands-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 14px;
   margin-bottom: 16px;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 11px 14px;
+  background: var(--app-workspace-shell);
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  color: var(--app-text);
+  font-size: 13px;
+  transition: all 0.18s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 18%, transparent);
+}
+
+.search-input::placeholder {
+  color: var(--app-text-soft);
+}
+
+.empty-state {
+  padding: 22px 14px;
+  border: 1px dashed var(--app-border);
+  border-radius: 12px;
+  background: var(--app-workspace-shell);
+  color: var(--app-text-soft);
+  font-size: 13px;
+  text-align: center;
+}
+
+.command-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.command-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px;
+}
+
+.command-group-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.command-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--app-text-soft);
+  text-transform: uppercase;
+}
+
+.command-group-count {
+  font-size: 11px;
+  color: var(--app-text-soft);
+}
+
+.command-group-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.group-action-btn {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border);
+  background: var(--app-workspace-shell);
+  color: var(--app-text-soft);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.group-action-btn:hover {
+  border-color: var(--app-chip-border);
+  color: var(--app-text);
+  background: var(--app-accent-soft);
 }
 
 .command-item {
@@ -331,6 +529,12 @@ const closeModal = () => {
   background: linear-gradient(135deg, var(--app-accent) 0%, color-mix(in srgb, var(--app-accent) 78%, black) 100%);
   color: var(--app-text);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--app-accent) 34%, transparent);
+}
+
+.action-btn.duplicate {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--app-accent) 22%, var(--app-workspace-soft)) 0%, var(--app-workspace-soft) 100%);
+  color: var(--app-text);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--app-accent) 18%, transparent);
 }
 
 .action-btn.delete {

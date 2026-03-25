@@ -35,6 +35,18 @@ const themeVars = computed(() => {
   const theme = appTheme.value
   if (isDarkMode.value) {
     return {
+      '--app-workspace-base': '#121a2b',
+      '--app-workspace-soft': '#172133',
+      '--app-workspace-shell': '#090f1d',
+      '--app-workspace-shell-strong': '#0d1425',
+      '--app-border': '#273248',
+      '--app-text': '#f9fafb',
+      '--app-text-soft': '#94a3b8',
+      '--app-accent': '#5ea0ff',
+      '--app-chip-text': '#dbeafe',
+      '--app-danger-soft': 'rgba(232, 84, 84, 0.12)',
+      '--app-danger-border': 'rgba(232, 84, 84, 0.22)',
+      '--app-danger-text': '#ffc8c8',
       '--converter-bg': `linear-gradient(180deg, ${theme.background || '#0f1720'} 0%, ${theme.workspaceShell || '#131c25'} 100%)`,
       '--converter-panel': 'var(--app-workspace-base)',
       '--converter-panel-strong': 'var(--app-workspace-shell-strong)',
@@ -53,6 +65,18 @@ const themeVars = computed(() => {
   }
 
   return {
+    '--app-workspace-base': '#ffffff',
+    '--app-workspace-soft': '#f4f7fb',
+    '--app-workspace-shell': '#edf2f7',
+    '--app-workspace-shell-strong': '#e2e8f0',
+    '--app-border': '#d8deea',
+    '--app-text': '#111827',
+    '--app-text-soft': '#6b7280',
+    '--app-accent': '#2563eb',
+    '--app-chip-text': '#1d4ed8',
+    '--app-danger-soft': 'rgba(196, 43, 28, 0.1)',
+    '--app-danger-border': 'rgba(196, 43, 28, 0.18)',
+    '--app-danger-text': '#b2473d',
     '--converter-bg': `linear-gradient(180deg, ${theme.background || '#f4f7fb'} 0%, ${theme.workspaceShell || '#e7eef6'} 100%)`,
     '--converter-panel': 'var(--app-workspace-base)',
     '--converter-panel-strong': 'var(--app-workspace-shell-strong)',

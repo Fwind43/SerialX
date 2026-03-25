@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useSerialStore } from '../stores/serial'
 import TerminalDisplay from './TerminalDisplay.vue'
 
@@ -16,7 +16,11 @@ const showFilters = ref(false)
 const showAdvancedOptions = ref(false)
 const sendErrorMessage = ref('')
 const sendSuccessMessage = ref('')
+const sendHistoryIndex = ref(-1)
+const sendHistoryDraft = ref('')
+const sendingInput = ref('')
 let sendFeedbackTimer = null
+let sendInputSyncTimer = null
 
 const portDisplaySettings = computed(() => serialStore.getPortDisplaySettings(props.portPath))
 const portControlSettings = computed(() => serialStore.getPortControlSettings(props.portPath))
@@ -25,9 +29,21 @@ const portStats = computed(() => serialStore.getPortStats(props.portPath))
 const portFilters = computed(() => serialStore.getPortFilters(props.portPath))
 const isConnected = computed(() => serialStore.getPortStatus(props.portPath))
 const portNotice = computed(() => serialStore.getPortNotice(props.portPath))
+const currentSendingData = computed(() => serialStore.getPortSendingData(props.portPath))
 const themeMode = computed(() => serialStore.appUiState?.themeMode || 'dark')
 const enabledCommands = computed(() => serialStore.getEnabledCommands)
-const quickCommands = computed(() => enabledCommands.value.slice(0, 3))
+const sendHistory = computed(() => serialStore.getPortSendHistory(props.portPath))
+const groupedEnabledCommands = computed(() => {
+  const groups = new Map()
+  enabledCommands.value.forEach((cmd) => {
+    const key = cmd.group || '默认'
+    if (!groups.has(key)) {
+      groups.set(key, [])
+    }
+    groups.get(key).push(cmd)
+  })
+  return Array.from(groups.entries()).map(([group, commands]) => ({ group, commands }))
+})
 const isPaused = computed(() => serialStore.portLoopSendPaused.get(props.portPath) || false)
 const loopSendCount = computed(() => serialStore.portLoopSendCounts.get(props.portPath) || 0)
 const loopHasStarted = computed(() => loopSendCount.value > 0)
@@ -49,29 +65,55 @@ const loopActionClass = computed(() => {
 })
 
 const isHexInputValid = computed(() => {
-  const data = serialStore.getPortSendingData(props.portPath)
+  const data = sendingInput.value
   if (!portControlSettings.value.hexSend || !data) return true
   return serialStore.isValidHex(data)
 })
 
 const isSendDisabled = computed(() => {
-  const data = serialStore.getPortSendingData(props.portPath)
+  const data = sendingInput.value
   if (!data) return true
   if (portControlSettings.value.hexSend) return !isHexInputValid.value
   return false
 })
 
-const advancedSummary = computed(() => {
-  const summary = [`分包 ${portControlSettings.value.packetTimeout} ms`]
+const sendStatusTone = computed(() => {
+  if (!portControlSettings.value.isLoopSend) return 'idle'
+  if (isPaused.value) return 'paused'
+  if (loopSendCount.value > 0) return 'running'
+  return 'ready'
+})
+
+const sendStatusSummary = computed(() => {
+  const summary = []
 
   if (portControlSettings.value.isLoopSend) {
-    summary.push(`启动延时 ${portControlSettings.value.loopStartDelay} ms`)
+    summary.push('循环发送')
+    summary.push(isPaused.value ? '已暂停' : loopSendCount.value > 0 ? '运行中' : '待启动')
+    summary.push(
+      loopSendCount.value > 0
+        ? `第 ${loopSendCount.value}${portControlSettings.value.loopMaxCount > 0 ? ` / ${portControlSettings.value.loopMaxCount}` : ''} 次`
+        : `间隔 ${portControlSettings.value.loopInterval} ms`
+    )
+
+    if (!loopHasStarted.value && portControlSettings.value.loopStartDelay > 0) {
+      summary.push(`启动延时 ${portControlSettings.value.loopStartDelay} ms`)
+    }
+
     summary.push(
       portControlSettings.value.loopFailureLimit > 0
         ? `失败停发 ${portControlSettings.value.loopFailureLimit} 次`
         : '失败停发 不限'
     )
+  } else {
+    summary.push('循环发送未启用')
   }
+
+  if (sendHistory.value.length > 0) {
+    summary.push(`历史 ${sendHistory.value.length} 条`)
+  }
+
+  summary.push(`分包 ${portControlSettings.value.packetTimeout} ms`)
 
   return summary.join(' · ')
 })
@@ -116,7 +158,7 @@ const toggleLoopSend = () => {
 }
 
 const startLoopSend = () => {
-  if (!serialStore.getPortSendingData(props.portPath)) {
+  if (!sendingInput.value) {
     serialStore.setPortNotice(props.portPath, 'warning', '请先输入要发送的数据')
     serialStore.addPortLog(props.portPath, '请先输入要发送的数据', 'warning')
     return
@@ -146,7 +188,7 @@ const togglePauseLoopSend = () => {
 }
 
 const updateLoopInterval = (value) => {
-  serialStore.updatePortControlSettings(props.portPath, { loopInterval: Number(value) })
+  serialStore.updatePortControlSettings(props.portPath, { loopInterval: Math.max(1, Number(value) || 1) })
 }
 
 const updateLoopMaxCount = (value) => {
@@ -166,11 +208,38 @@ const updatePacketTimeout = (value) => {
 }
 
 const executeCommand = (command) => {
+  sendingInput.value = command
   serialStore.setPortSendingData(props.portPath, command)
   sendErrorMessage.value = ''
   sendSuccessMessage.value = ''
   serialStore.clearPortNotice(props.portPath)
   serialStore.addPortLog(props.portPath, `命令 "${command}" 已填入输入框，请按 Enter 发送。`, 'info')
+}
+
+const applyHistoryItem = (value, event = null) => {
+  if (!value) return
+  sendingInput.value = value
+  serialStore.setPortSendingData(props.portPath, value)
+  sendErrorMessage.value = ''
+  sendSuccessMessage.value = ''
+  serialStore.clearPortNotice(props.portPath)
+  sendHistoryIndex.value = -1
+  sendHistoryDraft.value = ''
+
+  if (event?.target) {
+    event.target.value = ''
+  }
+}
+
+const deleteRecentSendHistory = () => {
+  const [latestHistoryItem] = sendHistory.value
+  if (!latestHistoryItem) return
+  serialStore.removePortSendHistoryItem(props.portPath, latestHistoryItem)
+}
+
+const clearSendHistory = () => {
+  if (!sendHistory.value.length) return
+  serialStore.clearPortSendHistory(props.portPath)
 }
 
 const handleClearLogs = () => {
@@ -181,17 +250,72 @@ const handlePanelFocus = () => {
   serialStore.selectedPort = props.portPath
 }
 
+const flushSendingInput = () => {
+  if (sendInputSyncTimer) {
+    clearTimeout(sendInputSyncTimer)
+    sendInputSyncTimer = null
+  }
+
+  if (serialStore.getPortSendingData(props.portPath) !== sendingInput.value) {
+    serialStore.setPortSendingData(props.portPath, sendingInput.value)
+  }
+}
+
 const handleSendingInput = (value) => {
-  serialStore.setPortSendingData(props.portPath, value)
+  sendingInput.value = value
   sendErrorMessage.value = ''
   sendSuccessMessage.value = ''
   serialStore.clearPortNotice(props.portPath)
+  if (sendHistoryIndex.value !== -1) {
+    sendHistoryIndex.value = -1
+    sendHistoryDraft.value = value
+  }
+
+  if (sendInputSyncTimer) {
+    clearTimeout(sendInputSyncTimer)
+  }
+
+  sendInputSyncTimer = setTimeout(() => {
+    flushSendingInput()
+  }, 140)
+}
+
+const navigateSendHistory = (direction) => {
+  const history = sendHistory.value
+  if (!history.length) return
+
+  if (direction === 'up') {
+    if (sendHistoryIndex.value === -1) {
+      sendHistoryDraft.value = sendingInput.value
+      sendHistoryIndex.value = 0
+    } else {
+      sendHistoryIndex.value = Math.min(sendHistoryIndex.value + 1, history.length - 1)
+    }
+
+    sendingInput.value = history[sendHistoryIndex.value] || ''
+    flushSendingInput()
+    return
+  }
+
+  if (direction === 'down' && sendHistoryIndex.value !== -1) {
+    if (sendHistoryIndex.value === 0) {
+      sendHistoryIndex.value = -1
+      sendingInput.value = sendHistoryDraft.value
+      flushSendingInput()
+      return
+    }
+
+    sendHistoryIndex.value = Math.max(sendHistoryIndex.value - 1, 0)
+    sendingInput.value = history[sendHistoryIndex.value] || ''
+    flushSendingInput()
+  }
 }
 
 const handleSend = async () => {
-  const data = serialStore.getPortSendingData(props.portPath)
+  const data = sendingInput.value
   if (!data) return
 
+  flushSendingInput()
   const result = await serialStore.sendData(props.portPath, null, portControlSettings.value.hexSend)
   if (!result.success) {
     sendErrorMessage.value = result.error || '发送失败'
@@ -212,9 +336,24 @@ const handleSend = async () => {
     sendSuccessMessage.value = ''
     sendFeedbackTimer = null
   }, 1600)
+
+  sendHistoryIndex.value = -1
+  sendHistoryDraft.value = ''
 }
 
 const handleSendingKeyDown = (event) => {
+  if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key === 'ArrowUp') {
+    event.preventDefault()
+    navigateSendHistory('up')
+    return
+  }
+
+  if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key === 'ArrowDown') {
+    event.preventDefault()
+    navigateSendHistory('down')
+    return
+  }
+
   if (event.key !== 'Enter') return
 
   if (event.ctrlKey || event.metaKey) {
@@ -269,12 +408,22 @@ const formatBytes = (bytes) => {
 }
 
 const hexPlaceholder = '输入十六进制数据，例如：48 65 6C 6C 6F'
-const textPlaceholder = '输入要发送的数据，按 Enter 或 Ctrl+Enter 发送...'
+const textPlaceholder = '输入要发送的数据，按 Enter 发送，↑↓ 浏览最近发送...'
+
+watch(currentSendingData, (value) => {
+  if (value !== sendingInput.value) {
+    sendingInput.value = value
+  }
+}, { immediate: true })
 
 onUnmounted(() => {
   if (sendFeedbackTimer) {
     clearTimeout(sendFeedbackTimer)
     sendFeedbackTimer = null
+  }
+  if (sendInputSyncTimer) {
+    clearTimeout(sendInputSyncTimer)
+    sendInputSyncTimer = null
   }
 })
 </script>
@@ -418,13 +567,14 @@ onUnmounted(() => {
     <div class="send-console">
       <div class="send-row">
         <input
-          :value="serialStore.getPortSendingData(props.portPath)"
+          :value="sendingInput"
           type="text"
           class="send-input"
           :class="{ 'hex-invalid': portControlSettings.hexSend && !isHexInputValid, 'send-error': !!sendErrorMessage }"
           :placeholder="portControlSettings.hexSend ? hexPlaceholder : textPlaceholder"
           @input="handleSendingInput($event.target.value)"
           @keydown="handleSendingKeyDown"
+          @blur="flushSendingInput"
         />
         <button class="send-button" :disabled="isSendDisabled" @click="handleSend">
           发送
@@ -432,18 +582,17 @@ onUnmounted(() => {
       </div>
 
       <div class="send-options">
-        <div v-if="quickCommands.length > 0" class="quick-command-row">
-          <button
-            v-for="cmd in quickCommands"
-            :key="cmd.id"
-            class="quick-command-btn"
-            :title="cmd.command"
-            :disabled="!isConnected"
-            @click="executeCommand(cmd.command)"
-          >
-            {{ cmd.name }}
-          </button>
-        </div>
+        <select
+          v-if="sendHistory.length > 0"
+          class="command-select history-select"
+          :disabled="!isConnected"
+          @change="applyHistoryItem($event.target.value, $event)"
+        >
+          <option value="" selected>最近发送</option>
+          <option v-for="item in sendHistory" :key="item" :value="item">
+            {{ item }}
+          </option>
+        </select>
 
         <select
           v-if="enabledCommands.length > 0"
@@ -452,9 +601,11 @@ onUnmounted(() => {
           @change="executeCommand($event.target.value); $event.target.value = ''"
         >
           <option value="" disabled>快捷命令</option>
-          <option v-for="cmd in enabledCommands" :key="cmd.id" :value="cmd.command">
-            {{ cmd.name }} ({{ cmd.command }})
-          </option>
+          <optgroup v-for="groupBlock in groupedEnabledCommands" :key="groupBlock.group" :label="groupBlock.group">
+            <option v-for="cmd in groupBlock.commands" :key="cmd.id" :value="cmd.command">
+              {{ cmd.name }} ({{ cmd.command }})
+            </option>
+          </optgroup>
         </select>
 
         <div class="option-chip-group">
@@ -507,8 +658,9 @@ onUnmounted(() => {
               type="number"
               class="interval-input"
               :value="portControlSettings.loopInterval"
-              :min="100"
-              :step="100"
+              :min="1"
+              :step="1"
+              title="循环发送允许设置到 1ms，但实际触发精度仍取决于系统定时器、系统调度与当前负载"
               @input="updateLoopInterval($event.target.value)"
             />
             <span class="interval-unit">ms</span>
@@ -528,9 +680,9 @@ onUnmounted(() => {
           </label>
         </div>
 
-        <div class="advanced-summary">
-          <span class="advanced-summary-label">高级参数</span>
-          <span class="advanced-summary-value">{{ advancedSummary }}</span>
+        <div class="send-status-summary" :class="sendStatusTone">
+          <span class="send-status-label">发送状态</span>
+          <span class="send-status-value">{{ sendStatusSummary }}</span>
         </div>
 
         <button
@@ -969,33 +1121,6 @@ onUnmounted(() => {
   gap: 12px;
 }
 
-.quick-command-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.quick-command-btn {
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--app-chip-border);
-  background: var(--app-accent-soft);
-  color: var(--app-chip-text);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.18s ease;
-}
-
-.quick-command-btn:hover:not(:disabled) {
-  background: var(--app-accent-strong);
-  border-color: var(--app-accent);
-}
-
-.quick-command-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 
 .command-select {
   height: 34px;
@@ -1018,6 +1143,50 @@ onUnmounted(() => {
   background-size: 12px 12px;
   min-width: 190px;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.history-select {
+  width: 132px;
+  min-width: 132px;
+  max-width: 132px;
+  flex: 0 0 132px;
+}
+
+.history-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-action-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--app-border);
+  background: var(--app-workspace-soft);
+  color: var(--app-text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.history-action-btn:hover:not(:disabled) {
+  border-color: var(--app-accent);
+  background: var(--app-accent-soft);
+  color: var(--app-chip-text);
+}
+
+.history-action-btn.danger:hover:not(:disabled) {
+  border-color: var(--app-danger-border);
+  background: var(--app-danger-soft);
+  color: var(--app-danger-text);
+}
+
+.history-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .command-select::-ms-expand {
@@ -1108,7 +1277,7 @@ onUnmounted(() => {
   border-color: var(--app-danger-border);
 }
 
-.advanced-summary {
+.send-status-summary {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1119,13 +1288,33 @@ onUnmounted(() => {
   border: 1px solid var(--app-border);
 }
 
-.advanced-summary-label {
+.send-status-summary.running {
+  background: var(--app-success-soft);
+  border-color: var(--app-success-border);
+}
+
+.send-status-summary.paused {
+  background: var(--app-warning-soft);
+  border-color: var(--app-warning-border);
+}
+
+.send-status-summary.ready {
+  background: var(--app-accent-soft);
+  border-color: var(--app-chip-border);
+}
+
+.send-status-summary.idle {
+  background: var(--app-chip-bg);
+  border-color: var(--app-border);
+}
+
+.send-status-label {
   font-size: 10px;
   letter-spacing: 0.08em;
   color: var(--app-text-soft);
 }
 
-.advanced-summary-value {
+.send-status-value {
   font-size: 11px;
   color: var(--app-text);
   white-space: nowrap;
@@ -1221,7 +1410,7 @@ onUnmounted(() => {
 
 .theme-light .port-baud,
 .theme-light .filter-hint,
-.theme-light .advanced-summary-label,
+.theme-light .send-status-label,
 .theme-light .interval-label,
 .theme-light .interval-unit {
   color: #6b7785;
@@ -1240,7 +1429,7 @@ onUnmounted(() => {
 .theme-light .action-btn,
 .theme-light .inline-group,
 .theme-light .checkbox-label,
-.theme-light .advanced-summary,
+.theme-light .send-status-summary,
 .theme-light .advanced-toggle,
 .theme-light .interval-group,
 .theme-light .command-select,
@@ -1255,8 +1444,7 @@ onUnmounted(() => {
 .theme-light .action-btn:hover,
 .theme-light .action-btn.filter.active,
 .theme-light .advanced-toggle:hover,
-.theme-light .advanced-toggle.active,
-.theme-light .quick-command-btn:hover:not(:disabled) {
+.theme-light .advanced-toggle.active {
   background: rgba(0, 120, 212, 0.08);
   border-color: rgba(0, 120, 212, 0.16);
 }
@@ -1278,7 +1466,7 @@ onUnmounted(() => {
 .theme-light .option-text,
 .theme-light .mode-text,
 .theme-light .target-label,
-.theme-light .advanced-summary-value,
+.theme-light .send-status-value,
 .theme-light .packet-label {
   color: #1f2328;
 }
@@ -1319,12 +1507,6 @@ onUnmounted(() => {
 .theme-light .send-feedback.floating {
   box-shadow: 0 8px 20px rgba(31, 35, 40, 0.08);
   backdrop-filter: blur(8px);
-}
-
-.theme-light .quick-command-btn {
-  background: rgba(33, 122, 184, 0.08);
-  border-color: rgba(33, 122, 184, 0.14);
-  color: #005fb8;
 }
 
 .theme-light .command-select {

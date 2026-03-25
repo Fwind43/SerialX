@@ -15,6 +15,7 @@ const props = defineProps({
 
 const serialStore = useSerialStore()
 const terminalContainer = ref(null)
+const contextMenuRef = ref(null)
 const searchInput = ref(null)
 
 let terminal = null
@@ -32,6 +33,18 @@ const showSearch = ref(false)
 const searchQuery = ref('')
 const searchMatchCount = ref(0)
 const currentMatchIndex = ref(0)
+const searchStatusText = computed(() => {
+  if (!searchQuery.value) {
+    return '输入内容开始搜索'
+  }
+
+  if (searchMatchCount.value === 0) {
+    return '未找到匹配项'
+  }
+
+  return `共 ${searchMatchCount.value} 项`
+})
+const isSearchEmpty = computed(() => searchQuery.value && searchMatchCount.value === 0)
 
 const showContextMenu = ref(false)
 const contextMenuPosition = ref({ x: 0, y: 0 })
@@ -577,6 +590,53 @@ const copySelection = async () => {
   showContextMenu.value = false
 }
 
+const copyVisibleScreen = async () => {
+  if (!terminal?.buffer?.active) return
+
+  const buffer = terminal.buffer.active
+  const start = Math.max(buffer.viewportY || 0, 0)
+  const end = Math.min(start + Math.max(terminal.rows || 0, 1) - 1, buffer.length - 1)
+  const lines = []
+
+  for (let lineIndex = start; lineIndex <= end; lineIndex++) {
+    const line = buffer.getLine(lineIndex)
+    if (!line) continue
+    lines.push(line.translateToString(true))
+  }
+
+  const text = lines.join('\n').replace(/\n+$/g, '')
+  if (!text) {
+    showContextMenu.value = false
+    return
+  }
+
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+  }
+
+  showContextMenu.value = false
+}
+
+const copyAllLogs = async () => {
+  const text = serialStore.buildPortPlainTextExport(props.portPath)
+  if (!text) {
+    serialStore.setPortNotice(props.portPath, 'warning', '当前没有可复制的日志内容')
+    closeContextMenu()
+    return
+  }
+
+  await copyTextToClipboard(text)
+  serialStore.setPortNotice(props.portPath, 'success', '已复制全部日志')
+  closeContextMenu()
+}
+
 const openSearchFromContextMenu = () => {
   openSearch()
 }
@@ -600,9 +660,12 @@ const clearTerminalLogs = () => {
   closeContextMenu()
 }
 
-const exportTerminalLogs = async () => {
-  const payload = serialStore.buildPortLogExport(props.portPath)
-  const suggestedName = `${props.portPath.replace(/[\\/:*?"<>|]/g, '_')}-logs-${new Date().toISOString().slice(0, 10)}.json`
+const exportTerminalLogs = async (format = 'json') => {
+  const isText = format === 'text'
+  const payload = isText
+    ? serialStore.buildPortPlainTextExport(props.portPath)
+    : serialStore.buildPortLogExport(props.portPath)
+  const suggestedName = `${props.portPath.replace(/[\\/:*?"<>|]/g, '_')}-logs-${new Date().toISOString().slice(0, 10)}.${isText ? 'txt' : 'json'}`
   const result = await window.electronAPI?.exportLogs(payload, suggestedName)
 
   if (!result || result.canceled) {
@@ -616,7 +679,7 @@ const exportTerminalLogs = async () => {
     return
   }
 
-  serialStore.setPortNotice(props.portPath, 'success', `日志已导出到 ${result.filePath}`)
+  serialStore.setPortNotice(props.portPath, 'success', `${isText ? '纯文本' : '日志'}已导出到 ${result.filePath}`)
   closeContextMenu()
 }
 
@@ -626,11 +689,28 @@ const closeContextMenu = (event) => {
   selectedText.value = ''
 }
 
-const handleContextMenu = (event) => {
+const clampContextMenuPosition = () => {
+  const menu = contextMenuRef.value
+  if (!menu || !showContextMenu.value) return
+
+  const margin = 12
+  const rect = menu.getBoundingClientRect()
+  const maxX = Math.max(margin, window.innerWidth - rect.width - margin)
+  const maxY = Math.max(margin, window.innerHeight - rect.height - margin)
+
+  contextMenuPosition.value = {
+    x: Math.min(Math.max(margin, contextMenuPosition.value.x), maxX),
+    y: Math.min(Math.max(margin, contextMenuPosition.value.y), maxY)
+  }
+}
+
+const handleContextMenu = async (event) => {
   event.preventDefault()
   selectedText.value = terminal?.getSelection()?.trim() || ''
   contextMenuPosition.value = { x: event.clientX, y: event.clientY }
   showContextMenu.value = true
+  await nextTick()
+  clampContextMenuPosition()
 }
 
 const handleGlobalKeyDown = (event) => {
@@ -681,6 +761,20 @@ const handleKeyDown = (event) => {
     event.preventDefault()
     event.stopPropagation()
     selectAllTerminal()
+    return
+  }
+
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'c' && serialStore.selectedPort === props.portPath) {
+    event.preventDefault()
+    event.stopPropagation()
+    copyVisibleScreen()
+    return
+  }
+
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'a' && serialStore.selectedPort === props.portPath) {
+    event.preventDefault()
+    event.stopPropagation()
+    copyAllLogs()
   }
 }
 
@@ -767,6 +861,8 @@ onMounted(() => {
   document.addEventListener('keydown', handleKeyDown, true)
   document.addEventListener('click', closeContextMenu)
   window.addEventListener('serialx-open-search', handleOpenSearch)
+  window.addEventListener('resize', closeContextMenu)
+  window.addEventListener('scroll', closeContextMenu, true)
 
   if (terminalContainer.value) {
     terminalContainer.value.addEventListener('contextmenu', handleContextMenu)
@@ -792,6 +888,8 @@ onUnmounted(() => {
   document.removeEventListener('click', closeContextMenu)
   window.removeEventListener('serialx-open-search', handleOpenSearch)
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('resize', closeContextMenu)
+  window.removeEventListener('scroll', closeContextMenu, true)
 
   if (terminalContainer.value) {
     terminalContainer.value.removeEventListener('contextmenu', handleContextMenu)
@@ -821,9 +919,12 @@ defineExpose({
           placeholder="搜索终端内容..."
           @keydown.enter.prevent="handleSearchKeyDown"
         />
+        <span :class="['search-status', { empty: isSearchEmpty }]">
+          {{ searchStatusText }}
+        </span>
         <div class="search-controls">
           <span class="search-count">
-            {{ !searchQuery ? '' : (searchMatchCount > 0 ? `${currentMatchIndex} / ${searchMatchCount}` : '无匹配项') }}
+            {{ !searchQuery ? '' : (searchMatchCount > 0 ? `${currentMatchIndex} / ${searchMatchCount}` : '0 / 0') }}
           </span>
           <button class="search-btn" title="上一个匹配 (Shift+Enter / Shift+F3)" @click="goToPreviousMatch">
             <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
@@ -844,59 +945,89 @@ defineExpose({
       </div>
     </div>
 
-    <div
-      v-if="showContextMenu"
-      class="context-menu"
-      :style="{ left: `${contextMenuPosition.x}px`, top: `${contextMenuPosition.y}px` }"
-      @click.stop
-    >
-      <div class="context-menu-item" @click="openSearchFromContextMenu">
-        <span class="menu-icon" aria-hidden="true">
-          <svg viewBox="0 0 16 16" width="14" height="14">
-            <circle cx="7" cy="7" r="4" fill="none" stroke="currentColor" stroke-width="1.3" />
-            <path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-          </svg>
-        </span>
-        <span>查找</span>
+    <Teleport to="body">
+      <div
+        v-if="showContextMenu"
+        ref="contextMenuRef"
+        class="context-menu"
+        :style="{ left: `${contextMenuPosition.x}px`, top: `${contextMenuPosition.y}px` }"
+        @click.stop
+      >
+        <div class="context-menu-item" @click="openSearchFromContextMenu">
+          <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14">
+              <circle cx="7" cy="7" r="4" fill="none" stroke="currentColor" stroke-width="1.3" />
+              <path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+            </svg>
+          </span>
+          <span>查找</span>
+        </div>
+        <div class="context-menu-item" :class="{ disabled: !selectedText }" @click="selectedText && copySelection()">
+          <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14">
+              <path d="M6 3h7v10H6z" fill="none" stroke="currentColor" stroke-width="1.2" />
+              <path d="M3 6h7v7H3z" fill="none" stroke="currentColor" stroke-width="1.2" />
+            </svg>
+          </span>
+          <span>复制</span>
+        </div>
+        <div class="context-menu-item" @click="copyVisibleScreen">
+          <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14">
+              <path d="M3 4h10v8H3z" fill="none" stroke="currentColor" stroke-width="1.2" />
+              <path d="M5 6h6M5 8h6M5 10h4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+            </svg>
+          </span>
+          <span>复制当前屏幕</span>
+        </div>
+        <div class="context-menu-item" @click="copyAllLogs">
+          <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14">
+              <path d="M4 3h8v10H4z" fill="none" stroke="currentColor" stroke-width="1.2" />
+              <path d="M6 6h4M6 8h4M6 10h4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+            </svg>
+          </span>
+          <span>复制全部日志</span>
+        </div>
+        <div class="context-menu-item" @click="selectAll">
+          <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14">
+              <path d="M3 3h10v10H3z" fill="none" stroke="currentColor" stroke-width="1.2" />
+              <path d="M5 5h6v6H5z" fill="none" stroke="currentColor" stroke-width="1.2" />
+            </svg>
+          </span>
+          <span>全选</span>
+        </div>
+        <div class="context-menu-item" @click="exportTerminalLogs('json')">
+          <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14">
+              <path d="M8 2v7.2l2.1-2.1.9.9L8 11 5 8l.9-.9L8 9.2V2Z" fill="currentColor" />
+              <path d="M3 12h10v2H3z" fill="currentColor" />
+            </svg>
+          </span>
+          <span>导出日志 (JSON)</span>
+        </div>
+        <div class="context-menu-item" @click="exportTerminalLogs('text')">
+          <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14">
+              <path d="M4 3h8v10H4z" fill="none" stroke="currentColor" stroke-width="1.2" />
+              <path d="M6 6h4M6 8h4M6 10h3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+            </svg>
+          </span>
+          <span>导出纯文本 (TXT)</span>
+        </div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item danger" @click="clearTerminalLogs">
+          <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14">
+              <path d="M5 4h6l-.5 9h-5z" fill="none" stroke="currentColor" stroke-width="1.2" />
+              <path d="M4 4h8M6 4V2h4v2" fill="none" stroke="currentColor" stroke-width="1.2" />
+            </svg>
+          </span>
+          <span>清空日志</span>
+        </div>
       </div>
-      <div class="context-menu-item" :class="{ disabled: !selectedText }" @click="selectedText && copySelection()">
-        <span class="menu-icon" aria-hidden="true">
-          <svg viewBox="0 0 16 16" width="14" height="14">
-            <path d="M6 3h7v10H6z" fill="none" stroke="currentColor" stroke-width="1.2" />
-            <path d="M3 6h7v7H3z" fill="none" stroke="currentColor" stroke-width="1.2" />
-          </svg>
-        </span>
-        <span>复制</span>
-      </div>
-      <div class="context-menu-item" @click="selectAll">
-        <span class="menu-icon" aria-hidden="true">
-          <svg viewBox="0 0 16 16" width="14" height="14">
-            <path d="M3 3h10v10H3z" fill="none" stroke="currentColor" stroke-width="1.2" />
-            <path d="M5 5h6v6H5z" fill="none" stroke="currentColor" stroke-width="1.2" />
-          </svg>
-        </span>
-        <span>全选</span>
-      </div>
-      <div class="context-menu-item" @click="exportTerminalLogs">
-        <span class="menu-icon" aria-hidden="true">
-          <svg viewBox="0 0 16 16" width="14" height="14">
-            <path d="M8 2v7.2l2.1-2.1.9.9L8 11 5 8l.9-.9L8 9.2V2Z" fill="currentColor" />
-            <path d="M3 12h10v2H3z" fill="currentColor" />
-          </svg>
-        </span>
-        <span>导出日志</span>
-      </div>
-      <div class="context-menu-divider"></div>
-      <div class="context-menu-item danger" @click="clearTerminalLogs">
-        <span class="menu-icon" aria-hidden="true">
-          <svg viewBox="0 0 16 16" width="14" height="14">
-            <path d="M5 4h6l-.5 9h-5z" fill="none" stroke="currentColor" stroke-width="1.2" />
-            <path d="M4 4h8M6 4V2h4v2" fill="none" stroke="currentColor" stroke-width="1.2" />
-          </svg>
-        </span>
-        <span>清空日志</span>
-      </div>
-    </div>
+    </Teleport>
 
     <div ref="terminalContainer" :class="['terminal-container', { 'search-open': showSearch }]"></div>
   </div>
@@ -1086,6 +1217,25 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.search-status {
+  display: inline-flex;
+  align-items: center;
+  min-width: 96px;
+  padding: 0 6px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--app-workspace-shell);
+  color: var(--app-text-soft);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.search-status.empty {
+  background: var(--app-danger-soft);
+  color: var(--app-danger-text);
 }
 
 .search-count {

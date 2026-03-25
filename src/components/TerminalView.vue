@@ -20,6 +20,16 @@ const paneWidths = ref(Array.isArray(serialStore.workspaceLayout?.paneWidths)
   : [])
 const paneRefs = ref([])
 const contentContainer = ref(null)
+let contentResizeObserver = null
+let suppressWorkspaceLayoutSync = false
+const tabContextMenuRef = ref(null)
+const tabContextMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  paneIndex: -1,
+  port: ''
+})
 
 const draggedData = ref(null)
 const draggedPaneIndex = ref(-1)
@@ -39,6 +49,45 @@ const connectedPorts = computed(() => {
 })
 
 const allTabs = computed(() => splitPanes.value.flatMap((pane) => pane.tabs))
+const tabContextMenuPane = computed(() => splitPanes.value[tabContextMenu.value.paneIndex] || null)
+const tabContextMenuPortIndex = computed(() => (
+  tabContextMenuPane.value ? tabContextMenuPane.value.tabs.indexOf(tabContextMenu.value.port) : -1
+))
+const canMoveTabToNewPane = computed(() => {
+  const pane = tabContextMenuPane.value
+  if (!pane || !pane.tabs.includes(tabContextMenu.value.port)) return false
+  return !(splitPanes.value.length === 1 && pane.tabs.length === 1)
+})
+const canCloseTabsToRight = computed(() => {
+  const pane = tabContextMenuPane.value
+  return Boolean(pane && tabContextMenuPortIndex.value !== -1 && tabContextMenuPortIndex.value < pane.tabs.length - 1)
+})
+const canCloseTabsToLeft = computed(() => {
+  const pane = tabContextMenuPane.value
+  return Boolean(pane && tabContextMenuPortIndex.value > 0)
+})
+const canCloseOtherTabs = computed(() => allTabs.value.filter((item) => item !== tabContextMenu.value.port).length > 0)
+const canCloseCurrentPane = computed(() => Boolean(tabContextMenuPane.value?.tabs.length))
+
+const cloneLayoutPanes = (panes = []) => (
+  Array.isArray(panes)
+    ? panes.map((pane) => ({
+        tabs: Array.isArray(pane?.tabs) ? [...pane.tabs] : [],
+        activeTab: typeof pane?.activeTab === 'string' ? pane.activeTab : ''
+      }))
+    : []
+)
+
+const getLayoutSignature = (layout = null) => JSON.stringify({
+  splitPanes: cloneLayoutPanes(layout?.splitPanes),
+  paneWidths: Array.isArray(layout?.paneWidths) ? layout.paneWidths.map((width) => Number(width) || 0) : []
+})
+
+const getLocalLayoutSignature = () => JSON.stringify({
+  splitPanes: cloneLayoutPanes(splitPanes.value),
+  paneWidths: [...paneWidths.value]
+})
+
 const setPaneRef = (element, paneIndex) => {
   if (element) {
     paneRefs.value[paneIndex] = element
@@ -129,15 +178,33 @@ const ensurePaneStructure = () => {
     splitPanes.value = [{ tabs: [], activeTab: '' }]
   }
 
+  const connectedPortSet = new Set(connectedPorts.value)
+  const assignedTabs = new Set()
+
   splitPanes.value.forEach((pane) => {
     if (!Array.isArray(pane.tabs)) {
       pane.tabs = []
     }
 
+    pane.tabs = pane.tabs.filter((port) => {
+      if (!connectedPortSet.has(port) || assignedTabs.has(port)) {
+        return false
+      }
+
+      assignedTabs.add(port)
+      return true
+    })
+
     if (!pane.tabs.includes(pane.activeTab)) {
       pane.activeTab = pane.tabs[0] || ''
     }
   })
+
+  while (splitPanes.value.length > 1 && splitPanes.value.some((pane) => pane.tabs.length === 0)) {
+    const emptyIndex = splitPanes.value.findIndex((pane) => pane.tabs.length === 0)
+    if (emptyIndex === -1) break
+    removePaneAndWidth(emptyIndex)
+  }
 }
 
 const syncSelectedPortWithPanes = () => {
@@ -155,6 +222,14 @@ const syncSelectedPortWithPanes = () => {
 const syncPaneLayout = () => {
   ensurePaneStructure()
   syncSelectedPortWithPanes()
+  if (suppressWorkspaceLayoutSync) {
+    nextTick(() => {
+      trimPaneRefs()
+      handleResize()
+    })
+    return
+  }
+
   serialStore.updateWorkspaceLayout({
     splitPanes: splitPanes.value,
     paneWidths: paneWidths.value
@@ -242,7 +317,31 @@ watch(() => serialStore.selectedPort, (selectedPort) => {
   }
 })
 
+watch(
+  () => getLayoutSignature(serialStore.workspaceLayout),
+  () => {
+    const workspaceLayout = serialStore.workspaceLayout || {}
+    if (getLayoutSignature(workspaceLayout) === getLocalLayoutSignature()) {
+      return
+    }
+
+    suppressWorkspaceLayoutSync = true
+    splitPanes.value = cloneLayoutPanes(workspaceLayout.splitPanes)
+    paneWidths.value = Array.isArray(workspaceLayout.paneWidths) ? [...workspaceLayout.paneWidths] : []
+    ensurePaneStructure()
+    syncSelectedPortWithPanes()
+
+    nextTick(() => {
+      trimPaneRefs()
+      handleResize()
+      suppressWorkspaceLayoutSync = false
+    })
+  },
+  { deep: true }
+)
+
 watch(paneWidths, (widths) => {
+  if (suppressWorkspaceLayoutSync) return
   serialStore.updateWorkspaceLayout({
     splitPanes: splitPanes.value,
     paneWidths: widths
@@ -256,6 +355,159 @@ const selectTab = (paneIndex, port) => {
 
 const disconnectPort = (port) => {
   serialStore.disconnect(port)
+}
+
+const closeTabContextMenu = () => {
+  tabContextMenu.value.visible = false
+  tabContextMenu.value.paneIndex = -1
+  tabContextMenu.value.port = ''
+}
+
+const clampTabContextMenuPosition = () => {
+  const menu = tabContextMenuRef.value
+  if (!menu) return
+
+  const margin = 12
+  const rect = menu.getBoundingClientRect()
+  const maxX = Math.max(margin, window.innerWidth - rect.width - margin)
+  const maxY = Math.max(margin, window.innerHeight - rect.height - margin)
+
+  tabContextMenu.value.x = Math.min(Math.max(margin, tabContextMenu.value.x), maxX)
+  tabContextMenu.value.y = Math.min(Math.max(margin, tabContextMenu.value.y), maxY)
+}
+
+const openTabContextMenu = async (event, paneIndex, port) => {
+  event.preventDefault()
+  selectTab(paneIndex, port)
+  tabContextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    paneIndex,
+    port
+  }
+  await nextTick()
+  clampTabContextMenuPosition()
+}
+
+const moveTabToNewPane = (paneIndex, port) => {
+  const sourcePane = splitPanes.value[paneIndex]
+  if (!sourcePane || !sourcePane.tabs.includes(port)) {
+    closeTabContextMenu()
+    return
+  }
+
+  if (splitPanes.value.length === 1 && sourcePane.tabs.length === 1) {
+    closeTabContextMenu()
+    return
+  }
+
+  const sourcePaneElement = paneRefs.value[paneIndex]
+  const sourcePaneWidth = sourcePaneElement?.offsetWidth || 0
+  const sourceTabIndex = sourcePane.tabs.indexOf(port)
+  if (sourceTabIndex === -1) {
+    closeTabContextMenu()
+    return
+  }
+
+  sourcePane.tabs.splice(sourceTabIndex, 1)
+  if (sourcePane.activeTab === port) {
+    sourcePane.activeTab = sourcePane.tabs[0] || ''
+  }
+
+  splitPanes.value.splice(paneIndex + 1, 0, {
+    tabs: [port],
+    activeTab: port
+  })
+
+  if (!sourcePaneWidth) {
+    paneWidths.value = getEvenPaneWidths(splitPanes.value.length)
+  } else {
+    const nextWidths = getCurrentPaneWidths(splitPanes.value.length - 1)
+    const primaryWidth = Math.max(MIN_PANE_WIDTH, Math.floor(sourcePaneWidth / 2))
+    const splitWidth = Math.max(MIN_PANE_WIDTH, sourcePaneWidth - primaryWidth)
+    nextWidths[paneIndex] = primaryWidth
+    nextWidths.splice(paneIndex + 1, 0, splitWidth)
+    applyPaneWidths(nextWidths, splitPanes.value.length)
+  }
+
+  if (sourcePane.tabs.length === 0 && splitPanes.value.length > 1) {
+    removePaneAndWidth(paneIndex)
+  }
+
+  serialStore.selectedPort = port
+  closeTabContextMenu()
+  syncPaneLayout()
+}
+
+const closeOtherTabs = async (paneIndex, port) => {
+  const portsToClose = allTabs.value.filter((item) => item !== port)
+  serialStore.selectedPort = port
+  closeTabContextMenu()
+  await disconnectPortsSequentially(portsToClose)
+}
+
+const disconnectPortsSequentially = async (ports) => {
+  for (const port of ports) {
+    // 逐个断开，避免同时触发多个串口关闭时打乱选中态和分屏回收顺序
+    await serialStore.disconnect(port)
+  }
+}
+
+const resolveFallbackPort = (excludedPorts = []) => {
+  const excluded = new Set(excludedPorts)
+  return connectedPorts.value.find((port) => !excluded.has(port)) || null
+}
+
+const closeTabsToRight = async (paneIndex, port) => {
+  const pane = splitPanes.value[paneIndex]
+  if (!pane) return
+
+  const currentIndex = pane.tabs.indexOf(port)
+  if (currentIndex === -1 || currentIndex >= pane.tabs.length - 1) {
+    closeTabContextMenu()
+    return
+  }
+
+  const portsToClose = pane.tabs.slice(currentIndex + 1)
+  serialStore.selectedPort = port
+  closeTabContextMenu()
+  await disconnectPortsSequentially(portsToClose)
+}
+
+const closeTabsToLeft = async (paneIndex, port) => {
+  const pane = splitPanes.value[paneIndex]
+  if (!pane) return
+
+  const currentIndex = pane.tabs.indexOf(port)
+  if (currentIndex <= 0) {
+    closeTabContextMenu()
+    return
+  }
+
+  const portsToClose = pane.tabs.slice(0, currentIndex)
+  serialStore.selectedPort = port
+  closeTabContextMenu()
+  await disconnectPortsSequentially(portsToClose)
+}
+
+const closeCurrentPane = async (paneIndex) => {
+  const pane = splitPanes.value[paneIndex]
+  if (!pane || !pane.tabs.length) {
+    closeTabContextMenu()
+    return
+  }
+
+  const portsToClose = [...pane.tabs]
+  serialStore.selectedPort = resolveFallbackPort(portsToClose)
+  closeTabContextMenu()
+  await disconnectPortsSequentially(portsToClose)
+}
+
+const closeCurrentTab = async (paneIndex, port) => {
+  serialStore.selectedPort = resolveFallbackPort([port])
+  closeTabContextMenu()
+  await serialStore.disconnect(port)
 }
 
 const splitPane = (paneIndex) => {
@@ -514,9 +766,19 @@ const handleResize = () => {
 }
 
 onMounted(() => {
+  if (contentContainer.value) {
+    contentResizeObserver = new ResizeObserver(() => {
+      handleResize()
+    })
+    contentResizeObserver.observe(contentContainer.value)
+  }
+
   window.addEventListener('mousemove', handleSeparatorMouseMove)
   window.addEventListener('mouseup', handleSeparatorMouseUp)
   window.addEventListener('resize', handleResize)
+  window.addEventListener('click', closeTabContextMenu)
+  window.addEventListener('blur', closeTabContextMenu)
+  window.addEventListener('scroll', closeTabContextMenu, true)
   syncPaneLayout()
 })
 
@@ -524,6 +786,14 @@ onUnmounted(() => {
   window.removeEventListener('mousemove', handleSeparatorMouseMove)
   window.removeEventListener('mouseup', handleSeparatorMouseUp)
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('click', closeTabContextMenu)
+  window.removeEventListener('blur', closeTabContextMenu)
+  window.removeEventListener('scroll', closeTabContextMenu, true)
+
+  if (contentResizeObserver) {
+    contentResizeObserver.disconnect()
+    contentResizeObserver = null
+  }
 })
 </script>
 
@@ -555,6 +825,7 @@ onUnmounted(() => {
                 :class="['tab-item', { active: pane.activeTab === port }]"
                 :draggable="true"
                 @click="selectTab(paneIndex, port)"
+                @contextmenu="openTabContextMenu($event, paneIndex, port)"
                 @dragstart="handleDragStart($event, paneIndex, port)"
                 @dragend="handleDragEnd"
               >
@@ -603,6 +874,35 @@ onUnmounted(() => {
         </div>
       </template>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="tabContextMenu.visible"
+        ref="tabContextMenuRef"
+        class="tab-context-menu"
+        :style="{ left: `${tabContextMenu.x}px`, top: `${tabContextMenu.y}px` }"
+        @click.stop
+      >
+        <button class="tab-context-item" :disabled="!canMoveTabToNewPane" @click="moveTabToNewPane(tabContextMenu.paneIndex, tabContextMenu.port)">
+          移动到新分屏
+        </button>
+        <button class="tab-context-item" :disabled="!canCloseTabsToRight" @click="closeTabsToRight(tabContextMenu.paneIndex, tabContextMenu.port)">
+          关闭右侧标签
+        </button>
+        <button class="tab-context-item" :disabled="!canCloseTabsToLeft" @click="closeTabsToLeft(tabContextMenu.paneIndex, tabContextMenu.port)">
+          关闭左侧标签
+        </button>
+        <button class="tab-context-item" :disabled="!canCloseOtherTabs" @click="closeOtherTabs(tabContextMenu.paneIndex, tabContextMenu.port)">
+          关闭其他标签
+        </button>
+        <button class="tab-context-item" :disabled="!canCloseCurrentPane" @click="closeCurrentPane(tabContextMenu.paneIndex)">
+          关闭当前分屏
+        </button>
+        <button class="tab-context-item danger" @click="closeCurrentTab(tabContextMenu.paneIndex, tabContextMenu.port)">
+          关闭当前标签
+        </button>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -639,6 +939,53 @@ onUnmounted(() => {
 .split-pane-group.pane-drop-target {
   border-color: var(--app-accent-strong);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-accent-strong) 38%, transparent);
+}
+
+.tab-context-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 160px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-menu-bg, var(--app-workspace-shell-strong));
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(14px);
+}
+
+.tab-context-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--app-text);
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.tab-context-item:hover {
+  background: var(--app-accent-soft);
+}
+
+.tab-context-item:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.tab-context-item:disabled:hover {
+  background: transparent;
+}
+
+.tab-context-item.danger {
+  color: var(--app-danger-text);
+}
+
+.tab-context-item.danger:hover {
+  background: var(--app-danger-soft);
 }
 
 .split-separator {

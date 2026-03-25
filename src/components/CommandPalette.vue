@@ -14,22 +14,68 @@ const searchQuery = ref('')
 const selectedIndex = ref(0)
 const inputRef = ref(null)
 
-// 获取已启用命令
-const enabledCommands = computed(() => {
-  return serialStore.getEnabledCommands
+const enabledCommands = computed(() => serialStore.getEnabledCommands)
+const selectedPort = computed(() => serialStore.selectedPort || '')
+const hasSelectedPort = computed(() => Boolean(selectedPort.value))
+const selectedPortStatusText = computed(() => {
+  if (!selectedPort.value) return '目标：未选择串口'
+  return serialStore.getPortStatus(selectedPort.value)
+    ? `目标：${selectedPort.value}`
+    : `目标：${selectedPort.value}（未连接）`
 })
 
-// 过滤后的命令
 const filteredCommands = computed(() => {
   if (!searchQuery.value) return enabledCommands.value
   const query = searchQuery.value.toLowerCase()
-  return enabledCommands.value.filter(cmd =>
+  return enabledCommands.value.filter((cmd) =>
     cmd.name.toLowerCase().includes(query) ||
-    cmd.command.toLowerCase().includes(query)
+    cmd.command.toLowerCase().includes(query) ||
+    (cmd.group || '默认').toLowerCase().includes(query)
   )
 })
 
-// 监听打开状态，自动聚焦
+const groupedCommands = computed(() => {
+  const groups = new Map()
+  filteredCommands.value.forEach((cmd) => {
+    const group = cmd.group || '默认'
+    if (!groups.has(group)) {
+      groups.set(group, [])
+    }
+    groups.get(group).push(cmd)
+  })
+
+  return Array.from(groups.entries()).map(([group, commands]) => ({ group, commands }))
+})
+
+const flatCommands = computed(() => (
+  groupedCommands.value.flatMap((groupBlock) => (
+    groupBlock.commands.map((cmd) => ({
+      ...cmd,
+      groupLabel: groupBlock.group
+    }))
+  ))
+))
+
+const hasResults = computed(() => flatCommands.value.length > 0)
+const currentSelectedCommand = computed(() => flatCommands.value[selectedIndex.value] || null)
+
+const syncSelectedIndex = () => {
+  if (!flatCommands.value.length) {
+    selectedIndex.value = 0
+    return
+  }
+
+  if (selectedIndex.value >= flatCommands.value.length) {
+    selectedIndex.value = flatCommands.value.length - 1
+  }
+}
+
+watch(searchQuery, () => {
+  selectedIndex.value = 0
+})
+
+watch(flatCommands, syncSelectedIndex)
+
 watch(() => props.modelValue, async (newVal) => {
   if (newVal) {
     selectedIndex.value = 0
@@ -39,32 +85,30 @@ watch(() => props.modelValue, async (newVal) => {
   }
 })
 
-// 键盘导航
 const handleKeyDown = (e) => {
   if (e.key === 'ArrowDown') {
     e.preventDefault()
-    selectedIndex.value = (selectedIndex.value + 1) % filteredCommands.value.length
+    if (!flatCommands.value.length) return
+    selectedIndex.value = (selectedIndex.value + 1) % flatCommands.value.length
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
-    selectedIndex.value = (selectedIndex.value - 1 + filteredCommands.value.length) % filteredCommands.value.length
+    if (!flatCommands.value.length) return
+    selectedIndex.value = (selectedIndex.value - 1 + flatCommands.value.length) % flatCommands.value.length
   } else if (e.key === 'Enter') {
     e.preventDefault()
-    sendCommand(filteredCommands.value[selectedIndex.value])
+    sendCommand(currentSelectedCommand.value)
   } else if (e.key === 'Escape') {
     emit('update:modelValue', false)
   }
 }
 
-// 发送命令
 const sendCommand = (cmd) => {
-  if (cmd) {
-    // 触发全局事件来发送命令
+  if (cmd && hasSelectedPort.value) {
     window.dispatchEvent(new CustomEvent('serialx-send-command', { detail: cmd.command }))
     emit('update:modelValue', false)
   }
 }
 
-// 点击命令
 const selectCommand = (cmd) => {
   sendCommand(cmd)
 }
@@ -82,36 +126,38 @@ const selectCommand = (cmd) => {
               v-model="searchQuery"
               type="text"
               class="palette-input"
-              placeholder="搜索命令... (输入关键字过滤)"
+              placeholder="搜索命令、分组..."
               @keydown="handleKeyDown"
             />
           </div>
           <div class="palette-body">
-            <div
-              v-for="(cmd, index) in filteredCommands"
-              :key="cmd.id"
-              :class="['command-item', { selected: index === selectedIndex }]"
-              @click="selectCommand(cmd)"
-              @mouseenter="selectedIndex = index"
-            >
-              <span class="command-name">{{ cmd.name }}</span>
-              <code class="command-value">{{ cmd.command }}</code>
+            <div v-for="groupBlock in groupedCommands" :key="groupBlock.group" class="command-group">
+              <div class="command-group-label">{{ groupBlock.group }}</div>
+              <div
+                v-for="cmd in groupBlock.commands"
+                :key="cmd.id"
+                :class="['command-item', { selected: currentSelectedCommand?.id === cmd.id }]"
+                @click="selectCommand(cmd)"
+                @mouseenter="selectedIndex = flatCommands.findIndex((item) => item.id === cmd.id)"
+              >
+                <span class="command-name">{{ cmd.name }}</span>
+                <span class="command-value-wrap">
+                  <code class="command-value">{{ cmd.command }}</code>
+                </span>
+              </div>
             </div>
-            <div v-if="filteredCommands.length === 0" class="no-commands">
+            <div v-if="!hasResults" class="no-commands">
               <span class="no-commands-icon">🔍</span>
               <span class="no-commands-text">未找到匹配的命令</span>
             </div>
           </div>
           <div class="palette-footer">
-            <span class="shortcut-hint">
-              <kbd>↑↓</kbd> 选择
+            <span class="target-port" :class="{ inactive: !hasSelectedPort }">
+              {{ selectedPortStatusText }}
             </span>
-            <span class="shortcut-hint">
-              <kbd>Enter</kbd> 发送
-            </span>
-            <span class="shortcut-hint">
-              <kbd>Esc</kbd> 关闭
-            </span>
+            <span class="shortcut-hint"><kbd>↑↓</kbd> 选择</span>
+            <span class="shortcut-hint"><kbd>Enter</kbd> 发送</span>
+            <span class="shortcut-hint"><kbd>Esc</kbd> 关闭</span>
           </div>
         </div>
       </div>
@@ -147,7 +193,7 @@ const selectCommand = (cmd) => {
 }
 
 .command-palette {
-  width: 500px;
+  width: 520px;
   max-width: 90vw;
   max-height: 400px;
   background: linear-gradient(145deg, var(--app-modal-bg) 0%, var(--app-modal-soft) 100%);
@@ -182,7 +228,9 @@ const selectCommand = (cmd) => {
   font-family: inherit;
 }
 
-.palette-input::placeholder { color: var(--app-text-soft); }
+.palette-input::placeholder {
+  color: var(--app-text-soft);
+}
 
 .palette-body {
   flex: 1;
@@ -191,10 +239,24 @@ const selectCommand = (cmd) => {
   max-height: 300px;
 }
 
+.command-group {
+  margin-bottom: 10px;
+}
+
+.command-group-label {
+  padding: 4px 10px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--app-text-soft);
+  text-transform: uppercase;
+}
+
 .command-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   padding: 12px 16px;
   border-radius: 8px;
   cursor: pointer;
@@ -216,6 +278,11 @@ const selectCommand = (cmd) => {
   font-size: 14px;
   color: var(--app-text);
   font-weight: 500;
+}
+
+.command-value-wrap {
+  display: inline-flex;
+  justify-content: flex-end;
 }
 
 .command-value {
@@ -247,11 +314,21 @@ const selectCommand = (cmd) => {
 
 .palette-footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 20px;
   padding: 12px 16px;
   border-top: 1px solid var(--app-border);
   background: var(--app-workspace-shell);
+}
+
+.target-port {
+  font-size: 12px;
+  color: var(--app-text);
+}
+
+.target-port.inactive {
+  color: var(--app-warning-text);
 }
 
 .shortcut-hint {

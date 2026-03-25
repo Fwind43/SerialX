@@ -28,6 +28,9 @@ const showResetConfirm = ref(false)
 
 const appUiState = computed(() => serialStore.appUiState || {})
 const appTheme = computed(() => serialStore.appTheme || {})
+const savedWorkspaceSnapshots = computed(() => serialStore.savedWorkspaceSnapshots || [])
+const activeWorkspaceSnapshotId = computed(() => appUiState.value.activeWorkspaceSnapshotId || '')
+const workspaceSnapshotLimit = 8
 const activeThemeSchemeId = computed(() => (
   appUiState.value.activeThemeSchemeId ||
   appUiState.value.terminalAppearanceMode ||
@@ -180,6 +183,13 @@ const formatImportedWorkspaceSummary = (result) => {
   return `已导入工作区快照\n${result.filePath}\n版本：${versionText}\n当前串口：${selectedPortText}`
 }
 
+const formatWorkspaceSnapshotTime = (timestamp) => {
+  if (!timestamp) return '创建时间：未知'
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return '创建时间：未知'
+  return `创建时间：${date.toLocaleString('zh-CN', { hour12: false })}`
+}
+
 const handleGlobalKeydown = (event) => {
   const activeElement = document.activeElement
   const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
@@ -280,6 +290,37 @@ const exportWorkspaceSnapshot = async () => {
   showSettingsMessage(`导出工作区快照失败\n${result.error || '未知错误'}`, 'error', '导出失败')
 }
 
+const exportAllLogs = async (format = 'json') => {
+  showSettingsMenu.value = false
+  const isText = format === 'text'
+  const payload = isText
+    ? serialStore.buildAllPortPlainTextExport()
+    : serialStore.buildAllPortLogExport()
+
+  const hasLogs = isText
+    ? Boolean(payload.trim())
+    : Array.isArray(payload.ports) && payload.ports.some((port) => Array.isArray(port.logs) && port.logs.length > 0)
+
+  if (!hasLogs) {
+    showSettingsMessage('当前没有可导出的串口日志', 'warning', '无可用数据')
+    return
+  }
+
+  const result = await window.electronAPI?.exportLogs(
+    payload,
+    `serialx-all-logs-${new Date().toISOString().slice(0, 10)}.${isText ? 'txt' : 'json'}`
+  )
+
+  if (!result || result.canceled) return
+
+  if (result.success) {
+    showSettingsMessage(`全部串口日志已导出到\n${result.filePath}`, 'success', '导出成功')
+    return
+  }
+
+  showSettingsMessage(`导出全部串口日志失败\n${result.error || '未知错误'}`, 'error', '导出失败')
+}
+
 const importWorkspaceSnapshot = async () => {
   showSettingsMenu.value = false
   const result = await window.electronAPI?.importWorkspaceSnapshot()
@@ -298,6 +339,56 @@ const importWorkspaceSnapshot = async () => {
   }
 }
 
+const saveWorkspaceSnapshotQuick = async () => {
+  showSettingsMenu.value = false
+  const defaultName = `工作区快照 ${new Date().toLocaleString('zh-CN', { hour12: false })}`
+  const name = window.prompt('请输入工作区快照名称：', defaultName)
+  if (name === null) return
+
+  const snapshot = await serialStore.saveNamedWorkspaceSnapshot(name)
+  showSettingsMessage(`已保存工作区快照\n${snapshot.name}\n${formatWorkspaceSnapshotTime(snapshot.createdAt)}`, 'success', '保存成功')
+}
+
+const applySavedWorkspaceSnapshotQuick = async (snapshotId) => {
+  showSettingsMenu.value = false
+  try {
+    const snapshot = await serialStore.applySavedWorkspaceSnapshot(snapshotId)
+    showSettingsMessage(`已切换到工作区快照\n${snapshot.name}\n${formatWorkspaceSnapshotTime(snapshot.createdAt)}`, 'success', '工作区已恢复')
+  } catch (error) {
+    showSettingsMessage(`应用工作区快照失败\n${error.message}`, 'error', '应用失败')
+  }
+}
+
+const overwriteSavedWorkspaceSnapshotQuick = async (snapshotId, snapshotName) => {
+  try {
+    const snapshot = await serialStore.overwriteSavedWorkspaceSnapshot(snapshotId)
+    showSettingsMessage(`已覆盖工作区快照\n${snapshotName}\n${formatWorkspaceSnapshotTime(snapshot.createdAt)}`, 'success', '覆盖成功')
+  } catch (error) {
+    showSettingsMessage(`覆盖工作区快照失败\n${error.message}`, 'error', '覆盖失败')
+  }
+}
+
+const renameSavedWorkspaceSnapshotQuick = async (snapshotId, snapshotName) => {
+  const nextName = window.prompt('请输入新的工作区快照名称：', snapshotName)
+  if (nextName === null) return
+
+  try {
+    const snapshot = await serialStore.renameSavedWorkspaceSnapshot(snapshotId, nextName)
+    showSettingsMessage(`已重命名工作区快照\n${snapshot.name}`, 'success', '重命名成功')
+  } catch (error) {
+    showSettingsMessage(`重命名工作区快照失败\n${error.message}`, 'error', '重命名失败')
+  }
+}
+
+const removeSavedWorkspaceSnapshotQuick = async (snapshotId, snapshotName) => {
+  try {
+    await serialStore.removeSavedWorkspaceSnapshot(snapshotId)
+    showSettingsMessage(`已删除工作区快照\n${snapshotName}`, 'success', '已删除')
+  } catch (error) {
+    showSettingsMessage(`删除工作区快照失败\n${error.message}`, 'error', '删除失败')
+  }
+}
+
 const resetAllSettings = () => {
   showSettingsMenu.value = false
   showResetConfirm.value = true
@@ -306,7 +397,7 @@ const resetAllSettings = () => {
 const confirmResetAllSettings = async () => {
   showResetConfirm.value = false
   await serialStore.resetAppSettings()
-  showSettingsMessage('终端外观、默认串口参数和常用命令都已恢复默认。', 'success', '已恢复默认')
+  showSettingsMessage('主题、工作区布局、默认串口参数和常用命令都已恢复默认。', 'success', '已恢复默认')
 }
 
 const cancelResetAllSettings = () => {
@@ -318,7 +409,10 @@ const handleSendCommand = (event) => {
   if (!command) return
 
   const portPath = serialStore.selectedPort
-  if (!portPath) return
+  if (!portPath) {
+    showSettingsMessage('请先选中一个串口，再执行快捷命令', 'warning', '无法发送命令')
+    return
+  }
 
   serialStore.setPortSendingData(portPath, command)
   serialStore.sendData(portPath)
@@ -554,7 +648,7 @@ onUnmounted(() => {
                     <path d="M8 3.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 0 0 0-3ZM4.4 8a3.6 3.6 0 1 1 7.2 0a3.6 3.6 0 0 1-7.2 0Zm8.85-.75 1.25.75-1.25.75-.3 1.42-1.42.3-.75 1.25-.75-1.25-1.42-.3-.3-1.42-1.25-.75 1.25-.75.3-1.42 1.42-.3.75-1.25.75 1.25 1.42.3.3 1.42Z" fill="currentColor" />
                   </svg>
                 </span>
-                <span class="dropdown-text">终端外观设置</span>
+                <span class="dropdown-text">外观设置</span>
               </div>
               <div class="dropdown-item" @click="openCommandsConfig">
                 <span class="dropdown-icon" aria-hidden="true">
@@ -590,6 +684,22 @@ onUnmounted(() => {
                 </span>
                 <span class="dropdown-text">导出工作区快照</span>
               </div>
+              <div class="dropdown-item" @click="exportAllLogs('json')">
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M3 3h10v3H3zM3 8h10v5H3zM5 5h6v1H5zm0 5h6v1H5z" fill="currentColor" />
+                  </svg>
+                </span>
+                <span class="dropdown-text">导出全部日志 (JSON)</span>
+              </div>
+              <div class="dropdown-item" @click="exportAllLogs('text')">
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M4 3h8v2H4zm0 4h8v1H4zm0 3h6v1H4zm0 3h8v1H4z" fill="currentColor" />
+                  </svg>
+                </span>
+                <span class="dropdown-text">导出全部日志 (TXT)</span>
+              </div>
               <div class="dropdown-item" @click="importWorkspaceSnapshot">
                 <span class="dropdown-icon" aria-hidden="true">
                   <svg viewBox="0 0 16 16" width="16" height="16">
@@ -599,6 +709,60 @@ onUnmounted(() => {
                 </span>
                 <span class="dropdown-text">导入工作区快照</span>
               </div>
+              <div class="dropdown-item" @click="saveWorkspaceSnapshotQuick">
+                <span class="dropdown-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="16" height="16">
+                    <path d="M3 3h8l2 2v8H3zM5 3v4h5V3M5 11h6v1H5z" fill="currentColor" />
+                  </svg>
+                </span>
+                <span class="dropdown-text">保存工作区快照</span>
+              </div>
+              <template v-if="savedWorkspaceSnapshots.length">
+                <div class="dropdown-divider"></div>
+                <div class="dropdown-section-label">快捷工作区（{{ savedWorkspaceSnapshots.length }}/{{ workspaceSnapshotLimit }}）</div>
+                <div
+                  v-for="snapshot in savedWorkspaceSnapshots.slice(0, 5)"
+                  :key="snapshot.id"
+                  :class="['dropdown-item', 'dropdown-item-composite', { selected: snapshot.id === activeWorkspaceSnapshotId }]"
+                  @click="applySavedWorkspaceSnapshotQuick(snapshot.id)"
+                >
+                  <span class="dropdown-icon" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" width="16" height="16">
+                      <path d="M3 4h10v8H3zM5 2h6v2H5z" fill="currentColor" />
+                    </svg>
+                  </span>
+                  <div class="dropdown-item-content">
+                    <div class="dropdown-item-main">
+                      <span class="dropdown-text">{{ snapshot.name }}</span>
+                      <span v-if="snapshot.id === activeWorkspaceSnapshotId" class="dropdown-item-badge">当前</span>
+                    </div>
+                    <div class="dropdown-item-meta">{{ formatWorkspaceSnapshotTime(snapshot.createdAt) }}</div>
+                  </div>
+                  <div class="dropdown-item-actions">
+                    <button
+                      class="dropdown-inline-action"
+                      title="覆盖保存当前工作区"
+                      @click.stop="overwriteSavedWorkspaceSnapshotQuick(snapshot.id, snapshot.name)"
+                    >
+                      ↺
+                    </button>
+                    <button
+                      class="dropdown-inline-action"
+                      title="重命名快照"
+                      @click.stop="renameSavedWorkspaceSnapshotQuick(snapshot.id, snapshot.name)"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      class="dropdown-inline-action"
+                      title="删除快照"
+                      @click.stop="removeSavedWorkspaceSnapshotQuick(snapshot.id, snapshot.name)"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              </template>
               <div class="dropdown-item danger" @click="resetAllSettings">
                 <span class="dropdown-icon" aria-hidden="true">
                   <svg viewBox="0 0 16 16" width="16" height="16">
@@ -905,14 +1069,64 @@ onUnmounted(() => {
   transition: all 0.18s ease;
 }
 
+.dropdown-item-composite {
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.dropdown-item-content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dropdown-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dropdown-item-meta {
+  font-size: 11px;
+  color: var(--app-text-soft);
+  line-height: 1.35;
+}
+
+.dropdown-item-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--app-chip-border);
+  background: var(--app-chip-bg);
+  color: var(--app-chip-text);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.dropdown-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .dropdown-item:hover,
 .dropdown-item.selected {
   background-color: var(--app-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--app-chip-border);
 }
 
 .theme-light .dropdown-item:hover,
 .theme-light .dropdown-item.selected {
   background-color: var(--app-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--app-chip-border);
 }
 
 .dropdown-item.danger:hover {
@@ -963,6 +1177,25 @@ onUnmounted(() => {
 .dropdown-text {
   font-size: 13px;
   color: var(--app-text);
+  flex: 1;
+}
+
+.dropdown-inline-action {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-text-soft);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.dropdown-inline-action:hover {
+  background: var(--app-danger-soft);
+  color: var(--app-danger-text);
 }
 
 .app-icon {

@@ -112,11 +112,15 @@ async function importSettingsFile() {
 async function exportLogsFile(payload, suggestedName = '') {
   try {
     const defaultFileName = suggestedName || `serialx-logs-${new Date().toISOString().slice(0, 10)}.json`
+    const isTextPayload = typeof payload === 'string'
+    const isTextFile = path.extname(defaultFileName).toLowerCase() === '.txt'
     const { canceled, filePath } = await dialog.showSaveDialog({
       title: '导出 SerialX 日志',
       defaultPath: path.join(app.getPath('documents'), defaultFileName),
       filters: [
-        { name: 'JSON Files', extensions: ['json'] }
+        isTextPayload || isTextFile
+          ? { name: 'Text Files', extensions: ['txt'] }
+          : { name: 'JSON Files', extensions: ['json'] }
       ]
     })
 
@@ -124,7 +128,11 @@ async function exportLogsFile(payload, suggestedName = '') {
       return { success: false, canceled: true }
     }
 
-    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8')
+    if (isTextPayload) {
+      fs.writeFileSync(filePath, payload, 'utf8')
+    } else {
+      fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8')
+    }
     return { success: true, filePath }
   } catch (error) {
     safeErrorLog('[Logs] Error exporting logs:', error)
@@ -356,11 +364,17 @@ class SerialManager {
 
       // 初始化该串口的缓冲区
       this.dataBuffers.set(portPath, [])
-      const FLUSH_INTERVAL = 100 // 100ms 刷新一次
-      const MAX_BUFFER_SIZE = 2048 // 2KB 触发刷新
-      const MAX_CHUNK_COUNT = 20 // 20 个数据块触发刷新
+      // 接收链路优先接近实时：默认在当前事件循环结束就刷出，只在连续大流量时做极小批量合并。
+      const MAX_BUFFER_SIZE = 1024 // 1KB 直接触发立即刷新
+      const MAX_CHUNK_COUNT = 8 // 8 个数据块直接触发立即刷新
 
-      const flushBuffer = (force = false) => {
+      const flushBuffer = () => {
+        const pendingTimer = this.flushTimers.get(portPath)
+        if (pendingTimer) {
+          clearImmediate(pendingTimer)
+          this.flushTimers.delete(portPath)
+        }
+
         const buffer = this.dataBuffers.get(portPath)
         if (!buffer || buffer.length === 0 || !mainWindow) return
 
@@ -380,9 +394,14 @@ class SerialManager {
         })
       }
 
-      // 使用固定大小的 Buffer 池减少内存分配
-      let bufferPool = Buffer.allocUnsafe(4096)
-      let poolOffset = 0
+      const scheduleFlushSoon = () => {
+        if (this.flushTimers.get(portPath)) return
+        const timer = setImmediate(() => {
+          this.flushTimers.delete(portPath)
+          flushBuffer()
+        })
+        this.flushTimers.set(portPath, timer)
+      }
 
       serialPort.on('data', (data) => {
         const buffer = this.dataBuffers.get(portPath)
@@ -396,14 +415,7 @@ class SerialManager {
         if (totalSize >= MAX_BUFFER_SIZE || buffer.length >= MAX_CHUNK_COUNT) {
           flushBuffer()
         } else {
-          // 启动定时器
-          if (!this.flushTimers.get(portPath)) {
-            const timer = setTimeout(() => {
-              this.flushTimers.delete(portPath)
-              flushBuffer()
-            }, FLUSH_INTERVAL)
-            this.flushTimers.set(portPath, timer)
-          }
+          scheduleFlushSoon()
         }
       })
 
