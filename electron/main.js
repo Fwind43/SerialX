@@ -724,6 +724,21 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.handle('window:set-always-on-top', (event, value) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow
+    if (!targetWindow) return false
+
+    const nextValue = Boolean(value)
+    targetWindow.setAlwaysOnTop(nextValue)
+    return targetWindow.isAlwaysOnTop()
+  })
+
+  ipcMain.handle('window:get-always-on-top', (event) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow
+    if (!targetWindow) return false
+    return targetWindow.isAlwaysOnTop()
+  })
+
   // 配置管理 - 常用命令持久化
   ipcMain.handle('config:load', async () => {
     return loadConfig()

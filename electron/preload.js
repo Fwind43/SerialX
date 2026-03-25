@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   unmaximizeWindow: () => ipcRenderer.send('window:unmaximize'),
   closeWindow: () => ipcRenderer.send('window:close'),
+  setWindowAlwaysOnTop: (value) => ipcRenderer.invoke('window:set-always-on-top', value),
+  getWindowAlwaysOnTop: () => ipcRenderer.invoke('window:get-always-on-top'),
 
   // Window State Events
   onWindowMaximized: (callback) => {

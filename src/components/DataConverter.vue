@@ -25,6 +25,7 @@ const inputUint32 = ref('')
 
 const byteOrder = ref('little')
 const debounceTimer = ref(null)
+const isAlwaysOnTop = ref(false)
 
 const themeMode = computed(() => serialStore.appUiState?.themeMode || 'dark')
 const isDarkMode = computed(() => themeMode.value === 'dark')
@@ -183,6 +184,7 @@ const handleGlobalKey = (event) => {
 onMounted(() => {
   if (props.standalone) {
     window.addEventListener('keydown', handleGlobalKey)
+    syncAlwaysOnTopState()
   }
 })
 
@@ -205,6 +207,20 @@ const closeWindow = () => {
   }
 
   window.close()
+}
+
+const syncAlwaysOnTopState = async () => {
+  if (!props.standalone || typeof window === 'undefined') return
+  if (!window.electronAPI?.getWindowAlwaysOnTop) return
+
+  isAlwaysOnTop.value = Boolean(await window.electronAPI.getWindowAlwaysOnTop())
+}
+
+const toggleAlwaysOnTop = async () => {
+  if (!props.standalone || typeof window === 'undefined') return
+  if (!window.electronAPI?.setWindowAlwaysOnTop) return
+
+  isAlwaysOnTop.value = Boolean(await window.electronAPI.setWindowAlwaysOnTop(!isAlwaysOnTop.value))
 }
 
 const hexToBytes = (hex) => {
@@ -422,6 +438,20 @@ const clearAll = () => {
 
       <div class="window-controls">
         <button
+          :class="['window-titlebar-pin', { active: isAlwaysOnTop }]"
+          type="button"
+          :title="isAlwaysOnTop ? '取消置顶' : '置顶显示'"
+          :aria-label="isAlwaysOnTop ? '取消置顶' : '置顶显示'"
+          @click="toggleAlwaysOnTop"
+        >
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path
+              d="M10.9 2.3 13.7 5.1 10.8 6l-1.9 1.9.8 3.6-.7.7-2.7-2.7-2.3 2.3-.9-.9 2.3-2.3-2.7-2.7.7-.7 3.6.8L8 5.2l.9-2.9Z"
+              fill="currentColor"
+            />
+          </svg>
+        </button>
+        <button
           class="window-titlebar-close"
           type="button"
           title="关闭 (Ctrl+W)"
@@ -632,15 +662,43 @@ const clearAll = () => {
   transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 }
 
+.window-titlebar-pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--converter-text-soft);
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.window-titlebar-pin:hover {
+  background: color-mix(in srgb, var(--converter-accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--converter-accent) 28%, transparent);
+  color: var(--converter-title);
+}
+
+.window-titlebar-pin.active {
+  background: color-mix(in srgb, var(--converter-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--converter-accent) 40%, var(--converter-border));
+  color: var(--converter-accent-strong);
+}
+
+.window-titlebar-pin:focus-visible,
+.window-titlebar-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--converter-accent) 18%, transparent);
+}
+
 .window-titlebar-close:hover {
   background: var(--app-danger-soft);
   border-color: var(--app-danger-border);
   color: var(--app-danger-text);
-}
-
-.window-titlebar-close:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--converter-accent) 18%, transparent);
 }
 
 .ghost-btn {
