@@ -190,9 +190,14 @@ const formatWorkspaceSnapshotTime = (timestamp) => {
   return `创建时间：${date.toLocaleString('zh-CN', { hour12: false })}`
 }
 
+const isTextInputLikeElement = (element) => {
+  if (!(element instanceof HTMLElement)) return false
+  return element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)
+}
+
 const handleGlobalKeydown = (event) => {
   const activeElement = document.activeElement
-  const isInputFocused = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA'
+  const isInputFocused = isTextInputLikeElement(activeElement)
 
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p' && !isInputFocused) {
     event.preventDefault()
@@ -200,9 +205,19 @@ const handleGlobalKeydown = (event) => {
     return
   }
 
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f' && !isInputFocused) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f' && serialStore.selectedPort) {
     event.preventDefault()
     window.dispatchEvent(new CustomEvent('serialx-open-search', {
+      detail: {
+        portPath: serialStore.selectedPort
+      }
+    }))
+    return
+  }
+
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && !isInputFocused && serialStore.selectedPort) {
+    event.preventDefault()
+    window.dispatchEvent(new CustomEvent('serialx-select-all', {
       detail: {
         portPath: serialStore.selectedPort
       }

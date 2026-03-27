@@ -212,6 +212,14 @@ const openSearch = () => {
   focusSearchInput()
 }
 
+const syncTerminalViewport = () => {
+  nextTick(() => {
+    if (!terminal || !fitAddon) return
+    fitAddon.fit()
+    refreshDisplay()
+  })
+}
+
 const getHexLengthPerLine = () => {
   const terminalCols = terminal?.cols || 100
   const reservedCols = 18
@@ -739,7 +747,23 @@ const handleOpenSearch = (event) => {
   openSearch()
 }
 
+const handleSelectAllRequest = (event) => {
+  const targetPortPath = event?.detail?.portPath
+  if (targetPortPath && targetPortPath !== props.portPath) return
+  serialStore.selectedPort = props.portPath
+  selectAllTerminal()
+}
+
+const isEditableTarget = (target) => {
+  if (!(target instanceof HTMLElement)) return false
+  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+}
+
 const handleKeyDown = (event) => {
+  if (isEditableTarget(event.target)) {
+    return
+  }
+
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && serialStore.selectedPort === props.portPath) {
     const selection = terminal?.getSelection()
     if (selection) {
@@ -809,6 +833,11 @@ const initTerminal = () => {
       copySelection()
       return false
     }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+      serialStore.selectedPort = props.portPath
+      openSearch()
+      return false
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
       selectAllTerminal()
       return false
@@ -828,6 +857,18 @@ const initTerminal = () => {
 
 watch(searchQuery, () => {
   debouncedSearch()
+})
+
+watch(showSearch, (visible) => {
+  syncTerminalViewport()
+  if (visible) {
+    focusSearchInput()
+    return
+  }
+
+  nextTick(() => {
+    terminal?.focus()
+  })
 })
 
 watch(() => {
@@ -861,6 +902,7 @@ onMounted(() => {
   document.addEventListener('keydown', handleKeyDown, true)
   document.addEventListener('click', closeContextMenu)
   window.addEventListener('serialx-open-search', handleOpenSearch)
+  window.addEventListener('serialx-select-all', handleSelectAllRequest)
   window.addEventListener('resize', closeContextMenu)
   window.addEventListener('scroll', closeContextMenu, true)
 
@@ -887,6 +929,7 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleKeyDown, true)
   document.removeEventListener('click', closeContextMenu)
   window.removeEventListener('serialx-open-search', handleOpenSearch)
+  window.removeEventListener('serialx-select-all', handleSelectAllRequest)
   window.removeEventListener('resize', handleResize)
   window.removeEventListener('resize', closeContextMenu)
   window.removeEventListener('scroll', closeContextMenu, true)
@@ -907,40 +950,42 @@ defineExpose({
 </script>
 
 <template>
-  <div :class="['terminal-wrapper', `theme-${themeMode}`, { 'search-open': showSearch }]" :style="terminalCssVars">
-    <div v-if="showSearch" class="search-widget">
-      <div class="search-input-wrapper">
-        <span class="search-chip">查找</span>
-        <input
-          ref="searchInput"
-          v-model="searchQuery"
-          type="text"
-          class="search-input"
-          placeholder="搜索终端内容..."
-          @keydown.enter.prevent="handleSearchKeyDown"
-        />
-        <span :class="['search-status', { empty: isSearchEmpty }]">
-          {{ searchStatusText }}
-        </span>
-        <div class="search-controls">
-          <span class="search-count">
-            {{ !searchQuery ? '' : (searchMatchCount > 0 ? `${currentMatchIndex} / ${searchMatchCount}` : '0 / 0') }}
+  <div :class="['terminal-wrapper', `theme-${themeMode}`]" :style="terminalCssVars">
+    <div v-if="showSearch" class="search-bar">
+      <div class="search-widget">
+        <div class="search-input-wrapper">
+          <span class="search-chip">查找</span>
+          <input
+            ref="searchInput"
+            v-model="searchQuery"
+            type="text"
+            class="search-input"
+            placeholder="搜索终端内容..."
+            @keydown.enter.prevent="handleSearchKeyDown"
+          />
+          <span :class="['search-status', { empty: isSearchEmpty }]">
+            {{ searchStatusText }}
           </span>
-          <button class="search-btn" title="上一个匹配 (Shift+Enter / Shift+F3)" @click="goToPreviousMatch">
-            <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
-              <path d="M6 3 2 7h8Z" fill="currentColor" />
-            </svg>
-          </button>
-          <button class="search-btn" title="下一个匹配 (Enter / F3)" @click="goToNextMatch">
-            <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
-              <path d="M6 9 10 5H2Z" fill="currentColor" />
-            </svg>
-          </button>
-          <button class="search-btn close" title="关闭 (Esc)" @click="clearSearch">
-            <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
-              <path d="M2 2 10 10M10 2 2 10" stroke="currentColor" stroke-width="1.2" />
-            </svg>
-          </button>
+          <div class="search-controls">
+            <span class="search-count">
+              {{ !searchQuery ? '' : (searchMatchCount > 0 ? `${currentMatchIndex} / ${searchMatchCount}` : '0 / 0') }}
+            </span>
+            <button class="search-btn" title="上一个匹配 (Shift+Enter / Shift+F3)" @click="goToPreviousMatch">
+              <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+                <path d="M6 3 2 7h8Z" fill="currentColor" />
+              </svg>
+            </button>
+            <button class="search-btn" title="下一个匹配 (Enter / F3)" @click="goToNextMatch">
+              <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+                <path d="M6 9 10 5H2Z" fill="currentColor" />
+              </svg>
+            </button>
+            <button class="search-btn close" title="关闭 (Esc)" @click="clearSearch">
+              <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+                <path d="M2 2 10 10M10 2 2 10" stroke="currentColor" stroke-width="1.2" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1029,7 +1074,7 @@ defineExpose({
       </div>
     </Teleport>
 
-    <div ref="terminalContainer" :class="['terminal-container', { 'search-open': showSearch }]"></div>
+    <div ref="terminalContainer" class="terminal-container"></div>
   </div>
 </template>
 
@@ -1049,6 +1094,11 @@ defineExpose({
   box-shadow: var(--terminal-inner-shadow);
 }
 
+.search-bar {
+  flex-shrink: 0;
+  padding: 10px 12px 0;
+}
+
 .terminal-container {
   flex: 1;
   width: 100%;
@@ -1056,10 +1106,7 @@ defineExpose({
   padding: 8px 10px;
   box-sizing: border-box;
   overflow: hidden;
-}
-
-.terminal-container.search-open {
-  padding-top: 50px;
+  min-height: 0;
 }
 
 .terminal-container {
@@ -1161,10 +1208,8 @@ defineExpose({
 }
 
 .search-widget {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  z-index: 100;
+  display: inline-flex;
+  margin-left: auto;
   padding: 5px 6px;
   border-radius: 999px;
   border: 1px solid var(--app-border);

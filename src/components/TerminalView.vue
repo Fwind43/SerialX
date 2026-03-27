@@ -178,7 +178,6 @@ const ensurePaneStructure = () => {
     splitPanes.value = [{ tabs: [], activeTab: '' }]
   }
 
-  const connectedPortSet = new Set(connectedPorts.value)
   const assignedTabs = new Set()
 
   splitPanes.value.forEach((pane) => {
@@ -187,7 +186,7 @@ const ensurePaneStructure = () => {
     }
 
     pane.tabs = pane.tabs.filter((port) => {
-      if (!connectedPortSet.has(port) || assignedTabs.has(port)) {
+      if (typeof port !== 'string' || !port || assignedTabs.has(port)) {
         return false
       }
 
@@ -212,11 +211,11 @@ const syncSelectedPortWithPanes = () => {
     .map((pane) => pane.activeTab)
     .filter(Boolean)
 
-  if (serialStore.selectedPort && activeTabs.includes(serialStore.selectedPort)) {
+  if (serialStore.selectedPort && allTabs.value.includes(serialStore.selectedPort)) {
     return
   }
 
-  serialStore.selectedPort = activeTabs[0] || connectedPorts.value[0] || null
+  serialStore.selectedPort = activeTabs[0] || allTabs.value[0] || connectedPorts.value[0] || null
 }
 
 const syncPaneLayout = () => {
@@ -277,25 +276,11 @@ watch(() => connectedPorts.value, (newPorts) => {
     }
   })
 
-  splitPanes.value.forEach((pane) => {
-    pane.tabs = pane.tabs.filter((port) => newPorts.includes(port))
-    if (!newPorts.includes(pane.activeTab)) {
-      pane.activeTab = pane.tabs[0] || ''
-    }
-  })
-
-  while (splitPanes.value.length > 1 && splitPanes.value.some((pane) => pane.tabs.length === 0)) {
-    const emptyIndex = splitPanes.value.findIndex((pane) => pane.tabs.length === 0)
-    if (emptyIndex !== -1) {
-      removePaneAndWidth(emptyIndex)
-    }
-  }
-
   ensurePaneStructure()
   if (latestConnectedPort) {
     serialStore.selectedPort = latestConnectedPort
-  } else if (!newPorts.includes(serialStore.selectedPort)) {
-    serialStore.selectedPort = splitPanes.value.find((pane) => pane.activeTab)?.activeTab || newPorts[0] || null
+  } else if (!serialStore.selectedPort || !allTabs.value.includes(serialStore.selectedPort)) {
+    serialStore.selectedPort = splitPanes.value.find((pane) => pane.activeTab)?.activeTab || allTabs.value[0] || newPorts[0] || null
   }
   syncPaneLayout()
 }, { deep: true })
@@ -353,8 +338,66 @@ const selectTab = (paneIndex, port) => {
   serialStore.selectedPort = port
 }
 
-const disconnectPort = (port) => {
-  serialStore.disconnect(port)
+const removeTabFromPanes = (port) => {
+  if (!port) return false
+
+  let removed = false
+  splitPanes.value.forEach((pane) => {
+    const tabIndex = pane.tabs.indexOf(port)
+    if (tabIndex === -1) {
+      return
+    }
+
+    removed = true
+    pane.tabs.splice(tabIndex, 1)
+    if (pane.activeTab === port) {
+      pane.activeTab = pane.tabs[tabIndex] || pane.tabs[tabIndex - 1] || pane.tabs[0] || ''
+    }
+  })
+
+  while (splitPanes.value.length > 1 && splitPanes.value.some((pane) => pane.tabs.length === 0)) {
+    const emptyIndex = splitPanes.value.findIndex((pane) => pane.tabs.length === 0)
+    if (emptyIndex === -1) break
+    removePaneAndWidth(emptyIndex)
+  }
+
+  if (!splitPanes.value.length) {
+    splitPanes.value = [{ tabs: [], activeTab: '' }]
+  }
+
+  return removed
+}
+
+const closePortTab = async (port) => {
+  if (!port) return false
+
+  if (serialStore.getPortStatus(port)) {
+    const didDisconnect = await serialStore.disconnect(port)
+    if (!didDisconnect && serialStore.getPortStatus(port)) {
+      return false
+    }
+  }
+
+  const removed = removeTabFromPanes(port)
+  if (!removed) return false
+
+  syncPaneLayout()
+  return true
+}
+
+const closePortTabsSequentially = async (ports) => {
+  for (const port of ports) {
+    const didClose = await closePortTab(port)
+    if (!didClose) {
+      return false
+    }
+  }
+
+  return true
+}
+
+const closeTabByPort = async (port) => {
+  await closePortTab(port)
 }
 
 const closeTabContextMenu = () => {
@@ -444,14 +487,7 @@ const closeOtherTabs = async (paneIndex, port) => {
   const portsToClose = allTabs.value.filter((item) => item !== port)
   serialStore.selectedPort = port
   closeTabContextMenu()
-  await disconnectPortsSequentially(portsToClose)
-}
-
-const disconnectPortsSequentially = async (ports) => {
-  for (const port of ports) {
-    // 逐个断开，避免同时触发多个串口关闭时打乱选中态和分屏回收顺序
-    await serialStore.disconnect(port)
-  }
+  await closePortTabsSequentially(portsToClose)
 }
 
 const resolveFallbackPort = (excludedPorts = []) => {
@@ -472,7 +508,7 @@ const closeTabsToRight = async (paneIndex, port) => {
   const portsToClose = pane.tabs.slice(currentIndex + 1)
   serialStore.selectedPort = port
   closeTabContextMenu()
-  await disconnectPortsSequentially(portsToClose)
+  await closePortTabsSequentially(portsToClose)
 }
 
 const closeTabsToLeft = async (paneIndex, port) => {
@@ -488,7 +524,7 @@ const closeTabsToLeft = async (paneIndex, port) => {
   const portsToClose = pane.tabs.slice(0, currentIndex)
   serialStore.selectedPort = port
   closeTabContextMenu()
-  await disconnectPortsSequentially(portsToClose)
+  await closePortTabsSequentially(portsToClose)
 }
 
 const closeCurrentPane = async (paneIndex) => {
@@ -501,13 +537,12 @@ const closeCurrentPane = async (paneIndex) => {
   const portsToClose = [...pane.tabs]
   serialStore.selectedPort = resolveFallbackPort(portsToClose)
   closeTabContextMenu()
-  await disconnectPortsSequentially(portsToClose)
+  await closePortTabsSequentially(portsToClose)
 }
 
 const closeCurrentTab = async (paneIndex, port) => {
-  serialStore.selectedPort = resolveFallbackPort([port])
   closeTabContextMenu()
-  await serialStore.disconnect(port)
+  await closePortTab(port)
 }
 
 const splitPane = (paneIndex) => {
@@ -831,7 +866,7 @@ onUnmounted(() => {
               >
                 <span class="tab-icon"></span>
                 <span class="tab-label">{{ port }}</span>
-                <span class="tab-close" @click.stop="disconnectPort(port)">×</span>
+                <span class="tab-close" @click.stop="closeTabByPort(port)">×</span>
               </div>
             </div>
             <div class="pane-actions">

@@ -368,8 +368,16 @@ const handleSendingKeyDown = (event) => {
   }
 }
 
-const handleDisconnect = async () => {
-  await serialStore.disconnect(props.portPath)
+const handleConnectionToggle = async () => {
+  if (isConnected.value) {
+    await serialStore.disconnect(props.portPath)
+    return
+  }
+
+  await serialStore.connect(props.portPath, {
+    ...portSettings.value,
+    path: props.portPath
+  })
 }
 
 const setFilterEnabled = (enabled) => {
@@ -455,7 +463,9 @@ onUnmounted(() => {
           {{ showFilters ? '隐藏过滤' : '显示过滤' }}
         </button>
         <button class="action-btn" @click="handleClearLogs">清空日志</button>
-        <button class="action-btn disconnect" @click="handleDisconnect">断开</button>
+        <button class="action-btn" :class="{ disconnect: isConnected }" @click="handleConnectionToggle">
+          {{ isConnected ? '断开' : '连接' }}
+        </button>
       </div>
     </div>
 
