@@ -207,6 +207,16 @@ export const useSerialStore = defineStore('serial', () => {
     paneWidths: []
   })
   const createDefaultSavedWorkspaceSnapshots = () => []
+  const createDefaultAutoLogSettings = () => ({
+    enabled: true,
+    directory: '',
+    format: 'txt'
+  })
+  const normalizeAutoLogSettings = (settings = {}) => ({
+    enabled: settings?.enabled !== false,
+    directory: typeof settings?.directory === 'string' ? settings.directory : '',
+    format: settings?.format === 'jsonl' ? 'jsonl' : 'txt'
+  })
 
   const createDefaultAppUiState = () => ({
     sidebarCollapsed: false,
@@ -279,6 +289,8 @@ export const useSerialStore = defineStore('serial', () => {
   const customAppearancePresets = ref(createDefaultCustomAppearancePresets())
   const workspaceLayout = ref(createDefaultWorkspaceLayout())
   const savedWorkspaceSnapshots = ref(createDefaultSavedWorkspaceSnapshots())
+  const autoLogSettings = ref(createDefaultAutoLogSettings())
+  const defaultLogDirectory = ref('')
   const appUiState = ref(createDefaultAppUiState())
   let isApplyingExternalUiSnapshot = false
 
@@ -316,6 +328,66 @@ export const useSerialStore = defineStore('serial', () => {
       console.error('[Store] Error saving UI preferences:', error)
     }
   }
+
+  const loadDefaultLogDirectory = async () => {
+    try {
+      const result = await window?.electronAPI?.getDefaultLogDirectory?.()
+      if (result?.success && typeof result.directoryPath === 'string') {
+        defaultLogDirectory.value = result.directoryPath
+      }
+    } catch (error) {
+      console.error('[Store] Error loading default log directory:', error)
+    }
+  }
+
+  const saveAutoLogSettings = async () => {
+    try {
+      if (!window?.electronAPI?.loadConfig || !window?.electronAPI?.saveConfig) return
+      const config = await window.electronAPI.loadConfig()
+      config.autoLogSettings = JSON.parse(JSON.stringify(autoLogSettings.value))
+      await window.electronAPI.saveConfig(config)
+    } catch (error) {
+      console.error('[Store] Error saving auto log settings:', error)
+    }
+  }
+
+  const updateAutoLogSettings = (updates = {}) => {
+    autoLogSettings.value = normalizeAutoLogSettings({
+      ...autoLogSettings.value,
+      ...updates
+    })
+  }
+
+  const selectAutoLogDirectory = async () => {
+    try {
+      const currentPath = autoLogSettings.value.directory || defaultLogDirectory.value
+      const result = await window?.electronAPI?.selectLogDirectory?.(currentPath)
+      if (!result || result.canceled) return null
+      if (!result.success) {
+        throw new Error(result.error || '选择日志目录失败')
+      }
+      updateAutoLogSettings({ directory: result.directoryPath || '' })
+      return result.directoryPath || ''
+    } catch (error) {
+      console.error('[Store] Error selecting auto log directory:', error)
+      throw error
+    }
+  }
+
+  const openAutoLogDirectory = async () => {
+    try {
+      const result = await window?.electronAPI?.openLogDirectory?.(autoLogSettings.value.directory || defaultLogDirectory.value)
+      if (!result?.success) {
+        throw new Error(result?.error || '打开日志目录失败')
+      }
+      return result.directoryPath || autoLogSettings.value.directory || defaultLogDirectory.value
+    } catch (error) {
+      console.error('[Store] Error opening auto log directory:', error)
+      throw error
+    }
+  }
+
+  const getResolvedAutoLogDirectory = () => autoLogSettings.value.directory || defaultLogDirectory.value || ''
 
   const buildUiSyncSnapshot = () => ({
     appUiState: JSON.parse(JSON.stringify(appUiState.value)),
@@ -836,6 +908,7 @@ export const useSerialStore = defineStore('serial', () => {
     version: SETTINGS_SNAPSHOT_VERSION,
     exportedAt: new Date().toISOString(),
     defaultSettings: { ...defaultSettings.value },
+    autoLogSettings: { ...autoLogSettings.value },
     portDisplaySettings: Object.fromEntries(portDisplaySettings.value),
     portControlSettings: Object.fromEntries(portControlSettings.value),
     commonCommands: JSON.parse(JSON.stringify(commonCommands.value)),
@@ -867,6 +940,7 @@ export const useSerialStore = defineStore('serial', () => {
       logs: logsForPort.map((log) => ({
         id: log.id,
         timestamp: log.timestamp,
+        recordedAt: log.recordedAt ?? null,
         type: log.type,
         message: log.message,
         pureData: log.pureData ?? log.message,
@@ -1238,6 +1312,10 @@ export const useSerialStore = defineStore('serial', () => {
     if (snapshot.commonCommands && !Array.isArray(snapshot.commonCommands)) {
       throw new Error('常用命令配置格式无效')
     }
+
+    if (snapshot.autoLogSettings && typeof snapshot.autoLogSettings !== 'object') {
+      throw new Error('自动日志配置格式无效')
+    }
   }
 
   const applySettingsSnapshot = async (snapshot = {}) => {
@@ -1247,6 +1325,7 @@ export const useSerialStore = defineStore('serial', () => {
       ...createDefaultSettings(),
       ...(snapshot.defaultSettings || {})
     }
+    autoLogSettings.value = normalizeAutoLogSettings(snapshot.autoLogSettings)
     portDisplaySettings.value = new Map(Object.entries(snapshot.portDisplaySettings || {}))
     portControlSettings.value = new Map(Object.entries(snapshot.portControlSettings || {}))
     const nextAppUiState = buildAppUiStateWithThemeScheme({
@@ -1270,11 +1349,13 @@ export const useSerialStore = defineStore('serial', () => {
 
     await saveSessionState()
     await saveCommonCommands()
+    await saveAutoLogSettings()
   }
 
   const resetAppSettings = async () => {
     await applySettingsSnapshot({
       defaultSettings: createDefaultSettings(),
+      autoLogSettings: createDefaultAutoLogSettings(),
       portDisplaySettings: {},
       portControlSettings: {},
       commonCommands: createDefaultCommonCommands(),
@@ -1315,6 +1396,7 @@ export const useSerialStore = defineStore('serial', () => {
   // 恢复会话状态
   const restoreSessionState = async () => {
     try {
+      await loadDefaultLogDirectory()
       const saved = localStorage.getItem('serialx-session-state')
       if (saved) {
         const state = JSON.parse(saved)
@@ -1406,6 +1488,9 @@ export const useSerialStore = defineStore('serial', () => {
         if (config?.savedWorkspaceSnapshots) {
           savedWorkspaceSnapshots.value = normalizeSavedWorkspaceSnapshots(config.savedWorkspaceSnapshots)
         }
+        if (config?.autoLogSettings) {
+          autoLogSettings.value = normalizeAutoLogSettings(config.autoLogSettings)
+        }
       }
 
       syncWorkspaceSnapshotSelection()
@@ -1456,6 +1541,10 @@ export const useSerialStore = defineStore('serial', () => {
   // 监听常用命令变化，自动保存
   watch(() => commonCommands.value, () => {
     saveCommonCommands()
+  }, { deep: true })
+
+  watch(() => autoLogSettings.value, () => {
+    saveAutoLogSettings()
   }, { deep: true })
 
   watch(selectedPort, () => {
@@ -2108,6 +2197,8 @@ export const useSerialStore = defineStore('serial', () => {
   const LOG_BATCH_INTERVAL = 100 // 100ms 刷新一次
 
   function flushLogBatch() {
+    const autoSavePayload = []
+
     for (const [portPath, batch] of logBatchBuffer.entries()) {
       const portLog = portLogs.value.get(portPath)
       if (!portLog) continue
@@ -2121,8 +2212,34 @@ export const useSerialStore = defineStore('serial', () => {
       if (portLog.length > 800) {
         portLog.splice(0, portLog.length - 800)
       }
+
+      if (autoLogSettings.value.enabled && batch.length > 0) {
+        autoSavePayload.push({
+          portPath,
+          logs: batch.map((entry) => ({
+            id: entry.id,
+            timestamp: entry.timestamp,
+            recordedAt: entry.recordedAt,
+            type: entry.type,
+            message: entry.message,
+            pureData: entry.pureData,
+            hexData: entry.hexData ?? null
+          }))
+        })
+      }
     }
+
     logBatchBuffer.clear()
+
+    if (autoSavePayload.length > 0) {
+      window?.electronAPI?.autoSaveLogs?.({
+        directory: autoLogSettings.value.directory,
+        format: autoLogSettings.value.format,
+        portLogs: autoSavePayload
+      }).catch((error) => {
+        console.error('[Store] Error auto-saving logs:', error)
+      })
+    }
   }
 
   function addPortLog(portPath, message, type = 'info', rawData = null) {
@@ -2140,6 +2257,7 @@ export const useSerialStore = defineStore('serial', () => {
     const logEntry = {
       id: Date.now() + Math.random(),
       timestamp,
+      recordedAt: new Date().toISOString(),
       message,
       type,
       hexData: rawData?.hexData || null,
@@ -2286,6 +2404,8 @@ export const useSerialStore = defineStore('serial', () => {
     terminalAppearance,
     customAppearancePresets,
     savedWorkspaceSnapshots,
+    autoLogSettings,
+    defaultLogDirectory,
     createTerminalAppearancePreset,
     getActiveThemeSchemeId,
     getThemeSchemeById,
@@ -2336,6 +2456,7 @@ export const useSerialStore = defineStore('serial', () => {
     buildAllPortLogExport,
     buildAllPortPlainTextExport,
     buildWorkspaceSnapshot,
+    getResolvedAutoLogDirectory,
     saveNamedWorkspaceSnapshot,
     renameSavedWorkspaceSnapshot,
     overwriteSavedWorkspaceSnapshot,
@@ -2368,6 +2489,9 @@ export const useSerialStore = defineStore('serial', () => {
     clearPortLogs,
     formatDisplayData,
     updateDefaultSetting,
+    updateAutoLogSettings,
+    selectAutoLogDirectory,
+    openAutoLogDirectory,
     setupEventListeners,
     addCommonCommand,
     removeCommonCommand,

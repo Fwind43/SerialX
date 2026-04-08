@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { SerialPort } from 'serialport'
@@ -55,6 +55,148 @@ function saveConfig(config) {
     return { success: true }
   } catch (error) {
     safeErrorLog('[Config] Error saving config:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+function ensureDirectory(dirPath) {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true })
+  }
+}
+
+function getDefaultAutoLogDirectory() {
+  const logDir = path.join(app.getPath('documents'), 'SerialX', 'Logs')
+  ensureDirectory(logDir)
+  return logDir
+}
+
+function sanitizeLogFileSegment(value = '') {
+  return String(value || 'unknown')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+function resolveAutoLogDirectory(dirPath = '') {
+  const resolvedPath = typeof dirPath === 'string' && dirPath.trim()
+    ? path.resolve(dirPath.trim())
+    : getDefaultAutoLogDirectory()
+
+  ensureDirectory(resolvedPath)
+  return resolvedPath
+}
+
+function buildAutoLogFilePath({ directory = '', portPath = '', format = 'txt', recordedAt = '' }) {
+  const targetDir = resolveAutoLogDirectory(directory)
+  const stamp = recordedAt ? new Date(recordedAt) : new Date()
+  const safeDate = Number.isNaN(stamp.getTime())
+    ? new Date().toISOString().slice(0, 10)
+    : stamp.toISOString().slice(0, 10)
+  const extension = format === 'jsonl' ? 'jsonl' : 'txt'
+  const safePort = sanitizeLogFileSegment(portPath)
+  return path.join(targetDir, `${safePort}-${safeDate}.${extension}`)
+}
+
+function formatAutoLogTextLine(entry = {}) {
+  const level = String(entry.type || 'info').toUpperCase()
+  const timestamp = typeof entry.recordedAt === 'string' && entry.recordedAt
+    ? entry.recordedAt.replace('T', ' ').replace('Z', '')
+    : new Date().toISOString().replace('T', ' ').replace('Z', '')
+  const content = typeof entry.pureData === 'string' && entry.pureData.length
+    ? entry.pureData
+    : (entry.message ?? '')
+  const hexSuffix = typeof entry.hexData === 'string' && entry.hexData
+    ? ` | HEX ${entry.hexData}`
+    : ''
+  return `[${timestamp}] [${level}] ${content}${hexSuffix}`
+}
+
+async function appendAutoSavedLogs(payload = {}) {
+  try {
+    const {
+      directory = '',
+      format = 'txt',
+      portLogs = []
+    } = payload || {}
+
+    if (!Array.isArray(portLogs) || portLogs.length === 0) {
+      return { success: true, writtenFiles: [] }
+    }
+
+    const fileChunks = new Map()
+
+    for (const item of portLogs) {
+      if (!item || typeof item.portPath !== 'string' || !Array.isArray(item.logs) || item.logs.length === 0) {
+        continue
+      }
+
+      for (const logEntry of item.logs) {
+        const filePath = buildAutoLogFilePath({
+          directory,
+          portPath: item.portPath,
+          format,
+          recordedAt: logEntry?.recordedAt
+        })
+        const line = format === 'jsonl'
+          ? JSON.stringify({
+              portPath: item.portPath,
+              ...logEntry
+            })
+          : formatAutoLogTextLine(logEntry)
+        const current = fileChunks.get(filePath) || []
+        current.push(line)
+        fileChunks.set(filePath, current)
+      }
+    }
+
+    const writtenFiles = []
+    for (const [filePath, lines] of fileChunks.entries()) {
+      if (!lines.length) continue
+      fs.appendFileSync(filePath, `${lines.join('\n')}\n`, 'utf8')
+      writtenFiles.push(filePath)
+    }
+
+    return { success: true, writtenFiles }
+  } catch (error) {
+    safeErrorLog('[Logs] Error auto-saving logs:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+async function selectLogDirectory(defaultPath = '') {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: '选择自动日志保存目录',
+      defaultPath: resolveAutoLogDirectory(defaultPath),
+      properties: ['openDirectory', 'createDirectory']
+    })
+
+    if (canceled || !filePaths?.length) {
+      return { success: false, canceled: true }
+    }
+
+    return {
+      success: true,
+      directoryPath: filePaths[0]
+    }
+  } catch (error) {
+    safeErrorLog('[Logs] Error selecting log directory:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+async function openLogDirectory(dirPath = '') {
+  try {
+    const targetDir = resolveAutoLogDirectory(dirPath)
+    const errorMessage = await shell.openPath(targetDir)
+    if (errorMessage) {
+      return { success: false, error: errorMessage }
+    }
+    return { success: true, directoryPath: targetDir }
+  } catch (error) {
+    safeErrorLog('[Logs] Error opening log directory:', error)
     return { success: false, error: error.message }
   }
 }
@@ -770,6 +912,22 @@ app.whenReady().then(() => {
 
   ipcMain.handle('logs:export', async (event, payload, suggestedName) => {
     return exportLogsFile(payload, suggestedName)
+  })
+
+  ipcMain.handle('logs:auto-save', async (event, payload) => {
+    return appendAutoSavedLogs(payload)
+  })
+
+  ipcMain.handle('logs:get-default-directory', async () => {
+    return { success: true, directoryPath: getDefaultAutoLogDirectory() }
+  })
+
+  ipcMain.handle('logs:select-directory', async (event, defaultPath) => {
+    return selectLogDirectory(defaultPath)
+  })
+
+  ipcMain.handle('logs:open-directory', async (event, dirPath) => {
+    return openLogDirectory(dirPath)
   })
 
   ipcMain.handle('workspace:export', async (event, payload) => {

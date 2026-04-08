@@ -46,6 +46,34 @@ const settingsSummary = computed(() => {
 
   return `${baudRate} / ${dataBits}${parityLabelMap[parity] || 'N'}${stopBits}`
 })
+
+const autoLogSummary = computed(() => {
+  if (!serialStore.autoLogSettings.enabled) {
+    return '已关闭'
+  }
+
+  return `自动保存 / ${serialStore.autoLogSettings.format.toUpperCase()}`
+})
+
+const autoLogDirectoryLabel = computed(() => (
+  serialStore.getResolvedAutoLogDirectory() || '未设置'
+))
+
+const handleSelectAutoLogDirectory = async () => {
+  try {
+    await serialStore.selectAutoLogDirectory()
+  } catch (error) {
+    serialStore.addLog(`选择日志目录失败：${error.message}`, 'error')
+  }
+}
+
+const handleOpenAutoLogDirectory = async () => {
+  try {
+    await serialStore.openAutoLogDirectory()
+  } catch (error) {
+    serialStore.addLog(`打开日志目录失败：${error.message}`, 'error')
+  }
+}
 </script>
 
 <template>
@@ -150,6 +178,47 @@ const settingsSummary = computed(() => {
             <option value="even">偶</option>
             <option value="odd">奇</option>
           </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="section-header settings-header">
+        <div class="settings-copy">
+          <span>自动日志保存</span>
+          <span class="settings-summary">{{ autoLogSummary }}</span>
+        </div>
+      </div>
+
+      <div class="auto-log-grid">
+        <label class="check-row">
+          <input
+            type="checkbox"
+            :checked="serialStore.autoLogSettings.enabled"
+            @change="serialStore.updateAutoLogSettings({ enabled: $event.target.checked })"
+          >
+          <span>连接期间自动落盘</span>
+        </label>
+
+        <div class="setting-item">
+          <label>保存格式</label>
+          <select
+            :value="serialStore.autoLogSettings.format"
+            class="setting-select"
+            @change="serialStore.updateAutoLogSettings({ format: $event.target.value })"
+          >
+            <option value="txt">TXT</option>
+            <option value="jsonl">JSONL</option>
+          </select>
+        </div>
+
+        <div class="setting-item auto-log-dir">
+          <label>保存目录</label>
+          <div class="dir-path" :title="autoLogDirectoryLabel">{{ autoLogDirectoryLabel }}</div>
+          <div class="dir-actions">
+            <button class="secondary-btn" @click="handleSelectAutoLogDirectory">选择目录</button>
+            <button class="secondary-btn" @click="handleOpenAutoLogDirectory">打开目录</button>
+          </div>
         </div>
       </div>
     </div>
@@ -432,6 +501,13 @@ const settingsSummary = computed(() => {
   padding: 8px;
 }
 
+.auto-log-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px;
+}
+
 .setting-item {
   display: flex;
   flex-direction: column;
@@ -472,6 +548,54 @@ const settingsSummary = computed(() => {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 18%, transparent);
 }
 
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--app-text);
+}
+
+.check-row input {
+  accent-color: var(--app-accent);
+}
+
+.auto-log-dir {
+  gap: 6px;
+}
+
+.dir-path {
+  padding: 7px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--app-border);
+  background: var(--app-workspace-soft);
+  color: var(--app-text);
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.dir-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.secondary-btn {
+  flex: 1;
+  padding: 7px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--app-border);
+  background: var(--app-chip-bg);
+  color: var(--app-text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.secondary-btn:hover {
+  background: var(--app-accent-soft);
+}
+
 .theme-light.sidebar-container {
   background: var(--app-sidebar-base, var(--app-surface-base, #ffffff));
 }
@@ -496,6 +620,10 @@ const settingsSummary = computed(() => {
   color: #1f2328;
 }
 
+.theme-light .check-row {
+  color: #1f2328;
+}
+
 .theme-light .ports-section,
 .theme-light .settings-section {
   background: var(--app-sidebar-soft, var(--app-surface-soft, #ffffff));
@@ -504,7 +632,9 @@ const settingsSummary = computed(() => {
 .theme-light .refresh-btn,
 .theme-light .settings-toggle,
 .theme-light .setting-select,
-.theme-light .port-action-btn {
+.theme-light .port-action-btn,
+.theme-light .secondary-btn,
+.theme-light .dir-path {
   background: var(--app-sidebar-soft, var(--app-surface-soft, #ffffff));
   border-color: rgba(0, 102, 153, 0.12);
   color: #1f2328;
