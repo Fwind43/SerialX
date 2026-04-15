@@ -21,7 +21,7 @@
   "license": "ISC",
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.5",
-    "electron": "^41.0.3",
+    "electron": "^41.2.0",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
     "sharp": "^0.34.5",

@@ -59,6 +59,53 @@ function saveConfig(config) {
   }
 }
 
+const MAIN_WINDOW_DEFAULT_BOUNDS = {
+  width: 1400,
+  height: 900
+}
+
+const MAIN_WINDOW_MIN_BOUNDS = {
+  width: 800,
+  height: 600
+}
+
+function getMainWindowState() {
+  const config = loadConfig()
+  const savedState = config?.windowState?.main || {}
+  const width = Math.max(MAIN_WINDOW_MIN_BOUNDS.width, Number(savedState.width) || MAIN_WINDOW_DEFAULT_BOUNDS.width)
+  const height = Math.max(MAIN_WINDOW_MIN_BOUNDS.height, Number(savedState.height) || MAIN_WINDOW_DEFAULT_BOUNDS.height)
+
+  return {
+    width,
+    height,
+    x: Number.isFinite(savedState.x) ? savedState.x : undefined,
+    y: Number.isFinite(savedState.y) ? savedState.y : undefined,
+    isMaximized: savedState.isMaximized === true
+  }
+}
+
+function saveMainWindowState(targetWindow) {
+  if (!targetWindow || targetWindow.isDestroyed()) return
+
+  const config = loadConfig()
+  const bounds = targetWindow.isMaximized()
+    ? targetWindow.getNormalBounds()
+    : targetWindow.getBounds()
+
+  config.windowState = {
+    ...(config.windowState || {}),
+    main: {
+      x: bounds.x,
+      y: bounds.y,
+      width: Math.max(MAIN_WINDOW_MIN_BOUNDS.width, bounds.width),
+      height: Math.max(MAIN_WINDOW_MIN_BOUNDS.height, bounds.height),
+      isMaximized: targetWindow.isMaximized()
+    }
+  }
+
+  saveConfig(config)
+}
+
 function ensureDirectory(dirPath) {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true })
@@ -650,13 +697,17 @@ let converterWindow = null
 let appearanceWindow = null
 let serialManager = null
 let latestUiStateSnapshot = null
+let saveMainWindowStateTimer = null
 
 function createWindow() {
+  const mainWindowState = getMainWindowState()
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 800,
-    minHeight: 600,
+    width: mainWindowState.width,
+    height: mainWindowState.height,
+    x: mainWindowState.x,
+    y: mainWindowState.y,
+    minWidth: MAIN_WINDOW_MIN_BOUNDS.width,
+    minHeight: MAIN_WINDOW_MIN_BOUNDS.height,
     frame: false,
     transparent: false,
     webPreferences: {
@@ -669,11 +720,27 @@ function createWindow() {
   // 监听窗口状态变化并通知渲染进程
   mainWindow.on('maximize', () => {
     mainWindow.webContents.send('window:maximized')
+    saveMainWindowState(mainWindow)
   })
 
   mainWindow.on('unmaximize', () => {
     mainWindow.webContents.send('window:unmaximized')
+    saveMainWindowState(mainWindow)
   })
+
+  const scheduleMainWindowStateSave = () => {
+    if (saveMainWindowStateTimer) {
+      clearTimeout(saveMainWindowStateTimer)
+    }
+
+    saveMainWindowStateTimer = setTimeout(() => {
+      saveMainWindowStateTimer = null
+      saveMainWindowState(mainWindow)
+    }, 180)
+  }
+
+  mainWindow.on('resize', scheduleMainWindowStateSave)
+  mainWindow.on('move', scheduleMainWindowStateSave)
 
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173')
@@ -685,11 +752,23 @@ function createWindow() {
   }
 
   mainWindow.on('closed', () => {
+    if (saveMainWindowStateTimer) {
+      clearTimeout(saveMainWindowStateTimer)
+      saveMainWindowStateTimer = null
+    }
     if (appearanceWindow && !appearanceWindow.isDestroyed()) {
       appearanceWindow.close()
     }
     mainWindow = null
   })
+
+  mainWindow.on('close', () => {
+    saveMainWindowState(mainWindow)
+  })
+
+  if (mainWindowState.isMaximized) {
+    mainWindow.maximize()
+  }
 }
 
 function createConverterWindow() {

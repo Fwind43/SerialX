@@ -329,6 +329,19 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  let isRestoringSessionState = false
+
+  const saveDefaultSettingsToConfig = async () => {
+    try {
+      if (!window?.electronAPI?.loadConfig || !window?.electronAPI?.saveConfig) return
+      const config = await window.electronAPI.loadConfig()
+      config.defaultSettings = JSON.parse(JSON.stringify(defaultSettings.value))
+      await window.electronAPI.saveConfig(config)
+    } catch (error) {
+      console.error('[Store] Error saving default settings:', error)
+    }
+  }
+
   const loadDefaultLogDirectory = async () => {
     try {
       const result = await window?.electronAPI?.getDefaultLogDirectory?.()
@@ -1396,6 +1409,7 @@ export const useSerialStore = defineStore('serial', () => {
   // 恢复会话状态
   const restoreSessionState = async () => {
     try {
+      isRestoringSessionState = true
       await loadDefaultLogDirectory()
       const saved = localStorage.getItem('serialx-session-state')
       if (saved) {
@@ -1491,6 +1505,12 @@ export const useSerialStore = defineStore('serial', () => {
         if (config?.autoLogSettings) {
           autoLogSettings.value = normalizeAutoLogSettings(config.autoLogSettings)
         }
+        if (config?.defaultSettings && typeof config.defaultSettings === 'object') {
+          defaultSettings.value = {
+            ...createDefaultSettings(),
+            ...config.defaultSettings
+          }
+        }
       }
 
       syncWorkspaceSnapshotSelection()
@@ -1503,6 +1523,8 @@ export const useSerialStore = defineStore('serial', () => {
       pushUiSyncSnapshot()
     } catch (error) {
       console.error('[Store] Error restoring session state:', error)
+    } finally {
+      isRestoringSessionState = false
     }
   }
 
@@ -1545,6 +1567,12 @@ export const useSerialStore = defineStore('serial', () => {
 
   watch(() => autoLogSettings.value, () => {
     saveAutoLogSettings()
+  }, { deep: true })
+
+  watch(() => defaultSettings.value, () => {
+    if (isRestoringSessionState) return
+    saveSessionState()
+    saveDefaultSettingsToConfig()
   }, { deep: true })
 
   watch(selectedPort, () => {

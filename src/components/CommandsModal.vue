@@ -106,13 +106,14 @@ const setCommandGroupEnabled = (commands, enabled) => {
 
 // 关闭弹窗
 const closeModal = () => {
+  closeEditModal()
   emit('update:show', false)
 }
 </script>
 
 <template>
   <div v-if="show" class="modal-overlay" @click.self="closeModal">
-    <div class="modal">
+    <div class="modal commands-modal">
       <div class="modal-header">
         <div class="modal-title-group">
           <span class="modal-title">⚡ 常用命令配置</span>
@@ -205,49 +206,48 @@ const closeModal = () => {
       <div class="modal-footer">
         <button @click="closeModal" class="modal-btn close">关闭</button>
       </div>
-    </div>
 
-    <!-- 命令编辑弹窗 -->
-    <div v-if="showEditModal" class="edit-modal-overlay" @click.self="closeEditModal">
-      <div class="modal">
-        <div class="modal-header">
-          <span class="modal-title">{{ isEditing ? '编辑命令' : '添加新命令' }}</span>
-          <button @click="closeEditModal" class="modal-close">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label>命令名称</label>
-            <input
-              v-model="editingCommand.name"
-              type="text"
-              class="form-input"
-              placeholder="例：复位、状态查询"
-            />
+      <transition name="command-editor-pop">
+        <div v-if="showEditModal" class="command-editor-popup" @click.stop>
+          <div class="modal-header">
+            <span class="modal-title">{{ isEditing ? '编辑命令' : '添加新命令' }}</span>
+            <button @click="closeEditModal" class="modal-close">✕</button>
           </div>
-          <div class="form-group">
-            <label>命令内容</label>
-            <input
-              v-model="editingCommand.command"
-              type="text"
-              class="form-input"
-              placeholder="例：RESET、STATUS?"
-            />
+          <div class="modal-body">
+            <div class="form-group">
+              <label>命令名称</label>
+              <input
+                v-model="editingCommand.name"
+                type="text"
+                class="form-input"
+                placeholder="例：复位、状态查询"
+              />
+            </div>
+            <div class="form-group">
+              <label>命令内容</label>
+              <input
+                v-model="editingCommand.command"
+                type="text"
+                class="form-input"
+                placeholder="例：RESET、STATUS?"
+              />
+            </div>
+            <div class="form-group">
+              <label>命令分组</label>
+              <input
+                v-model="editingCommand.group"
+                type="text"
+                class="form-input"
+                placeholder="例：查询、设备控制、自定义"
+              />
+            </div>
           </div>
-          <div class="form-group">
-            <label>命令分组</label>
-            <input
-              v-model="editingCommand.group"
-              type="text"
-              class="form-input"
-              placeholder="例：查询、设备控制、自定义"
-            />
+          <div class="modal-footer">
+            <button @click="closeEditModal" class="modal-btn cancel">取消</button>
+            <button @click="saveCommand" class="modal-btn save">保存</button>
           </div>
         </div>
-        <div class="modal-footer">
-          <button @click="closeEditModal" class="modal-btn cancel">取消</button>
-          <button @click="saveCommand" class="modal-btn save">保存</button>
-        </div>
-      </div>
+      </transition>
     </div>
   </div>
 </template>
@@ -285,6 +285,11 @@ const closeModal = () => {
   animation: slideIn 0.3s ease;
   display: flex;
   flex-direction: column;
+}
+
+.commands-modal {
+  position: relative;
+  width: min(600px, calc(100vw - 32px));
 }
 
 @keyframes slideIn {
@@ -598,19 +603,29 @@ const closeModal = () => {
   box-shadow: 0 6px 20px color-mix(in srgb, var(--app-accent) 46%, transparent);
 }
 
-/* 编辑弹窗 */
-.edit-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--app-overlay-strong);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1001;
-  backdrop-filter: blur(4px);
+.command-editor-popup {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 1002;
+  width: min(420px, calc(100% - 32px));
+  max-width: calc(100% - 32px);
+  padding: 22px;
+  border-radius: 16px;
+  border: 1px solid var(--app-modal-border);
+  background: linear-gradient(145deg, var(--app-modal-bg) 0%, var(--app-modal-soft) 100%);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.28);
+  transform: translate(-50%, -50%);
+}
+
+.command-editor-pop-enter-active,
+.command-editor-pop-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.command-editor-pop-enter-from,
+.command-editor-pop-leave-to {
+  opacity: 0;
+  transform: translate(-50%, calc(-50% - 10px)) scale(0.96);
 }
 
 .form-group {
