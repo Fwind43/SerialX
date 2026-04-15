@@ -12,10 +12,10 @@ const serialStore = useSerialStore()
 
 const isConverterMode = computed(() => window.location.hash === '#/converter')
 const isAppearanceMode = computed(() => window.location.hash === '#/appearance')
+const isCommandsMode = computed(() => window.location.hash === '#/commands')
 
 const showToolsMenu = ref(false)
 const showSettingsMenu = ref(false)
-const showCommandsModal = ref(false)
 const showCommandPalette = ref(false)
 const isMaximized = ref(false)
 const settingsToast = ref({
@@ -248,8 +248,8 @@ const openConverter = () => {
 }
 
 const openCommandsConfig = () => {
-  showCommandsModal.value = true
   showSettingsMenu.value = false
+  window.electronAPI?.openCommandsWindow?.()
 }
 
 const openAppearanceSettings = () => {
@@ -258,6 +258,10 @@ const openAppearanceSettings = () => {
 }
 
 const closeAppearanceWindow = () => {
+  window.electronAPI?.closeWindow?.()
+}
+
+const closeCommandsWindow = () => {
   window.electronAPI?.closeWindow?.()
 }
 
@@ -576,7 +580,9 @@ onMounted(async () => {
   await syncWallpaperDataUrl()
 
   if (!isAppearanceMode.value && !isConverterMode.value) {
-    serialStore.refreshPorts()
+    if (!isCommandsMode.value) {
+      serialStore.refreshPorts()
+    }
     serialStore.loadCommonCommands()
   }
 
@@ -612,7 +618,7 @@ onUnmounted(() => {
 
 <template>
   <div
-    v-if="!isConverterMode && !isAppearanceMode"
+    v-if="!isConverterMode && !isAppearanceMode && !isCommandsMode"
     :class="['app-container', `theme-${themeMode}`, { 'wallpaper-active': wallpaperEnabled }]"
     :style="rootThemeVars"
   >
@@ -882,8 +888,6 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-
-    <CommandsModal v-model:show="showCommandsModal" />
     <CommandPalette v-model="showCommandPalette" />
   </div>
 
@@ -891,8 +895,12 @@ onUnmounted(() => {
     <DataConverter standalone />
   </div>
 
-  <div v-else class="appearance-only">
+  <div v-else-if="isAppearanceMode" class="appearance-only">
     <AppearanceSettingsModal :show="true" standalone @update:show="closeAppearanceWindow" />
+  </div>
+
+  <div v-else class="commands-only">
+    <CommandsModal :show="true" standalone @update:show="closeCommandsWindow" />
   </div>
 </template>
 
@@ -1549,6 +1557,13 @@ onUnmounted(() => {
 }
 
 .appearance-only {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--app-bg-gradient);
+}
+
+.commands-only {
   height: 100vh;
   width: 100vw;
   overflow: hidden;

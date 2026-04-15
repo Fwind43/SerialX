@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Window Operations
   openConverterWindow: () => ipcRenderer.send('window:open-converter'),
   openAppearanceWindow: () => ipcRenderer.send('window:open-appearance'),
+  openCommandsWindow: () => ipcRenderer.send('window:open-commands'),
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   unmaximizeWindow: () => ipcRenderer.send('window:unmaximize'),
@@ -48,6 +49,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUiStateSnapshot: (callback) => {
     ipcRenderer.removeAllListeners('ui-state:update')
     ipcRenderer.on('ui-state:update', (event, snapshot) => callback(snapshot))
+  },
+  pushCommonCommandsSnapshot: (snapshot) => ipcRenderer.send('common-commands:push', snapshot),
+  getLatestCommonCommandsSnapshot: () => ipcRenderer.invoke('common-commands:get-latest'),
+  onCommonCommandsSnapshot: (callback) => {
+    ipcRenderer.removeAllListeners('common-commands:update')
+    ipcRenderer.on('common-commands:update', (event, snapshot) => callback(snapshot))
   },
 
   // Serial Data Events (from main to renderer) - 数据包含串口路径

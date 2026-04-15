@@ -8,6 +8,10 @@ const props = defineProps({
   show: {
     type: Boolean,
     default: false
+  },
+  standalone: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -109,10 +113,16 @@ const closeModal = () => {
   closeEditModal()
   emit('update:show', false)
 }
+
+const handleOverlayClick = () => {
+  if (!props.standalone) {
+    closeModal()
+  }
+}
 </script>
 
 <template>
-  <div v-if="show" class="modal-overlay" @click.self="closeModal">
+  <div v-if="show" :class="['modal-overlay', { standalone: props.standalone }]" @click.self="handleOverlayClick">
     <div class="modal commands-modal">
       <div class="modal-header">
         <div class="modal-title-group">
@@ -268,6 +278,16 @@ const closeModal = () => {
   animation: fadeIn 0.2s ease;
 }
 
+.modal-overlay.standalone {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100vh;
+  background: var(--app-bg-gradient);
+  backdrop-filter: none;
+  padding: 0;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -290,6 +310,17 @@ const closeModal = () => {
 .commands-modal {
   position: relative;
   width: min(600px, calc(100vw - 32px));
+}
+
+.modal-overlay.standalone .commands-modal {
+  width: 100%;
+  height: 100vh;
+  max-width: none;
+  max-height: 100vh;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
 }
 
 @keyframes slideIn {

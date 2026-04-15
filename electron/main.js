@@ -695,8 +695,10 @@ class SerialManager {
 let mainWindow = null
 let converterWindow = null
 let appearanceWindow = null
+let commandsWindow = null
 let serialManager = null
 let latestUiStateSnapshot = null
+let latestCommonCommandsSnapshot = null
 let saveMainWindowStateTimer = null
 
 function createWindow() {
@@ -758,6 +760,9 @@ function createWindow() {
     }
     if (appearanceWindow && !appearanceWindow.isDestroyed()) {
       appearanceWindow.close()
+    }
+    if (commandsWindow && !commandsWindow.isDestroyed()) {
+      commandsWindow.close()
     }
     mainWindow = null
   })
@@ -826,12 +831,29 @@ function sendUiStateSnapshot(targetWindow, snapshot) {
 
 function broadcastUiStateSnapshot(snapshot, sender = null) {
   latestUiStateSnapshot = snapshot
-  const windows = [mainWindow, appearanceWindow]
+  const windows = [mainWindow, appearanceWindow, commandsWindow]
 
   windows.forEach((targetWindow) => {
     if (!targetWindow || targetWindow.isDestroyed()) return
     if (sender && targetWindow.webContents.id === sender.id) return
     targetWindow.webContents.send('ui-state:update', snapshot)
+  })
+}
+
+function sendCommonCommandsSnapshot(targetWindow, snapshot) {
+  if (!targetWindow || targetWindow.isDestroyed() || !Array.isArray(snapshot)) return
+  targetWindow.webContents.send('common-commands:update', snapshot)
+}
+
+function broadcastCommonCommandsSnapshot(snapshot, sender = null) {
+  if (!Array.isArray(snapshot)) return
+  latestCommonCommandsSnapshot = snapshot
+  const windows = [mainWindow, commandsWindow]
+
+  windows.forEach((targetWindow) => {
+    if (!targetWindow || targetWindow.isDestroyed()) return
+    if (sender && targetWindow.webContents.id === sender.id) return
+    targetWindow.webContents.send('common-commands:update', snapshot)
   })
 }
 
@@ -882,6 +904,56 @@ function createAppearanceWindow() {
   return appearanceWindow
 }
 
+function createCommandsWindow() {
+  if (commandsWindow && !commandsWindow.isDestroyed()) {
+    if (commandsWindow.isMinimized()) {
+      commandsWindow.restore()
+    }
+    commandsWindow.show()
+    commandsWindow.focus()
+    return commandsWindow
+  }
+
+  commandsWindow = new BrowserWindow({
+    width: 980,
+    height: 760,
+    minWidth: 840,
+    minHeight: 600,
+    autoHideMenuBar: true,
+    parent: mainWindow || undefined,
+    title: 'SerialX 常用命令配置',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  loadWindowRoute(commandsWindow, '/commands')
+
+  commandsWindow.webContents.on('did-finish-load', () => {
+    if (latestUiStateSnapshot) {
+      sendUiStateSnapshot(commandsWindow, latestUiStateSnapshot)
+    }
+    if (latestCommonCommandsSnapshot) {
+      sendCommonCommandsSnapshot(commandsWindow, latestCommonCommandsSnapshot)
+    }
+  })
+
+  commandsWindow.webContents.on('render-process-gone', () => {
+    if (commandsWindow && !commandsWindow.isDestroyed()) {
+      commandsWindow.destroy()
+    }
+    commandsWindow = null
+  })
+
+  commandsWindow.on('closed', () => {
+    commandsWindow = null
+  })
+
+  return commandsWindow
+}
+
 app.whenReady().then(() => {
   serialManager = new SerialManager()
   createWindow()
@@ -924,6 +996,10 @@ app.whenReady().then(() => {
 
   ipcMain.on('window:open-appearance', () => {
     createAppearanceWindow()
+  })
+
+  ipcMain.on('window:open-commands', () => {
+    createCommandsWindow()
   })
 
   // 窗口控制
@@ -1032,6 +1108,15 @@ app.whenReady().then(() => {
   ipcMain.on('ui-state:push', (event, snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return
     broadcastUiStateSnapshot(snapshot, event.sender)
+  })
+
+  ipcMain.handle('common-commands:get-latest', async () => {
+    return latestCommonCommandsSnapshot
+  })
+
+  ipcMain.on('common-commands:push', (event, snapshot) => {
+    if (!Array.isArray(snapshot)) return
+    broadcastCommonCommandsSnapshot(snapshot, event.sender)
   })
 })
 

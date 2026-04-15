@@ -330,6 +330,7 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   let isRestoringSessionState = false
+  let shouldSkipNextCommonCommandsSync = false
 
   const saveDefaultSettingsToConfig = async () => {
     try {
@@ -1560,9 +1561,42 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  const pushCommonCommandsSyncSnapshot = () => {
+    if (!window?.electronAPI?.pushCommonCommandsSnapshot) return
+    window.electronAPI.pushCommonCommandsSnapshot(JSON.parse(JSON.stringify(commonCommands.value)))
+  }
+
+  const applyExternalCommonCommandsSnapshot = (snapshot = []) => {
+    if (!Array.isArray(snapshot)) return
+    const normalizedSnapshot = normalizeCommonCommands(JSON.parse(JSON.stringify(snapshot)))
+    if (JSON.stringify(commonCommands.value) === JSON.stringify(normalizedSnapshot)) {
+      return
+    }
+
+    shouldSkipNextCommonCommandsSync = true
+    commonCommands.value = normalizedSnapshot
+  }
+
+  const setupCommonCommandsSyncListeners = () => {
+    window?.electronAPI?.onCommonCommandsSnapshot?.((snapshot) => {
+      applyExternalCommonCommandsSnapshot(snapshot)
+    })
+
+    window?.electronAPI?.getLatestCommonCommandsSnapshot?.().then((snapshot) => {
+      if (Array.isArray(snapshot)) {
+        applyExternalCommonCommandsSnapshot(snapshot)
+      }
+    })
+  }
+
   // 监听常用命令变化，自动保存
   watch(() => commonCommands.value, () => {
     saveCommonCommands()
+    if (shouldSkipNextCommonCommandsSync) {
+      shouldSkipNextCommonCommandsSync = false
+      return
+    }
+    pushCommonCommandsSyncSnapshot()
   }, { deep: true })
 
   watch(() => autoLogSettings.value, () => {
@@ -2410,6 +2444,7 @@ export const useSerialStore = defineStore('serial', () => {
   // 必须在 setupEventListeners 调用前绑定 this
   setupEventListeners()
   setupUiSyncListeners()
+  setupCommonCommandsSyncListeners()
 
   const applyTerminalAppearanceMode = applyThemeScheme
   const createCustomTerminalAppearancePreset = createThemeScheme

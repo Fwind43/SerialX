@@ -4,6 +4,7 @@ import { useSerialStore } from '../stores/serial'
 
 const serialStore = useSerialStore()
 const showSettings = ref(false)
+const showAutoLogSettings = ref(false)
 const themeMode = computed(() => serialStore.appUiState?.themeMode || 'dark')
 
 const isPortConnected = (portPath) => serialStore.getPortStatus(portPath)
@@ -188,9 +189,16 @@ const handleOpenAutoLogDirectory = async () => {
           <span>自动日志保存</span>
           <span class="settings-summary">{{ autoLogSummary }}</span>
         </div>
+        <button
+          class="settings-toggle"
+          :title="showAutoLogSettings ? '收起自动日志保存' : '展开自动日志保存'"
+          @click="showAutoLogSettings = !showAutoLogSettings"
+        >
+          {{ showAutoLogSettings ? '收起' : '编辑' }}
+        </button>
       </div>
 
-      <div class="auto-log-grid">
+      <div v-if="showAutoLogSettings" class="auto-log-grid">
         <label class="check-row">
           <input
             type="checkbox"
