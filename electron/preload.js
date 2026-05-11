@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openPort: (options) => ipcRenderer.invoke('serial:open', options),
   closePort: (portPath) => ipcRenderer.invoke('serial:close', portPath),
   writeData: (portPath, data) => ipcRenderer.invoke('serial:write', portPath, data),
+  setPacketTimeout: (portPath, packetTimeout) => ipcRenderer.invoke('serial:set-packet-timeout', portPath, packetTimeout),
   isOpen: (portPath) => ipcRenderer.invoke('serial:isOpen', portPath),
   getOpenPorts: () => ipcRenderer.invoke('serial:get-open-ports'),
 

@@ -507,9 +507,19 @@ export const useSerialStore = defineStore('serial', () => {
       normalizedUpdates.loopInterval = Math.max(1, Number(normalizedUpdates.loopInterval) || 1000)
     }
 
+    if ('packetTimeout' in normalizedUpdates) {
+      normalizedUpdates.packetTimeout = Math.max(1, Number(normalizedUpdates.packetTimeout) || 500)
+    }
+
     portControlSettings.value.set(portPath, { ...current, ...normalizedUpdates })
     // 配置变更时自动保存
     saveSessionState()
+
+    if ('packetTimeout' in normalizedUpdates && openPorts.value.get(portPath)?.isConnected && window.electronAPI?.setPacketTimeout) {
+      window.electronAPI.setPacketTimeout(portPath, normalizedUpdates.packetTimeout).catch(error => {
+        console.error('Failed to update packet timeout:', error)
+      })
+    }
 
     if (portLoopSendTimers.has(portPath) && ('loopInterval' in normalizedUpdates || 'loopStartDelay' in normalizedUpdates || 'loopMaxCount' in normalizedUpdates || 'loopFailureLimit' in normalizedUpdates || 'hexSend' in normalizedUpdates)) {
       restartLoopSendForPort(portPath, { preserveCount: true, silent: true })
@@ -1814,9 +1824,11 @@ export const useSerialStore = defineStore('serial', () => {
       return false
     }
 
+    const portControl = getPortControlSettings(targetPort)
     const connectionSettings = {
       path: targetPort,
-      ...(settings || defaultSettings.value)
+      ...(settings || defaultSettings.value),
+      packetTimeout: portControl.packetTimeout
     }
 
     try {

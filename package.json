@@ -1,6 +1,6 @@
 {
   "name": "serialx",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Modern Serial Port Debugger based on Electron + Vue 3",
   "main": "dist-electron/main.js",
   "scripts": {

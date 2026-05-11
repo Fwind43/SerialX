@@ -477,6 +477,24 @@ class SerialManager {
     this.ports = new Map() // 存储多个串口实例：path -> { port, parser, isOpen }
     this.dataBuffers = new Map() // 每个串口的数据缓冲区
     this.flushTimers = new Map() // 每个串口的刷新定时器
+    this.packetTimeouts = new Map() // 每个串口的分包超时时间（毫秒）
+  }
+
+  normalizePacketTimeout(value) {
+    const timeout = Number(value)
+    if (!Number.isFinite(timeout)) return 500
+    return Math.max(1, Math.min(60000, Math.round(timeout)))
+  }
+
+  setPacketTimeout(portPath, packetTimeout) {
+    if (!portPath) {
+      return { success: false, error: '端口路径不能为空' }
+    }
+
+    const normalizedTimeout = this.normalizePacketTimeout(packetTimeout)
+    this.packetTimeouts.set(portPath, normalizedTimeout)
+    safeLog('[SerialManager] Packet timeout updated:', portPath, normalizedTimeout)
+    return { success: true, packetTimeout: normalizedTimeout }
   }
 
   async listPorts() {
@@ -518,7 +536,7 @@ class SerialManager {
   }
 
   async openPort(options) {
-    const { path: portPath, baudRate = 9600, dataBits = 8, stopBits = 1, parity = 'none' } = options || {}
+    const { path: portPath, baudRate = 9600, dataBits = 8, stopBits = 1, parity = 'none', packetTimeout = 500 } = options || {}
 
     if (!portPath) {
       return { success: false, error: '端口路径不能为空' }
@@ -553,14 +571,16 @@ class SerialManager {
 
       // 初始化该串口的缓冲区
       this.dataBuffers.set(portPath, [])
-      // 接收链路优先接近实时：默认在当前事件循环结束就刷出，只在连续大流量时做极小批量合并。
-      const MAX_BUFFER_SIZE = 1024 // 1KB 直接触发立即刷新
-      const MAX_CHUNK_COUNT = 8 // 8 个数据块直接触发立即刷新
+      this.setPacketTimeout(portPath, packetTimeout)
+      // 按“分包超时”聚合接收数据：超时窗口内持续收到数据则延后刷新。
+      // 为避免异常大流量无限堆积，达到安全阈值时仍立即刷新。
+      const MAX_BUFFER_SIZE = 1024 * 1024 // 1MB 直接触发立即刷新
+      const MAX_CHUNK_COUNT = 1024 // 1024 个数据块直接触发立即刷新
 
       const flushBuffer = () => {
         const pendingTimer = this.flushTimers.get(portPath)
         if (pendingTimer) {
-          clearImmediate(pendingTimer)
+          clearTimeout(pendingTimer)
           this.flushTimers.delete(portPath)
         }
 
@@ -583,12 +603,17 @@ class SerialManager {
         })
       }
 
-      const scheduleFlushSoon = () => {
-        if (this.flushTimers.get(portPath)) return
-        const timer = setImmediate(() => {
+      const scheduleFlushByPacketTimeout = () => {
+        const pendingTimer = this.flushTimers.get(portPath)
+        if (pendingTimer) {
+          clearTimeout(pendingTimer)
+        }
+
+        const timeout = this.packetTimeouts.get(portPath) ?? 500
+        const timer = setTimeout(() => {
           this.flushTimers.delete(portPath)
           flushBuffer()
-        })
+        }, timeout)
         this.flushTimers.set(portPath, timer)
       }
 
@@ -604,7 +629,7 @@ class SerialManager {
         if (totalSize >= MAX_BUFFER_SIZE || buffer.length >= MAX_CHUNK_COUNT) {
           flushBuffer()
         } else {
-          scheduleFlushSoon()
+          scheduleFlushByPacketTimeout()
         }
       })
 
@@ -653,6 +678,7 @@ class SerialManager {
         this.flushTimers.delete(portPath)
       }
       this.dataBuffers.delete(portPath)
+      this.packetTimeouts.delete(portPath)
 
       await portData.port.close()
       portData.isOpen = false
@@ -979,6 +1005,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('serial:write', async (event, portPath, data) => {
     return await serialManager.write(portPath, data)
+  })
+
+  ipcMain.handle('serial:set-packet-timeout', async (event, portPath, packetTimeout) => {
+    return serialManager.setPacketTimeout(portPath, packetTimeout)
   })
 
   ipcMain.handle('serial:isOpen', async (event, portPath) => {
