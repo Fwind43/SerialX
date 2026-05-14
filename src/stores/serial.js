@@ -279,6 +279,20 @@ export const useSerialStore = defineStore('serial', () => {
   const portLoopSendFailures = reactive(new Map()) // path -> consecutive failure count
   const portManualDisconnects = reactive(new Set())
 
+  const createDefaultPortDisplaySettings = () => ({
+    hexReceive: true,
+    showAscii: false,
+    alignHexContinuation: false
+  })
+
+  const normalizePortDisplaySettings = (settings = {}) => ({
+    ...createDefaultPortDisplaySettings(),
+    ...(settings && typeof settings === 'object' ? settings : {})
+  })
+
+  // 全局显示默认值：新串口首次打开时继承最近一次用户选择
+  const defaultPortDisplaySettings = ref(createDefaultPortDisplaySettings())
+
   // 每个串口的显示设置（独立配置）
   const portDisplaySettings = ref(new Map()) // path -> { hexReceive: boolean, showAscii: boolean, alignHexContinuation: boolean }
 
@@ -323,6 +337,8 @@ export const useSerialStore = defineStore('serial', () => {
       config.terminalAppearance = JSON.parse(JSON.stringify(terminalAppearance.value))
       config.customAppearancePresets = JSON.parse(JSON.stringify(customAppearancePresets.value))
       config.savedWorkspaceSnapshots = JSON.parse(JSON.stringify(savedWorkspaceSnapshots.value))
+      config.defaultPortDisplaySettings = JSON.parse(JSON.stringify(defaultPortDisplaySettings.value))
+      config.portDisplaySettings = JSON.parse(JSON.stringify(Object.fromEntries(portDisplaySettings.value)))
       await window.electronAPI.saveConfig(config)
     } catch (error) {
       console.error('[Store] Error saving UI preferences:', error)
@@ -611,11 +627,7 @@ export const useSerialStore = defineStore('serial', () => {
   // 获取串口显示设置
   const getPortDisplaySettings = (portPath) => {
     if (!portDisplaySettings.value.has(portPath)) {
-      portDisplaySettings.value.set(portPath, {
-        hexReceive: true,
-        showAscii: false,
-        alignHexContinuation: false
-      })
+      portDisplaySettings.value.set(portPath, normalizePortDisplaySettings(defaultPortDisplaySettings.value))
     }
     return portDisplaySettings.value.get(portPath)
   }
@@ -623,9 +635,12 @@ export const useSerialStore = defineStore('serial', () => {
   // 更新串口显示设置
   const updatePortDisplaySettings = (portPath, updates) => {
     const current = getPortDisplaySettings(portPath)
-    portDisplaySettings.value.set(portPath, { ...current, ...updates })
+    const nextSettings = normalizePortDisplaySettings({ ...current, ...updates })
+    portDisplaySettings.value.set(portPath, nextSettings)
+    defaultPortDisplaySettings.value = { ...nextSettings }
     // 配置变更时自动保存
     saveSessionState()
+    persistUiPreferencesToConfig()
   }
 
   const getActiveThemeSchemeId = () => normalizeThemeSchemeId(
@@ -933,6 +948,7 @@ export const useSerialStore = defineStore('serial', () => {
     exportedAt: new Date().toISOString(),
     defaultSettings: { ...defaultSettings.value },
     autoLogSettings: { ...autoLogSettings.value },
+    defaultPortDisplaySettings: { ...defaultPortDisplaySettings.value },
     portDisplaySettings: Object.fromEntries(portDisplaySettings.value),
     portControlSettings: Object.fromEntries(portControlSettings.value),
     commonCommands: JSON.parse(JSON.stringify(commonCommands.value)),
@@ -1233,6 +1249,10 @@ export const useSerialStore = defineStore('serial', () => {
       throw new Error('默认串口参数格式无效')
     }
 
+    if (snapshot.defaultPortDisplaySettings && typeof snapshot.defaultPortDisplaySettings !== 'object') {
+      throw new Error('默认显示设置格式无效')
+    }
+
     if (snapshot.portDisplaySettings && typeof snapshot.portDisplaySettings !== 'object') {
       throw new Error('显示设置格式无效')
     }
@@ -1350,7 +1370,10 @@ export const useSerialStore = defineStore('serial', () => {
       ...(snapshot.defaultSettings || {})
     }
     autoLogSettings.value = normalizeAutoLogSettings(snapshot.autoLogSettings)
-    portDisplaySettings.value = new Map(Object.entries(snapshot.portDisplaySettings || {}))
+    defaultPortDisplaySettings.value = normalizePortDisplaySettings(snapshot.defaultPortDisplaySettings)
+    portDisplaySettings.value = new Map(
+      Object.entries(snapshot.portDisplaySettings || {}).map(([portPath, settings]) => [portPath, normalizePortDisplaySettings(settings)])
+    )
     portControlSettings.value = new Map(Object.entries(snapshot.portControlSettings || {}))
     const nextAppUiState = buildAppUiStateWithThemeScheme({
       ...createDefaultAppUiState(),
@@ -1380,6 +1403,7 @@ export const useSerialStore = defineStore('serial', () => {
     await applySettingsSnapshot({
       defaultSettings: createDefaultSettings(),
       autoLogSettings: createDefaultAutoLogSettings(),
+      defaultPortDisplaySettings: createDefaultPortDisplaySettings(),
       portDisplaySettings: {},
       portControlSettings: {},
       commonCommands: createDefaultCommonCommands(),
@@ -1399,6 +1423,7 @@ export const useSerialStore = defineStore('serial', () => {
       syncActiveWorkspaceSnapshotState()
       const state = {
         defaultSettings: defaultSettings.value,
+        defaultPortDisplaySettings: defaultPortDisplaySettings.value,
         portDisplaySettings: Object.fromEntries(portDisplaySettings.value),
         portControlSettings: Object.fromEntries(portControlSettings.value),
         commonCommands: commonCommands.value,
@@ -1428,8 +1453,13 @@ export const useSerialStore = defineStore('serial', () => {
         if (state.defaultSettings) {
           Object.assign(defaultSettings.value, state.defaultSettings)
         }
+        if (state.defaultPortDisplaySettings) {
+          defaultPortDisplaySettings.value = normalizePortDisplaySettings(state.defaultPortDisplaySettings)
+        }
         if (state.portDisplaySettings) {
-          portDisplaySettings.value = new Map(Object.entries(state.portDisplaySettings))
+          portDisplaySettings.value = new Map(
+            Object.entries(state.portDisplaySettings).map(([portPath, settings]) => [portPath, normalizePortDisplaySettings(settings)])
+          )
         }
         if (state.portControlSettings) {
           portControlSettings.value = new Map(Object.entries(state.portControlSettings))
@@ -1515,6 +1545,14 @@ export const useSerialStore = defineStore('serial', () => {
         }
         if (config?.autoLogSettings) {
           autoLogSettings.value = normalizeAutoLogSettings(config.autoLogSettings)
+        }
+        if (config?.defaultPortDisplaySettings && typeof config.defaultPortDisplaySettings === 'object') {
+          defaultPortDisplaySettings.value = normalizePortDisplaySettings(config.defaultPortDisplaySettings)
+        }
+        if (config?.portDisplaySettings && typeof config.portDisplaySettings === 'object') {
+          portDisplaySettings.value = new Map(
+            Object.entries(config.portDisplaySettings).map(([portPath, settings]) => [portPath, normalizePortDisplaySettings(settings)])
+          )
         }
         if (config?.defaultSettings && typeof config.defaultSettings === 'object') {
           defaultSettings.value = {
