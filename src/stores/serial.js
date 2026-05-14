@@ -612,8 +612,8 @@ export const useSerialStore = defineStore('serial', () => {
   const getPortDisplaySettings = (portPath) => {
     if (!portDisplaySettings.value.has(portPath)) {
       portDisplaySettings.value.set(portPath, {
-        hexReceive: false,
-        showAscii: true,
+        hexReceive: true,
+        showAscii: false,
         alignHexContinuation: false
       })
     }
