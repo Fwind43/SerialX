@@ -24,6 +24,12 @@ const selectedPortStatusText = computed(() => {
     ? `目标：${selectedPort.value}`
     : `目标：${selectedPort.value}（未连接）`
 })
+const sendBlockedReason = computed(() => {
+  if (canSendCommand.value) return ''
+  return selectedPort.value
+    ? '当前串口未连接，连接后可发送命令。'
+    : '请先选择并连接串口，再发送常用命令。'
+})
 
 const filteredCommands = computed(() => {
   if (!searchQuery.value) return enabledCommands.value
@@ -158,7 +164,8 @@ const selectCommand = (cmd) => {
               <div
                 v-for="cmd in groupBlock.commands"
                 :key="cmd.id"
-                :class="['command-item', { selected: currentSelectedCommand?.id === cmd.id }]"
+                :class="['command-item', { selected: currentSelectedCommand?.id === cmd.id, disabled: !canSendCommand }]"
+                :title="canSendCommand ? `发送：${cmd.command}` : sendBlockedReason"
                 @click="selectCommand(cmd)"
                 @mouseenter="selectedIndex = flatCommands.findIndex((item) => item.id === cmd.id)"
               >
@@ -291,6 +298,19 @@ const selectCommand = (cmd) => {
 .command-item:hover,
 .command-item.selected {
   background: var(--app-accent-soft);
+}
+
+.command-item.disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.command-item.disabled:hover {
+  background: transparent;
+}
+
+.command-item.disabled .command-value {
+  filter: grayscale(0.3);
 }
 
 .command-item.selected {
