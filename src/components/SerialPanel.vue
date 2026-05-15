@@ -36,6 +36,7 @@ const sendHistory = computed(() => serialStore.getPortSendHistory(props.portPath
 const selectedHistoryItem = ref('')
 const sendHistoryLimit = computed(() => serialStore.sendHistoryLimit)
 const sendHistoryLabel = computed(() => `最近发送 ${sendHistory.value.length}/${sendHistoryLimit.value}`)
+const pinnedSendHistory = computed(() => sendHistory.value.slice(0, 3))
 const groupedEnabledCommands = computed(() => {
   const groups = new Map()
   enabledCommands.value.forEach((cmd) => {
@@ -654,6 +655,18 @@ onUnmounted(() => {
           <span class="history-count" :title="`当前串口保留最近 ${sendHistoryLimit} 条发送历史`">
             {{ sendHistoryLabel }}
           </span>
+          <div v-if="pinnedSendHistory.length" class="history-shortcuts" aria-label="最近发送快捷复用">
+            <button
+              v-for="(item, index) in pinnedSendHistory"
+              :key="item"
+              type="button"
+              class="history-shortcut-btn"
+              :title="`填入最近发送 #${index + 1}：${item}`"
+              @click="applyHistoryItem(item)"
+            >
+              #{{ index + 1 }} {{ item }}
+            </button>
+          </div>
           <select
             v-model="selectedHistoryItem"
             class="command-select history-select"
@@ -1255,6 +1268,38 @@ onUnmounted(() => {
   background-size: 12px 12px;
   min-width: 190px;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.history-shortcuts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.history-shortcut-btn {
+  height: 34px;
+  max-width: 180px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--app-chip-border);
+  background: var(--app-chip-bg);
+  color: var(--app-chip-text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.history-shortcut-btn:hover {
+  border-color: var(--app-accent);
+  background: var(--app-accent-soft);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 12%, transparent);
 }
 
 .history-select {
