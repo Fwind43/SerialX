@@ -18,6 +18,9 @@ const enabledCommands = computed(() => serialStore.getEnabledCommands)
 const selectedPort = computed(() => serialStore.selectedPort || '')
 const isSelectedPortConnected = computed(() => Boolean(selectedPort.value && serialStore.getPortStatus(selectedPort.value)))
 const canSendCommand = computed(() => isSelectedPortConnected.value)
+const commandSendHint = computed(() => (
+  canSendCommand.value ? '发送当前选中命令' : '连接串口后可发送当前选中命令'
+))
 const selectedPortStatusText = computed(() => {
   if (!selectedPort.value) return '目标：未选择串口'
   return isSelectedPortConnected.value
@@ -159,6 +162,10 @@ const selectCommand = (cmd) => {
             />
           </div>
           <div class="palette-body">
+            <div v-if="hasResults && !canSendCommand" class="send-blocked-banner" role="status">
+              <span class="send-blocked-icon">⚠️</span>
+              <span>{{ sendBlockedReason }}</span>
+            </div>
             <div v-for="groupBlock in groupedCommands" :key="groupBlock.group" class="command-group">
               <div class="command-group-label">{{ groupBlock.group }}</div>
               <div
@@ -187,7 +194,7 @@ const selectCommand = (cmd) => {
               {{ selectedPortStatusText }}
             </span>
             <span class="shortcut-hint"><kbd>↑↓</kbd> 选择</span>
-            <span class="shortcut-hint"><kbd>Enter</kbd> 发送</span>
+            <span class="shortcut-hint" :class="{ inactive: !canSendCommand }"><kbd>Enter</kbd> {{ commandSendHint }}</span>
             <span class="shortcut-hint"><kbd>Esc</kbd> 关闭</span>
           </div>
         </div>
@@ -268,6 +275,24 @@ const selectCommand = (cmd) => {
   overflow-y: auto;
   padding: 8px;
   max-height: 300px;
+}
+
+.send-blocked-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 2px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--app-warning-border);
+  border-radius: 8px;
+  background: var(--app-warning-bg);
+  color: var(--app-warning-text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.send-blocked-icon {
+  flex: none;
 }
 
 .command-group {
@@ -413,6 +438,10 @@ const selectCommand = (cmd) => {
   gap: 6px;
   font-size: 12px;
   color: var(--app-text-soft);
+}
+
+.shortcut-hint.inactive {
+  color: var(--app-warning-text);
 }
 
 kbd {
