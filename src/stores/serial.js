@@ -3,6 +3,7 @@ import { ref, computed, watch, reactive } from 'vue'
 
 export const useSerialStore = defineStore('serial', () => {
   const SETTINGS_SNAPSHOT_VERSION = 1
+  const WORKSPACE_SNAPSHOT_VERSION = 1
   const SEND_HISTORY_LIMIT = 12
 
   const createTerminalAppearancePreset = (mode = 'dark') => {
@@ -1237,6 +1238,10 @@ export const useSerialStore = defineStore('serial', () => {
 
     if (typeof snapshot.version !== 'number') {
       throw new Error('工作区快照缺少版本信息')
+    }
+
+    if (snapshot.version > WORKSPACE_SNAPSHOT_VERSION) {
+      throw new Error(`工作区快照版本过高，当前仅支持 v${WORKSPACE_SNAPSHOT_VERSION}`)
     }
 
     if (snapshot.workspaceLayout && typeof snapshot.workspaceLayout !== 'object') {
