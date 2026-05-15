@@ -332,8 +332,15 @@ const exportAllLogs = async (format = 'json') => {
 
   if (!result || result.canceled) return
 
+  const exportedSummaryPayload = isText ? serialStore.buildAllPortLogExport() : payload
+  const exportedPortCount = Array.isArray(exportedSummaryPayload.ports) ? exportedSummaryPayload.ports.length : 0
+  const exportedLogCount = Array.isArray(exportedSummaryPayload.ports)
+    ? exportedSummaryPayload.ports.reduce((total, port) => total + (Array.isArray(port.logs) ? port.logs.length : 0), 0)
+    : 0
+  const exportedSummary = `${exportedPortCount} 个串口，${exportedLogCount} 条日志`
+
   if (result.success) {
-    showSettingsMessage(`全部串口日志已导出到\n${result.filePath}`, 'success', '导出成功')
+    showSettingsMessage(`全部串口日志已导出（${exportedSummary}）\n${result.filePath}`, 'success', '导出成功')
     return
   }
 
