@@ -69,18 +69,25 @@ const openCommandManager = (cmd = null) => {
   showEditModalInner.value = true
 }
 
+const normalizeCommandText = (value) => String(value || '').trim()
+const normalizeCommandGroup = (value) => normalizeCommandText(value) || '默认'
+
 // 保存命令
 const saveCommand = () => {
-  if (!editingCommand.value.name || !editingCommand.value.command) return
+  const normalizedName = normalizeCommandText(editingCommand.value.name)
+  const normalizedCommand = normalizeCommandText(editingCommand.value.command)
+  const normalizedGroup = normalizeCommandGroup(editingCommand.value.group)
+
+  if (!normalizedName || !normalizedCommand) return
 
   if (isEditing.value) {
     serialStore.updateCommonCommand(editingCommand.value.id, {
-      name: editingCommand.value.name,
-      command: editingCommand.value.command,
-      group: editingCommand.value.group
+      name: normalizedName,
+      command: normalizedCommand,
+      group: normalizedGroup
     })
   } else {
-    serialStore.addCommonCommand(editingCommand.value.name, editingCommand.value.command, editingCommand.value.group)
+    serialStore.addCommonCommand(normalizedName, normalizedCommand, normalizedGroup)
   }
   closeEditModal()
 }
@@ -96,8 +103,11 @@ const toggleCommand = (id) => {
 }
 
 const duplicateCommand = (cmd) => {
-  if (!cmd?.name || !cmd?.command) return
-  serialStore.addCommonCommand(`${cmd.name} 副本`, cmd.command, cmd.group || '默认')
+  const normalizedName = normalizeCommandText(cmd?.name)
+  const normalizedCommand = normalizeCommandText(cmd?.command)
+  const normalizedGroup = normalizeCommandGroup(cmd?.group)
+  if (!normalizedName || !normalizedCommand) return
+  serialStore.addCommonCommand(`${normalizedName} 副本`, normalizedCommand, normalizedGroup)
 }
 
 const setCommandGroupEnabled = (commands, enabled) => {
