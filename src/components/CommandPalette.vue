@@ -58,6 +58,15 @@ const flatCommands = computed(() => (
 ))
 
 const hasResults = computed(() => flatCommands.value.length > 0)
+const hasEnabledCommands = computed(() => enabledCommands.value.length > 0)
+const emptyStateTitle = computed(() => (
+  hasEnabledCommands.value ? '未找到匹配的命令' : '暂无可用命令'
+))
+const emptyStateDetail = computed(() => (
+  hasEnabledCommands.value
+    ? '尝试更换关键词，或在常用命令配置中检查分组与命令内容。'
+    : '请先在常用命令配置中添加命令，或启用已保存的命令。'
+))
 const currentSelectedCommand = computed(() => flatCommands.value[selectedIndex.value] || null)
 
 const syncSelectedIndex = () => {
@@ -148,8 +157,9 @@ const selectCommand = (cmd) => {
               </div>
             </div>
             <div v-if="!hasResults" class="no-commands">
-              <span class="no-commands-icon">🔍</span>
-              <span class="no-commands-text">未找到匹配的命令</span>
+              <span class="no-commands-icon">{{ hasEnabledCommands ? '🔍' : '⚡' }}</span>
+              <span class="no-commands-title">{{ emptyStateTitle }}</span>
+              <span class="no-commands-text">{{ emptyStateDetail }}</span>
             </div>
           </div>
           <div class="palette-footer">
@@ -309,8 +319,18 @@ const selectCommand = (cmd) => {
   margin-bottom: 8px;
 }
 
-.no-commands-text {
+.no-commands-title {
+  color: var(--app-text);
   font-size: 14px;
+  font-weight: 600;
+}
+
+.no-commands-text {
+  max-width: 320px;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
 }
 
 .palette-footer {

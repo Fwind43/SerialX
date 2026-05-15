@@ -45,6 +45,12 @@ const groupedCommands = computed(() => {
   return Array.from(groups.entries()).map(([group, commands]) => ({ group, commands }))
 })
 const visibleCommandCount = computed(() => groupedCommands.value.reduce((sum, group) => sum + group.commands.length, 0))
+const emptyStateTitle = computed(() => (normalizedSearchQuery.value ? '没有匹配的命令' : '还没有常用命令'))
+const emptyStateDetail = computed(() => (
+  normalizedSearchQuery.value
+    ? '请尝试搜索命令名称、内容或分组中的其他关键词。'
+    : '点击下方“添加新命令”创建常用命令，之后可在命令面板快速发送。'
+))
 
 // 编辑弹窗显示状态
 const showEditModal = computed(() => {
@@ -154,7 +160,9 @@ const handleOverlayClick = () => {
         </div>
         <div class="commands-list">
           <div v-if="visibleCommandCount === 0" class="empty-state">
-            {{ normalizedSearchQuery ? '没有匹配的命令' : '还没有常用命令' }}
+            <span class="empty-state-icon">{{ normalizedSearchQuery ? '🔍' : '⚡' }}</span>
+            <span class="empty-state-title">{{ emptyStateTitle }}</span>
+            <span class="empty-state-detail">{{ emptyStateDetail }}</span>
           </div>
           <div v-for="groupBlock in groupedCommands" :key="groupBlock.group" class="command-group">
             <div class="command-group-header">
@@ -435,13 +443,31 @@ const handleOverlayClick = () => {
 }
 
 .empty-state {
-  padding: 22px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 26px 18px;
   border: 1px dashed var(--app-border);
   border-radius: 12px;
   background: var(--app-workspace-shell);
   color: var(--app-text-soft);
   font-size: 13px;
   text-align: center;
+}
+
+.empty-state-icon {
+  font-size: 28px;
+}
+
+.empty-state-title {
+  color: var(--app-text);
+  font-weight: 600;
+}
+
+.empty-state-detail {
+  max-width: 360px;
+  line-height: 1.5;
 }
 
 .command-group {
