@@ -3,6 +3,7 @@ import { ref, computed, watch, reactive } from 'vue'
 
 export const useSerialStore = defineStore('serial', () => {
   const SETTINGS_SNAPSHOT_VERSION = 1
+  const SEND_HISTORY_LIMIT = 12
 
   const createTerminalAppearancePreset = (mode = 'dark') => {
     if (mode === 'light') {
@@ -1708,7 +1709,7 @@ export const useSerialStore = defineStore('serial', () => {
     if (!trimmed) return
 
     const currentHistory = portSendHistory.value.get(portPath) || []
-    const nextHistory = [trimmed, ...currentHistory.filter((item) => item !== trimmed)].slice(0, 12)
+    const nextHistory = [trimmed, ...currentHistory.filter((item) => item !== trimmed)].slice(0, SEND_HISTORY_LIMIT)
     portSendHistory.value.set(portPath, nextHistory)
     saveSessionState()
   }
@@ -2536,6 +2537,7 @@ export const useSerialStore = defineStore('serial', () => {
     getPortNotice,
     getPortSettings,
     getPortSendingData,
+    sendHistoryLimit: SEND_HISTORY_LIMIT,
     getPortSendHistory,
     removePortSendHistoryItem,
     clearPortSendHistory,

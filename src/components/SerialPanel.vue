@@ -34,8 +34,8 @@ const themeMode = computed(() => serialStore.appUiState?.themeMode || 'dark')
 const enabledCommands = computed(() => serialStore.getEnabledCommands)
 const sendHistory = computed(() => serialStore.getPortSendHistory(props.portPath))
 const selectedHistoryItem = ref('')
-const sendHistoryLimit = 12
-const sendHistoryLabel = computed(() => `最近发送 ${sendHistory.value.length}/${sendHistoryLimit}`)
+const sendHistoryLimit = computed(() => serialStore.sendHistoryLimit)
+const sendHistoryLabel = computed(() => `最近发送 ${sendHistory.value.length}/${sendHistoryLimit.value}`)
 const groupedEnabledCommands = computed(() => {
   const groups = new Map()
   enabledCommands.value.forEach((cmd) => {
