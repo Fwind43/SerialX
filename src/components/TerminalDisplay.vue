@@ -31,6 +31,7 @@ let renderedLastLogId = null
 
 const showSearch = ref(false)
 const searchQuery = ref('')
+const searchCaseSensitive = ref(false)
 const searchMatchCount = ref(0)
 const currentMatchIndex = ref(0)
 const searchStatusText = computed(() => {
@@ -358,7 +359,7 @@ const getTerminalTheme = () => ({
 })
 
 const getSearchOptions = () => ({
-  caseSensitive: false,
+  caseSensitive: searchCaseSensitive.value,
   wholeWord: false,
   regex: false,
   decorations: {
@@ -436,6 +437,7 @@ const handleSearchKeyDown = (event) => {
 const clearSearch = () => {
   showSearch.value = false
   searchQuery.value = ''
+  searchCaseSensitive.value = false
   searchMatchCount.value = 0
   currentMatchIndex.value = 0
   clearSearchDebounce()
@@ -859,6 +861,10 @@ watch(searchQuery, () => {
   debouncedSearch()
 })
 
+watch(searchCaseSensitive, () => {
+  performSearch()
+})
+
 watch(showSearch, (visible) => {
   syncTerminalViewport()
   if (visible) {
@@ -966,6 +972,15 @@ defineExpose({
           <span :class="['search-status', { empty: isSearchEmpty }]">
             {{ searchStatusText }}
           </span>
+          <button
+            :class="['search-toggle', { active: searchCaseSensitive }]"
+            type="button"
+            :aria-pressed="searchCaseSensitive"
+            title="区分大小写"
+            @click="searchCaseSensitive = !searchCaseSensitive"
+          >
+            Aa
+          </button>
           <div class="search-controls">
             <span class="search-count">
               {{ !searchQuery ? '' : (searchMatchCount > 0 ? `${currentMatchIndex} / ${searchMatchCount}` : '0 / 0') }}
@@ -1281,6 +1296,35 @@ defineExpose({
 .search-status.empty {
   background: var(--app-danger-soft);
   color: var(--app-danger-text);
+}
+
+.search-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border);
+  background: var(--app-chip-bg);
+  color: var(--app-text-soft);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.search-toggle:hover {
+  background: var(--app-accent-soft);
+  border-color: var(--app-chip-border);
+  color: var(--app-text);
+}
+
+.search-toggle.active {
+  background: var(--app-accent);
+  border-color: var(--app-accent);
+  color: var(--app-accent-contrast);
 }
 
 .search-count {
