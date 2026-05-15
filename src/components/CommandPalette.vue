@@ -286,17 +286,26 @@ const selectCommand = (cmd) => {
 }
 
 .command-name {
+  min-width: 0;
   font-size: 14px;
   color: var(--app-text);
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .command-value-wrap {
+  min-width: 0;
   display: inline-flex;
   justify-content: flex-end;
 }
 
 .command-value {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   color: var(--app-chip-text);
   background: var(--app-chip-bg);
