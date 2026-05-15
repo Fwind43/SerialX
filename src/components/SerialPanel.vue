@@ -107,6 +107,20 @@ const sendStatusTone = computed(() => {
   return 'ready'
 })
 
+const loopProgressPercent = computed(() => {
+  const maxCount = Number(portControlSettings.value.loopMaxCount) || 0
+  if (maxCount <= 0 || loopSendCount.value <= 0) return 0
+  return Math.min(100, Math.round((loopSendCount.value / maxCount) * 100))
+})
+
+const loopProgressLabel = computed(() => {
+  const maxCount = Number(portControlSettings.value.loopMaxCount) || 0
+  if (maxCount <= 0) return '不限次数'
+  const sentCount = Math.min(loopSendCount.value, maxCount)
+  const remainingCount = Math.max(0, maxCount - sentCount)
+  return `${sentCount}/${maxCount} 次 · 剩余 ${remainingCount} 次`
+})
+
 const sendStatusSummary = computed(() => {
   const summary = []
 
@@ -806,6 +820,16 @@ onUnmounted(() => {
             />
             <span class="interval-unit">{{ portControlSettings.loopMaxCount > 0 ? '次' : '不限' }}</span>
           </label>
+
+          <div v-if="portControlSettings.loopMaxCount > 0 && loopSendCount > 0" class="loop-progress">
+            <div class="loop-progress-meta">
+              <span>循环进度</span>
+              <strong>{{ loopProgressLabel }}</strong>
+            </div>
+            <div class="loop-progress-track" role="progressbar" :aria-valuenow="loopProgressPercent" aria-valuemin="0" aria-valuemax="100">
+              <span class="loop-progress-fill" :style="{ width: `${loopProgressPercent}%` }"></span>
+            </div>
+          </div>
         </div>
 
         <div class="send-status-summary" :class="sendStatusTone">
@@ -1476,6 +1500,46 @@ onUnmounted(() => {
   background: var(--app-danger-soft);
   color: var(--app-danger-text);
   border-color: var(--app-danger-border);
+}
+
+.loop-progress {
+  min-width: 180px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--app-chip-bg);
+  border: 1px solid var(--app-border);
+}
+
+.loop-progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+  color: var(--app-text-soft);
+  font-size: 10px;
+}
+
+.loop-progress-meta strong {
+  color: var(--app-text);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.loop-progress-track {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-border) 55%, transparent);
+}
+
+.loop-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--app-accent);
+  transition: width 0.18s ease;
 }
 
 .send-status-summary {
