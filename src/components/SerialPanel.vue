@@ -33,6 +33,9 @@ const currentSendingData = computed(() => serialStore.getPortSendingData(props.p
 const themeMode = computed(() => serialStore.appUiState?.themeMode || 'dark')
 const enabledCommands = computed(() => serialStore.getEnabledCommands)
 const sendHistory = computed(() => serialStore.getPortSendHistory(props.portPath))
+const selectedHistoryItem = ref('')
+const sendHistoryLimit = 12
+const sendHistoryLabel = computed(() => `最近发送 ${sendHistory.value.length}/${sendHistoryLimit}`)
 const groupedEnabledCommands = computed(() => {
   const groups = new Map()
   enabledCommands.value.forEach((cmd) => {
@@ -218,6 +221,7 @@ const executeCommand = (command) => {
 
 const applyHistoryItem = (value, event = null) => {
   if (!value) return
+  selectedHistoryItem.value = value
   sendingInput.value = value
   serialStore.setPortSendingData(props.portPath, value)
   sendErrorMessage.value = ''
@@ -227,19 +231,30 @@ const applyHistoryItem = (value, event = null) => {
   sendHistoryDraft.value = ''
 
   if (event?.target) {
-    event.target.value = ''
+    event.target.value = value
   }
 }
 
-const deleteRecentSendHistory = () => {
-  const [latestHistoryItem] = sendHistory.value
-  if (!latestHistoryItem) return
-  serialStore.removePortSendHistoryItem(props.portPath, latestHistoryItem)
+const sendSelectedHistoryItem = async () => {
+  const value = selectedHistoryItem.value || sendHistory.value[0]
+  if (!value) return
+  applyHistoryItem(value)
+  await handleSend()
+}
+
+const deleteSelectedSendHistory = () => {
+  const value = selectedHistoryItem.value || sendHistory.value[0]
+  if (!value) return
+  const removed = serialStore.removePortSendHistoryItem(props.portPath, value)
+  if (removed && selectedHistoryItem.value === value) {
+    selectedHistoryItem.value = ''
+  }
 }
 
 const clearSendHistory = () => {
   if (!sendHistory.value.length) return
   serialStore.clearPortSendHistory(props.portPath)
+  selectedHistoryItem.value = ''
 }
 
 const handleClearLogs = () => {
@@ -593,24 +608,36 @@ onUnmounted(() => {
 
       <div class="send-options">
         <div v-if="sendHistory.length > 0" class="history-actions">
+          <span class="history-count" :title="`当前串口保留最近 ${sendHistoryLimit} 条发送历史`">
+            {{ sendHistoryLabel }}
+          </span>
           <select
+            v-model="selectedHistoryItem"
             class="command-select history-select"
             :disabled="!isConnected"
             title="选择最近发送内容填入输入框；输入框内也可用 ↑/↓ 浏览历史"
             @change="applyHistoryItem($event.target.value, $event)"
           >
-            <option value="" selected>最近发送</option>
-            <option v-for="item in sendHistory" :key="item" :value="item">
-              {{ item }}
+            <option value="">选择历史</option>
+            <option v-for="(item, index) in sendHistory" :key="item" :value="item">
+              #{{ index + 1 }} {{ item }}
             </option>
           </select>
           <button
+            class="history-action-btn primary"
+            :disabled="!isConnected || !sendHistory.length"
+            title="立即发送当前选择的历史；未选择时发送最近一条"
+            @click="sendSelectedHistoryItem"
+          >
+            发送历史
+          </button>
+          <button
             class="history-action-btn"
             :disabled="!sendHistory.length"
-            title="删除最近一条发送历史"
-            @click="deleteRecentSendHistory"
+            title="删除当前选择的历史；未选择时删除最近一条"
+            @click="deleteSelectedSendHistory"
           >
-            删除最近
+            删除所选
           </button>
           <button
             class="history-action-btn danger"
@@ -1174,16 +1201,31 @@ onUnmounted(() => {
 }
 
 .history-select {
-  width: 132px;
-  min-width: 132px;
-  max-width: 132px;
-  flex: 0 0 132px;
+  width: 150px;
+  min-width: 150px;
+  max-width: 150px;
+  flex: 0 0 150px;
 }
 
 .history-actions {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.history-count {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border);
+  background: var(--app-chip-bg);
+  color: var(--app-muted-text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .history-action-btn {
@@ -1204,6 +1246,17 @@ onUnmounted(() => {
   border-color: var(--app-accent);
   background: var(--app-accent-soft);
   color: var(--app-chip-text);
+}
+
+.history-action-btn.primary {
+  border-color: var(--app-chip-border);
+  background: var(--app-accent-soft);
+  color: var(--app-chip-text);
+}
+
+.history-action-btn.primary:hover:not(:disabled) {
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent);
 }
 
 .history-action-btn.danger:hover:not(:disabled) {
