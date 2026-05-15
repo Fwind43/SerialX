@@ -42,7 +42,18 @@ const groupedCommands = computed(() => {
     }
     groups.get(key).push(cmd)
     })
-  return Array.from(groups.entries()).map(([group, commands]) => ({ group, commands }))
+  return Array.from(groups.entries()).map(([group, commands]) => {
+    const enabledCount = commands.filter((cmd) => cmd.enabled !== false).length
+    const disabledCount = commands.length - enabledCount
+    return {
+      group,
+      commands,
+      enabledCount,
+      disabledCount,
+      allEnabled: disabledCount === 0,
+      allDisabled: enabledCount === 0
+    }
+  })
 })
 const visibleCommandCount = computed(() => groupedCommands.value.reduce((sum, group) => sum + group.commands.length, 0))
 const emptyStateTitle = computed(() => (normalizedSearchQuery.value ? '没有匹配的命令' : '还没有常用命令'))
@@ -212,17 +223,23 @@ const handleOverlayClick = () => {
             <div class="command-group-header">
               <div class="command-group-title-row">
                 <div class="command-group-title">{{ groupBlock.group }}</div>
-                <span class="command-group-count">{{ groupBlock.commands.length }} 条</span>
+                <span class="command-group-count">
+                  {{ groupBlock.commands.length }} 条 · 启用 {{ groupBlock.enabledCount }} · 禁用 {{ groupBlock.disabledCount }}
+                </span>
               </div>
               <div class="command-group-actions">
                 <button
                   class="group-action-btn"
+                  :disabled="groupBlock.allEnabled"
+                  :title="groupBlock.allEnabled ? '该分组已全部启用' : '启用该分组内全部命令'"
                   @click="setCommandGroupEnabled(groupBlock.commands, true)"
                 >
                   全部启用
                 </button>
                 <button
                   class="group-action-btn"
+                  :disabled="groupBlock.allDisabled"
+                  :title="groupBlock.allDisabled ? '该分组已全部禁用' : '禁用该分组内全部命令'"
                   @click="setCommandGroupEnabled(groupBlock.commands, false)"
                 >
                   全部禁用
@@ -578,10 +595,16 @@ const handleOverlayClick = () => {
   transition: all 0.18s ease;
 }
 
-.group-action-btn:hover {
+.group-action-btn:hover:not(:disabled) {
   border-color: var(--app-chip-border);
   color: var(--app-text);
   background: var(--app-accent-soft);
+}
+
+.group-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .command-item {
