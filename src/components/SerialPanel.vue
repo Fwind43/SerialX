@@ -635,7 +635,6 @@ onUnmounted(() => {
           <select
             v-model="selectedHistoryItem"
             class="command-select history-select"
-            :disabled="!isConnected"
             title="选择最近发送内容填入输入框；输入框内也可用 ↑/↓ 浏览历史"
             @change="applyHistoryItem($event.target.value, $event)"
           >
