@@ -263,9 +263,19 @@ const deleteSelectedSendHistory = () => {
 }
 
 const clearSendHistory = () => {
-  if (!sendHistory.value.length) return
+  const historyCount = sendHistory.value.length
+  if (!historyCount) return
+
+  const confirmed = window.confirm(`确定清空当前串口的 ${historyCount} 条发送历史吗？此操作不可撤销。`)
+  if (!confirmed) return
+
   serialStore.clearPortSendHistory(props.portPath)
   selectedHistoryItem.value = ''
+  sendHistoryIndex.value = -1
+  sendHistoryDraft.value = ''
+  sendingInput.value = ''
+  serialStore.setPortSendingData(props.portPath, '')
+  serialStore.addPortLog(props.portPath, `已清空 ${historyCount} 条发送历史。`, 'info')
 }
 
 const handleClearLogs = () => {
