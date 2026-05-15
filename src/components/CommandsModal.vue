@@ -85,13 +85,24 @@ const knownCommandGroups = computed(() => {
   return Array.from(groups).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
 })
 
+const editorValidationMessage = computed(() => {
+  if (!showEditModalInner.value) return ''
+  const normalizedName = normalizeCommandText(editingCommand.value.name)
+  const normalizedCommand = normalizeCommandText(editingCommand.value.command)
+  if (!normalizedName && !normalizedCommand) return '请输入命令名称和命令内容。'
+  if (!normalizedName) return '请输入命令名称。'
+  if (!normalizedCommand) return '请输入命令内容。'
+  return ''
+})
+const canSaveCommand = computed(() => !editorValidationMessage.value)
+
 // 保存命令
 const saveCommand = () => {
   const normalizedName = normalizeCommandText(editingCommand.value.name)
   const normalizedCommand = normalizeCommandText(editingCommand.value.command)
   const normalizedGroup = normalizeCommandGroup(editingCommand.value.group)
 
-  if (!normalizedName || !normalizedCommand) return
+  if (!canSaveCommand.value) return
 
   if (isEditing.value) {
     serialStore.updateCommonCommand(editingCommand.value.id, {
@@ -249,6 +260,9 @@ const handleOverlayClick = () => {
             <button @click="closeEditModal" class="modal-close">✕</button>
           </div>
           <div class="modal-body">
+            <div v-if="editorValidationMessage" class="form-alert" role="status">
+              {{ editorValidationMessage }}
+            </div>
             <div class="form-group">
               <label>命令名称</label>
               <input
@@ -284,7 +298,12 @@ const handleOverlayClick = () => {
           </div>
           <div class="modal-footer">
             <button @click="closeEditModal" class="modal-btn cancel">取消</button>
-            <button @click="saveCommand" class="modal-btn save">保存</button>
+            <button
+              @click="saveCommand"
+              class="modal-btn save"
+              :disabled="!canSaveCommand"
+              :title="editorValidationMessage || '保存命令'"
+            >保存</button>
           </div>
         </div>
       </transition>
@@ -670,6 +689,13 @@ const handleOverlayClick = () => {
   border: 1px solid transparent;
 }
 
+.modal-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
 .modal-btn.close {
   background: linear-gradient(135deg, var(--app-accent) 0%, color-mix(in srgb, var(--app-accent) 65%, #6a54a8) 100%);
   border: 1px solid var(--app-chip-border);
@@ -722,6 +748,16 @@ const handleOverlayClick = () => {
   letter-spacing: 0.5px;
 }
 
+.form-alert {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, #ffb86c 46%, var(--app-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, #ffb86c 12%, var(--app-workspace-shell));
+  color: var(--app-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .form-input {
   padding: 12px 14px;
   background: var(--app-workspace-shell);
@@ -770,7 +806,7 @@ const handleOverlayClick = () => {
   box-shadow: 0 4px 12px color-mix(in srgb, var(--app-accent) 34%, transparent);
 }
 
-.modal-btn.save:hover {
+.modal-btn.save:not(:disabled):hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 20px color-mix(in srgb, var(--app-accent) 46%, transparent);
 }
