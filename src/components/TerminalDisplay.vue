@@ -34,9 +34,14 @@ const searchQuery = ref('')
 const searchCaseSensitive = ref(false)
 const searchMatchCount = ref(0)
 const currentMatchIndex = ref(0)
+const isSearchPending = ref(false)
 const searchStatusText = computed(() => {
   if (!searchQuery.value) {
     return '输入内容开始搜索'
+  }
+
+  if (isSearchPending.value) {
+    return '正在搜索...'
   }
 
   if (searchMatchCount.value === 0) {
@@ -45,7 +50,7 @@ const searchStatusText = computed(() => {
 
   return `共 ${searchMatchCount.value} 项`
 })
-const isSearchEmpty = computed(() => searchQuery.value && searchMatchCount.value === 0)
+const isSearchEmpty = computed(() => searchQuery.value && !isSearchPending.value && searchMatchCount.value === 0)
 
 const showContextMenu = ref(false)
 const contextMenuPosition = ref({ x: 0, y: 0 })
@@ -210,6 +215,7 @@ const openSearch = () => {
   closeContextMenu()
   searchMatchCount.value = 0
   currentMatchIndex.value = 0
+  isSearchPending.value = Boolean(searchQuery.value)
   focusSearchInput()
 }
 
@@ -383,6 +389,7 @@ const clearSearchHighlights = () => {
 
 const refreshSearchResults = () => {
   if (!showSearch.value || !searchQuery.value || !terminal || !searchAddon) return
+  isSearchPending.value = true
   nextTick(() => {
     searchAddon.findNext(searchQuery.value, getSearchOptions())
   })
@@ -392,6 +399,7 @@ const performSearch = () => {
   if (!terminal || !searchAddon) {
     searchMatchCount.value = 0
     currentMatchIndex.value = 0
+    isSearchPending.value = false
     return
   }
 
@@ -399,15 +407,18 @@ const performSearch = () => {
     clearSearchHighlights()
     searchMatchCount.value = 0
     currentMatchIndex.value = 0
+    isSearchPending.value = false
     return
   }
 
   clearSearchHighlights()
+  isSearchPending.value = true
   searchAddon.findNext(searchQuery.value, getSearchOptions())
 }
 
 const debouncedSearch = () => {
   clearSearchDebounce()
+  isSearchPending.value = Boolean(searchQuery.value)
   searchDebounceTimer = setTimeout(() => {
     performSearch()
   }, 150)
@@ -852,6 +863,7 @@ const initTerminal = () => {
   searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
     searchMatchCount.value = resultCount
     currentMatchIndex.value = resultIndex >= 0 ? resultIndex + 1 : 0
+    isSearchPending.value = false
   })
 
   window.addEventListener('resize', handleResize)
