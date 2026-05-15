@@ -59,6 +59,12 @@ const searchStatusText = computed(() => {
   return `第 ${currentIndex} / 共 ${searchMatchCount.value} 项`
 })
 const isSearchEmpty = computed(() => searchQuery.value && !isSearchPending.value && (searchMatchCount.value === 0 || Boolean(searchError.value)))
+const canNavigateSearchMatches = computed(() => (
+  Boolean(searchQuery.value) &&
+  !isSearchPending.value &&
+  !searchError.value &&
+  searchMatchCount.value > 0
+))
 
 const showContextMenu = ref(false)
 const contextMenuPosition = ref({ x: 0, y: 0 })
@@ -465,12 +471,12 @@ const debouncedSearch = () => {
 }
 
 const goToNextMatch = () => {
-  if (!searchQuery.value || !terminal || !searchAddon) return
+  if (!canNavigateSearchMatches.value || !terminal || !searchAddon) return
   searchAddon.findNext(searchQuery.value, getSearchOptions())
 }
 
 const goToPreviousMatch = () => {
-  if (!searchQuery.value || !terminal || !searchAddon) return
+  if (!canNavigateSearchMatches.value || !terminal || !searchAddon) return
   searchAddon.findPrevious(searchQuery.value, getSearchOptions())
 }
 
@@ -1057,12 +1063,22 @@ defineExpose({
             <span class="search-count">
               {{ !searchQuery ? '' : (searchMatchCount > 0 ? `${currentMatchIndex} / ${searchMatchCount}` : '0 / 0') }}
             </span>
-            <button class="search-btn" title="上一个匹配 (Shift+Enter / Shift+F3)" @click="goToPreviousMatch">
+            <button
+              class="search-btn"
+              :disabled="!canNavigateSearchMatches"
+              title="上一个匹配 (Shift+Enter / Shift+F3)"
+              @click="goToPreviousMatch"
+            >
               <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
                 <path d="M6 3 2 7h8Z" fill="currentColor" />
               </svg>
             </button>
-            <button class="search-btn" title="下一个匹配 (Enter / F3)" @click="goToNextMatch">
+            <button
+              class="search-btn"
+              :disabled="!canNavigateSearchMatches"
+              title="下一个匹配 (Enter / F3)"
+              @click="goToNextMatch"
+            >
               <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
                 <path d="M6 9 10 5H2Z" fill="currentColor" />
               </svg>
@@ -1424,9 +1440,14 @@ defineExpose({
   transition: all 0.16s ease;
 }
 
-.search-btn:hover {
+.search-btn:hover:not(:disabled) {
   background: var(--app-accent-soft);
   border-color: var(--app-chip-border);
+}
+
+.search-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .search-btn.close:hover {
