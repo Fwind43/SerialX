@@ -77,6 +77,13 @@ const openCommandManager = (cmd = null) => {
 
 const normalizeCommandText = (value) => String(value || '').trim()
 const normalizeCommandGroup = (value) => normalizeCommandText(value) || '默认'
+const knownCommandGroups = computed(() => {
+  const groups = new Set(['默认'])
+  serialStore.commonCommands.forEach((cmd) => {
+    groups.add(normalizeCommandGroup(cmd.group))
+  })
+  return Array.from(groups).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
+})
 
 // 保存命令
 const saveCommand = () => {
@@ -266,8 +273,13 @@ const handleOverlayClick = () => {
                 v-model="editingCommand.group"
                 type="text"
                 class="form-input"
+                list="command-group-suggestions"
                 placeholder="例：查询、设备控制、自定义"
               />
+              <datalist id="command-group-suggestions">
+                <option v-for="group in knownCommandGroups" :key="group" :value="group" />
+              </datalist>
+              <span class="form-hint">输入新名称可创建分组，或从已有分组中快速选择。</span>
             </div>
           </div>
           <div class="modal-footer">
@@ -729,6 +741,14 @@ const handleOverlayClick = () => {
 }
 
 .form-input::placeholder {
+  color: var(--app-text-soft);
+}
+
+.form-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--app-text-soft);
 }
 
