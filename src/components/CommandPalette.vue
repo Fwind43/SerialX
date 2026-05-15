@@ -16,10 +16,11 @@ const inputRef = ref(null)
 
 const enabledCommands = computed(() => serialStore.getEnabledCommands)
 const selectedPort = computed(() => serialStore.selectedPort || '')
-const hasSelectedPort = computed(() => Boolean(selectedPort.value))
+const isSelectedPortConnected = computed(() => Boolean(selectedPort.value && serialStore.getPortStatus(selectedPort.value)))
+const canSendCommand = computed(() => isSelectedPortConnected.value)
 const selectedPortStatusText = computed(() => {
   if (!selectedPort.value) return '目标：未选择串口'
-  return serialStore.getPortStatus(selectedPort.value)
+  return isSelectedPortConnected.value
     ? `目标：${selectedPort.value}`
     : `目标：${selectedPort.value}（未连接）`
 })
@@ -103,7 +104,7 @@ const handleKeyDown = (e) => {
 }
 
 const sendCommand = (cmd) => {
-  if (cmd && hasSelectedPort.value) {
+  if (cmd && canSendCommand.value) {
     window.dispatchEvent(new CustomEvent('serialx-send-command', { detail: cmd.command }))
     emit('update:modelValue', false)
   }
@@ -152,7 +153,7 @@ const selectCommand = (cmd) => {
             </div>
           </div>
           <div class="palette-footer">
-            <span class="target-port" :class="{ inactive: !hasSelectedPort }">
+            <span class="target-port" :class="{ inactive: !canSendCommand }">
               {{ selectedPortStatusText }}
             </span>
             <span class="shortcut-hint"><kbd>↑↓</kbd> 选择</span>
