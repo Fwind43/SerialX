@@ -75,6 +75,7 @@ const isHexInputValid = computed(() => {
 
 const isSendDisabled = computed(() => {
   const data = sendingInput.value
+  if (!isConnected.value) return true
   if (!data) return true
   if (portControlSettings.value.hexSend) return !isHexInputValid.value
   return false
@@ -350,6 +351,14 @@ const navigateSendHistory = (direction) => {
 const handleSend = async () => {
   const data = sendingInput.value
   if (!data) return
+
+  if (!isConnected.value) {
+    sendErrorMessage.value = '请先连接串口'
+    sendSuccessMessage.value = ''
+    serialStore.setPortNotice(props.portPath, 'warning', sendErrorMessage.value)
+    serialStore.addPortLog(props.portPath, sendErrorMessage.value, 'warning')
+    return
+  }
 
   flushSendingInput()
   const result = await serialStore.sendData(props.portPath, null, portControlSettings.value.hexSend)
