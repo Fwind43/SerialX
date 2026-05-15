@@ -37,6 +37,24 @@ const selectedHistoryItem = ref('')
 const sendHistoryLimit = computed(() => serialStore.sendHistoryLimit)
 const sendHistoryLabel = computed(() => `最近发送 ${sendHistory.value.length}/${sendHistoryLimit.value}`)
 const pinnedSendHistory = computed(() => sendHistory.value.slice(0, 3))
+const selectedHistoryValue = computed(() => selectedHistoryItem.value || sendHistory.value[0] || '')
+const isSelectedHistoryHexValid = computed(() => {
+  const value = selectedHistoryValue.value
+  if (!portControlSettings.value.hexSend || !value) return true
+  return serialStore.isValidHex(value)
+})
+const isHistorySendDisabled = computed(() => {
+  if (!selectedHistoryValue.value) return true
+  if (!isConnected.value) return true
+  if (portControlSettings.value.hexSend) return !isSelectedHistoryHexValid.value
+  return false
+})
+const historySendTitle = computed(() => {
+  if (!selectedHistoryValue.value) return '暂无可发送的历史记录'
+  if (!isConnected.value) return '请先连接串口后再发送历史'
+  if (portControlSettings.value.hexSend && !isSelectedHistoryHexValid.value) return '当前历史不是有效 HEX，无法发送'
+  return selectedHistoryItem.value ? '立即发送当前选择的历史' : '立即发送最近一条历史'
+})
 const groupedEnabledCommands = computed(() => {
   const groups = new Map()
   enabledCommands.value.forEach((cmd) => {
@@ -249,8 +267,8 @@ const applyHistoryItem = (value, event = null) => {
 }
 
 const sendSelectedHistoryItem = async () => {
-  const value = selectedHistoryItem.value || sendHistory.value[0]
-  if (!value) return
+  const value = selectedHistoryValue.value
+  if (!value || isHistorySendDisabled.value) return
   applyHistoryItem(value)
   await handleSend()
 }
@@ -680,8 +698,8 @@ onUnmounted(() => {
           </select>
           <button
             class="history-action-btn primary"
-            :disabled="!isConnected || !sendHistory.length"
-            title="立即发送当前选择的历史；未选择时发送最近一条"
+            :disabled="isHistorySendDisabled"
+            :title="historySendTitle"
             @click="sendSelectedHistoryItem"
           >
             发送历史
