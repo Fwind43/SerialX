@@ -38,6 +38,17 @@ const sendHistoryLimit = computed(() => serialStore.sendHistoryLimit)
 const sendHistoryLabel = computed(() => `最近发送 ${sendHistory.value.length}/${sendHistoryLimit.value}`)
 const pinnedSendHistory = computed(() => sendHistory.value.slice(0, 3))
 const selectedHistoryValue = computed(() => selectedHistoryItem.value || sendHistory.value[0] || '')
+const selectedHistoryIndexLabel = computed(() => {
+  const value = selectedHistoryValue.value
+  if (!value) return '未选择'
+  const index = sendHistory.value.indexOf(value)
+  return index >= 0 ? `#${index + 1}` : '自定义'
+})
+const selectedHistoryPreviewLabel = computed(() => {
+  const value = selectedHistoryValue.value
+  if (!value) return '暂无可复用的发送历史'
+  return value.length > 48 ? `${value.slice(0, 48)}…` : value
+})
 const isSelectedHistoryHexValid = computed(() => {
   const value = selectedHistoryValue.value
   if (!portControlSettings.value.hexSend || !value) return true
@@ -710,6 +721,10 @@ onUnmounted(() => {
               #{{ index + 1 }} {{ item }}
             </option>
           </select>
+          <div class="history-preview" :class="{ invalid: !isSelectedHistoryHexValid }" :title="selectedHistoryValue || '暂无发送历史'">
+            <span class="history-preview-index">{{ selectedHistoryIndexLabel }}</span>
+            <span class="history-preview-text">{{ selectedHistoryPreviewLabel }}</span>
+          </div>
           <button
             class="history-action-btn primary"
             :disabled="isHistorySendDisabled"
@@ -1370,6 +1385,43 @@ onUnmounted(() => {
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
+}
+
+.history-preview {
+  height: 34px;
+  min-width: 190px;
+  max-width: 260px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 28%, var(--app-border));
+  background: color-mix(in srgb, var(--app-accent-soft) 45%, var(--app-workspace-soft));
+  color: var(--app-text);
+  font-size: 11px;
+  line-height: 1;
+  overflow: hidden;
+}
+
+.history-preview.invalid {
+  border-color: var(--app-danger-border);
+  background: var(--app-danger-soft);
+  color: var(--app-danger-text);
+}
+
+.history-preview-index {
+  flex: 0 0 auto;
+  font-weight: 800;
+  color: var(--app-chip-text);
+}
+
+.history-preview-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--app-mono-font, 'SFMono-Regular', Consolas, monospace);
 }
 
 .history-action-btn {
