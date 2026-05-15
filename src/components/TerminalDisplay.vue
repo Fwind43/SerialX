@@ -32,12 +32,19 @@ let renderedLastLogId = null
 const showSearch = ref(false)
 const searchQuery = ref('')
 const searchCaseSensitive = ref(false)
+const searchWholeWord = ref(false)
+const searchUseRegex = ref(false)
+const searchError = ref('')
 const searchMatchCount = ref(0)
 const currentMatchIndex = ref(0)
 const isSearchPending = ref(false)
 const searchStatusText = computed(() => {
   if (!searchQuery.value) {
     return '输入内容开始搜索'
+  }
+
+  if (searchError.value) {
+    return searchError.value
   }
 
   if (isSearchPending.value) {
@@ -51,7 +58,7 @@ const searchStatusText = computed(() => {
   const currentIndex = currentMatchIndex.value || 1
   return `第 ${currentIndex} / 共 ${searchMatchCount.value} 项`
 })
-const isSearchEmpty = computed(() => searchQuery.value && !isSearchPending.value && searchMatchCount.value === 0)
+const isSearchEmpty = computed(() => searchQuery.value && !isSearchPending.value && (searchMatchCount.value === 0 || Boolean(searchError.value)))
 
 const showContextMenu = ref(false)
 const contextMenuPosition = ref({ x: 0, y: 0 })
@@ -367,8 +374,8 @@ const getTerminalTheme = () => ({
 
 const getSearchOptions = () => ({
   caseSensitive: searchCaseSensitive.value,
-  wholeWord: false,
-  regex: false,
+  wholeWord: searchWholeWord.value,
+  regex: searchUseRegex.value,
   decorations: {
     matchBackground: effectiveSearchPalette.value.matchBackground,
     matchBorder: effectiveSearchPalette.value.matchBorder,
@@ -378,6 +385,28 @@ const getSearchOptions = () => ({
     activeMatchColorOverviewRuler: effectiveSearchPalette.value.overviewRuler
   }
 })
+
+const resetSearchResults = () => {
+  searchMatchCount.value = 0
+  currentMatchIndex.value = 0
+  isSearchPending.value = false
+}
+
+const isSearchPatternValid = () => {
+  if (!searchUseRegex.value || !searchQuery.value) {
+    searchError.value = ''
+    return true
+  }
+
+  try {
+    new RegExp(searchQuery.value)
+    searchError.value = ''
+    return true
+  } catch {
+    searchError.value = '正则表达式无效'
+    return false
+  }
+}
 
 const clearSearchHighlights = () => {
   if (terminal) {
@@ -390,6 +419,11 @@ const clearSearchHighlights = () => {
 
 const refreshSearchResults = () => {
   if (!showSearch.value || !searchQuery.value || !terminal || !searchAddon) return
+  if (!isSearchPatternValid()) {
+    resetSearchResults()
+    clearSearchHighlights()
+    return
+  }
   isSearchPending.value = true
   nextTick(() => {
     searchAddon.findNext(searchQuery.value, getSearchOptions())
@@ -405,10 +439,15 @@ const performSearch = () => {
   }
 
   if (!searchQuery.value) {
+    searchError.value = ''
     clearSearchHighlights()
-    searchMatchCount.value = 0
-    currentMatchIndex.value = 0
-    isSearchPending.value = false
+    resetSearchResults()
+    return
+  }
+
+  if (!isSearchPatternValid()) {
+    resetSearchResults()
+    clearSearchHighlights()
     return
   }
 
@@ -450,8 +489,10 @@ const clearSearch = () => {
   showSearch.value = false
   searchQuery.value = ''
   searchCaseSensitive.value = false
-  searchMatchCount.value = 0
-  currentMatchIndex.value = 0
+  searchWholeWord.value = false
+  searchUseRegex.value = false
+  searchError.value = ''
+  resetSearchResults()
   clearSearchDebounce()
   clearSearchHighlights()
 }
@@ -874,7 +915,7 @@ watch(searchQuery, () => {
   debouncedSearch()
 })
 
-watch(searchCaseSensitive, () => {
+watch([searchCaseSensitive, searchWholeWord, searchUseRegex], () => {
   performSearch()
 })
 
@@ -993,6 +1034,24 @@ defineExpose({
             @click="searchCaseSensitive = !searchCaseSensitive"
           >
             Aa
+          </button>
+          <button
+            :class="['search-toggle', { active: searchWholeWord }]"
+            type="button"
+            :aria-pressed="searchWholeWord"
+            title="全字匹配"
+            @click="searchWholeWord = !searchWholeWord"
+          >
+            W
+          </button>
+          <button
+            :class="['search-toggle', { active: searchUseRegex }]"
+            type="button"
+            :aria-pressed="searchUseRegex"
+            title="正则表达式"
+            @click="searchUseRegex = !searchUseRegex"
+          >
+            .*
           </button>
           <div class="search-controls">
             <span class="search-count">
