@@ -144,6 +144,10 @@ SerialX/
   当前开发周期计划。
 - [v0.1.0-bug-log.md](docs/v0.1.0-bug-log.md)
   当前开发周期已修复缺陷记录。
+- [v0.1.0-regression-checklist.md](docs/v0.1.0-regression-checklist.md)
+  当前开发周期手动回归基线。
+- [v0.1.0-local-data-boundaries.md](docs/v0.1.0-local-data-boundaries.md)
+  当前开发周期本地持久化、设置导入导出和非目标数据边界。
 
 后续版本沿用同样的 `plan + bug-log` 结构。
 
