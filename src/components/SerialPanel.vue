@@ -257,10 +257,23 @@ const sendSelectedHistoryItem = async () => {
 const deleteSelectedSendHistory = () => {
   const value = selectedHistoryItem.value || sendHistory.value[0]
   if (!value) return
+
+  const nextSelection = sendHistory.value.find((item) => item !== value) || ''
   const removed = serialStore.removePortSendHistoryItem(props.portPath, value)
-  if (removed && selectedHistoryItem.value === value) {
-    selectedHistoryItem.value = ''
+  if (!removed) return
+
+  selectedHistoryItem.value = nextSelection
+  sendHistoryIndex.value = -1
+  sendHistoryDraft.value = ''
+
+  if (sendingInput.value === value) {
+    sendingInput.value = nextSelection
+    serialStore.setPortSendingData(props.portPath, nextSelection)
   }
+
+  serialStore.addPortLog(props.portPath, nextSelection
+    ? `已删除发送历史，并选中下一条：${nextSelection}`
+    : '已删除最后一条发送历史。', 'info')
 }
 
 const clearSendHistory = () => {
