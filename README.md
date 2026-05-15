@@ -122,25 +122,33 @@ SerialX/
 
 ## 关键组件
 
-- [App.vue](/E:/SerialX/src/App.vue)
+- [App.vue](src/App.vue)
   负责主窗口结构、菜单、主题变量、壁纸层和独立页面入口。
-- [serial.js](/E:/SerialX/src/stores/serial.js)
+- [serial.js](src/stores/serial.js)
   负责串口状态、工作区布局、主题方案、命令持久化和会话恢复。
-- [TerminalView.vue](/E:/SerialX/src/components/TerminalView.vue)
+- [TerminalView.vue](src/components/TerminalView.vue)
   负责多分屏布局、标签拖拽和工作区交互。
-- [TerminalDisplay.vue](/E:/SerialX/src/components/TerminalDisplay.vue)
+- [TerminalDisplay.vue](src/components/TerminalDisplay.vue)
   负责 xterm 终端渲染、搜索、选区、HEX 排版与复制行为。
-- [AppearanceSettingsModal.vue](/E:/SerialX/src/components/AppearanceSettingsModal.vue)
+- [AppearanceSettingsModal.vue](src/components/AppearanceSettingsModal.vue)
   负责主题方案、应用外观、终端外观和壁纸相关设置。
 
 ## 文档约定
 
-- [v0.1.0-plan.md](/E:/SerialX/docs/v0.1.0-plan.md)
+- [v0.1.0-plan.md](docs/v0.1.0-plan.md)
   当前开发周期计划。
-- [v0.1.0-bug-log.md](/E:/SerialX/docs/v0.1.0-bug-log.md)
+- [v0.1.0-bug-log.md](docs/v0.1.0-bug-log.md)
   当前开发周期已修复缺陷记录。
 
 后续版本沿用同样的 `plan + bug-log` 结构。
+
+## 持续迭代与自动追踪
+
+- 当前主线：`v0.1.0` 可用性与发布基线，详见 [v0.1.0-plan.md](docs/v0.1.0-plan.md)。
+- 回归基线：构建、串口基础、终端、HEX、工作区、发送流、外观、辅助窗口和持久化，详见 [v0.1.0-regression-checklist.md](docs/v0.1.0-regression-checklist.md)。
+- 自动追踪：GenericAgent 调度任务 `serialx_followup_every_2h.json` 已按用户要求调整为每 30 分钟复核项目状态，优先只读检查 README / docs / package / git diff，并在必要时提出下一轮小步迭代建议。
+- 下一轮候选：按 [v0.1.0-next-iteration.md](docs/v0.1.0-next-iteration.md) 选择一个低风险验证驱动的小步迭代。
+- 追踪边界：不读取密钥或本地私有配置，不发布、不打包 release，不调用外部 API；功能改动前先确认当前计划和验证基线。
 
 ## 已知边界
 

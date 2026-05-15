@@ -592,17 +592,35 @@ onUnmounted(() => {
       </div>
 
       <div class="send-options">
-        <select
-          v-if="sendHistory.length > 0"
-          class="command-select history-select"
-          :disabled="!isConnected"
-          @change="applyHistoryItem($event.target.value, $event)"
-        >
-          <option value="" selected>最近发送</option>
-          <option v-for="item in sendHistory" :key="item" :value="item">
-            {{ item }}
-          </option>
-        </select>
+        <div v-if="sendHistory.length > 0" class="history-actions">
+          <select
+            class="command-select history-select"
+            :disabled="!isConnected"
+            title="选择最近发送内容填入输入框；输入框内也可用 ↑/↓ 浏览历史"
+            @change="applyHistoryItem($event.target.value, $event)"
+          >
+            <option value="" selected>最近发送</option>
+            <option v-for="item in sendHistory" :key="item" :value="item">
+              {{ item }}
+            </option>
+          </select>
+          <button
+            class="history-action-btn"
+            :disabled="!sendHistory.length"
+            title="删除最近一条发送历史"
+            @click="deleteRecentSendHistory"
+          >
+            删除最近
+          </button>
+          <button
+            class="history-action-btn danger"
+            :disabled="!sendHistory.length"
+            title="清空当前串口的发送历史"
+            @click="clearSendHistory"
+          >
+            清空历史
+          </button>
+        </div>
 
         <select
           v-if="enabledCommands.length > 0"
