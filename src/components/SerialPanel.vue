@@ -116,6 +116,13 @@ const sendStatusSummary = computed(() => {
     summary.push(`历史 ${sendHistory.value.length} 条`)
   }
 
+  const lineEndingLabel = {
+    cr: 'CR',
+    lf: 'LF',
+    crlf: 'CRLF',
+    none: '无追加'
+  }[portControlSettings.value.sendLineEnding] || '无追加'
+  summary.push(`追加 ${lineEndingLabel}`)
   summary.push(`分包 ${portControlSettings.value.packetTimeout} ms`)
 
   return summary.join(' · ')
@@ -208,6 +215,10 @@ const updateLoopFailureLimit = (value) => {
 
 const updatePacketTimeout = (value) => {
   serialStore.updatePortControlSettings(props.portPath, { packetTimeout: Number(value) })
+}
+
+const updateSendLineEnding = (value) => {
+  serialStore.updatePortControlSettings(props.portPath, { sendLineEnding: value })
 }
 
 const executeCommand = (command) => {
@@ -751,6 +762,21 @@ onUnmounted(() => {
       </div>
 
       <div v-if="showAdvancedOptions" class="advanced-options">
+        <label class="interval-group packet-timeout line-ending-group">
+          <span class="interval-label packet-label">发送追加</span>
+          <select
+            class="command-select line-ending-select"
+            :value="portControlSettings.sendLineEnding || 'none'"
+            title="发送时自动在末尾追加换行符；Hex 模式下追加对应字节"
+            @change="updateSendLineEnding($event.target.value)"
+          >
+            <option value="none">无</option>
+            <option value="cr">CR (\r)</option>
+            <option value="lf">LF (\n)</option>
+            <option value="crlf">CRLF (\r\n)</option>
+          </select>
+        </label>
+
         <label class="interval-group packet-timeout">
           <span class="interval-label packet-label">分包超时</span>
           <input

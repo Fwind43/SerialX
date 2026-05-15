@@ -509,6 +509,7 @@ export const useSerialStore = defineStore('serial', () => {
         loopMaxCount: 0,
         loopFailureLimit: 0,
         hexSend: false,
+        sendLineEnding: 'none',
         packetTimeout: 500 // 分包超时时间（毫秒）
       })
     }
@@ -528,6 +529,10 @@ export const useSerialStore = defineStore('serial', () => {
       normalizedUpdates.packetTimeout = Math.max(1, Number(normalizedUpdates.packetTimeout) || 500)
     }
 
+    if ('sendLineEnding' in normalizedUpdates && !['none', 'cr', 'lf', 'crlf'].includes(normalizedUpdates.sendLineEnding)) {
+      normalizedUpdates.sendLineEnding = 'none'
+    }
+
     portControlSettings.value.set(portPath, { ...current, ...normalizedUpdates })
     // 配置变更时自动保存
     saveSessionState()
@@ -538,7 +543,7 @@ export const useSerialStore = defineStore('serial', () => {
       })
     }
 
-    if (portLoopSendTimers.has(portPath) && ('loopInterval' in normalizedUpdates || 'loopStartDelay' in normalizedUpdates || 'loopMaxCount' in normalizedUpdates || 'loopFailureLimit' in normalizedUpdates || 'hexSend' in normalizedUpdates)) {
+    if (portLoopSendTimers.has(portPath) && ('loopInterval' in normalizedUpdates || 'loopStartDelay' in normalizedUpdates || 'loopMaxCount' in normalizedUpdates || 'loopFailureLimit' in normalizedUpdates || 'hexSend' in normalizedUpdates || 'sendLineEnding' in normalizedUpdates)) {
       restartLoopSendForPort(portPath, { preserveCount: true, silent: true })
     }
   }
@@ -1980,6 +1985,27 @@ export const useSerialStore = defineStore('serial', () => {
       .join(' ')
   }
 
+  const getSendLineEndingBytes = (lineEnding = 'none') => {
+    switch (lineEnding) {
+      case 'cr':
+        return [0x0D]
+      case 'lf':
+        return [0x0A]
+      case 'crlf':
+        return [0x0D, 0x0A]
+      default:
+        return []
+    }
+  }
+
+  const appendBytes = (bytes, suffixBytes) => {
+    if (!suffixBytes.length) return bytes
+    const merged = new Uint8Array(bytes.length + suffixBytes.length)
+    merged.set(bytes, 0)
+    merged.set(suffixBytes, bytes.length)
+    return merged
+  }
+
   // Hex 工具函数：验证 Hex 字符串是否有效
   const isValidHex = (hexString) => {
     if (!hexString) return false
@@ -2023,6 +2049,7 @@ export const useSerialStore = defineStore('serial', () => {
     let actualData = dataToSend
     let logData = dataToSend
     let rawBytes = null
+    const lineEndingBytes = getSendLineEndingBytes(getPortControlSettings(targetPort).sendLineEnding)
 
     if (isHex) {
       try {
@@ -2035,7 +2062,7 @@ export const useSerialStore = defineStore('serial', () => {
           addPortLog(targetPort, `发送失败：无效的 Hex 格式，请输入 0-9 和 A-F 字符`, 'error')
           return { success: false, error: '无效的 Hex 格式' }
         }
-        actualData = hexToBytes(hexString)
+        actualData = appendBytes(hexToBytes(hexString), lineEndingBytes)
         rawBytes = Array.from(actualData)
         logData = dataToSend
       } catch (error) {
@@ -2044,7 +2071,9 @@ export const useSerialStore = defineStore('serial', () => {
       }
     } else {
       // 非 Hex 模式也保存原始字节，方便切换查看
-      rawBytes = Array.from(new TextEncoder().encode(dataToSend))
+      const lineEndingText = String.fromCharCode(...lineEndingBytes)
+      actualData = `${dataToSend}${lineEndingText}`
+      rawBytes = Array.from(new TextEncoder().encode(actualData))
     }
 
     try {
