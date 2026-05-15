@@ -77,6 +77,18 @@ const openCommandManager = (cmd = null) => {
 
 const normalizeCommandText = (value) => String(value || '').trim()
 const normalizeCommandGroup = (value) => normalizeCommandText(value) || '默认'
+const normalizeCommandKey = (value) => normalizeCommandText(value).toLowerCase()
+const hasDuplicateCommand = (name, command, group, ignoredId = null) => {
+  const normalizedName = normalizeCommandKey(name)
+  const normalizedCommand = normalizeCommandKey(command)
+  const normalizedGroup = normalizeCommandKey(normalizeCommandGroup(group))
+  return serialStore.commonCommands.some((cmd) => {
+    if (ignoredId !== null && cmd.id === ignoredId) return false
+    return normalizeCommandKey(cmd.name) === normalizedName
+      && normalizeCommandKey(cmd.command) === normalizedCommand
+      && normalizeCommandKey(normalizeCommandGroup(cmd.group)) === normalizedGroup
+  })
+}
 const knownCommandGroups = computed(() => {
   const groups = new Set(['默认'])
   serialStore.commonCommands.forEach((cmd) => {
@@ -92,6 +104,14 @@ const editorValidationMessage = computed(() => {
   if (!normalizedName && !normalizedCommand) return '请输入命令名称和命令内容。'
   if (!normalizedName) return '请输入命令名称。'
   if (!normalizedCommand) return '请输入命令内容。'
+  if (hasDuplicateCommand(
+    normalizedName,
+    normalizedCommand,
+    editingCommand.value.group,
+    isEditing.value ? editingCommand.value.id : null
+  )) {
+    return '已存在相同名称、内容和分组的命令。'
+  }
   return ''
 })
 const canSaveCommand = computed(() => !editorValidationMessage.value)
@@ -131,7 +151,13 @@ const duplicateCommand = (cmd) => {
   const normalizedCommand = normalizeCommandText(cmd?.command)
   const normalizedGroup = normalizeCommandGroup(cmd?.group)
   if (!normalizedName || !normalizedCommand) return
-  serialStore.addCommonCommand(`${normalizedName} 副本`, normalizedCommand, normalizedGroup)
+  let copyName = `${normalizedName} 副本`
+  let copyIndex = 2
+  while (hasDuplicateCommand(copyName, normalizedCommand, normalizedGroup)) {
+    copyName = `${normalizedName} 副本 ${copyIndex}`
+    copyIndex += 1
+  }
+  serialStore.addCommonCommand(copyName, normalizedCommand, normalizedGroup)
 }
 
 const setCommandGroupEnabled = (commands, enabled) => {
