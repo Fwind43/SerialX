@@ -48,7 +48,8 @@ const searchStatusText = computed(() => {
     return '未找到匹配项'
   }
 
-  return `共 ${searchMatchCount.value} 项`
+  const currentIndex = currentMatchIndex.value || 1
+  return `第 ${currentIndex} / 共 ${searchMatchCount.value} 项`
 })
 const isSearchEmpty = computed(() => searchQuery.value && !isSearchPending.value && searchMatchCount.value === 0)
 
