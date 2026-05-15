@@ -59,14 +59,26 @@ const flatCommands = computed(() => (
 
 const hasResults = computed(() => flatCommands.value.length > 0)
 const hasEnabledCommands = computed(() => enabledCommands.value.length > 0)
-const emptyStateTitle = computed(() => (
-  hasEnabledCommands.value ? '未找到匹配的命令' : '暂无可用命令'
-))
-const emptyStateDetail = computed(() => (
-  hasEnabledCommands.value
-    ? '尝试更换关键词，或在常用命令配置中检查分组与命令内容。'
-    : '请先在常用命令配置中添加命令，或启用已保存的命令。'
-))
+const hasSavedCommands = computed(() => serialStore.commonCommands.length > 0)
+const disabledCommandCount = computed(() => serialStore.commonCommands.filter((cmd) => !cmd.enabled).length)
+const emptyStateTitle = computed(() => {
+  if (hasEnabledCommands.value) return '未找到匹配的命令'
+  return hasSavedCommands.value ? '没有已启用的命令' : '暂无可用命令'
+})
+const emptyStateDetail = computed(() => {
+  if (hasEnabledCommands.value) {
+    return '尝试更换关键词，或在常用命令配置中检查分组与命令内容。'
+  }
+  if (hasSavedCommands.value) {
+    return `已保存 ${serialStore.commonCommands.length} 条命令，其中 ${disabledCommandCount.value} 条处于禁用状态；请在常用命令配置中启用后再发送。`
+  }
+  return '请先在常用命令配置中添加命令，或从团队/设备文档复制常用串口指令。'
+})
+const emptyStateTip = computed(() => {
+  if (hasEnabledCommands.value) return '搜索范围：命令名称、内容、分组。'
+  if (hasSavedCommands.value) return '命令面板只显示已启用命令，避免误发送草稿或停用指令。'
+  return '添加后可用 Ctrl/⌘ + K 快速打开命令面板。'
+})
 const currentSelectedCommand = computed(() => flatCommands.value[selectedIndex.value] || null)
 
 const syncSelectedIndex = () => {
@@ -160,6 +172,7 @@ const selectCommand = (cmd) => {
               <span class="no-commands-icon">{{ hasEnabledCommands ? '🔍' : '⚡' }}</span>
               <span class="no-commands-title">{{ emptyStateTitle }}</span>
               <span class="no-commands-text">{{ emptyStateDetail }}</span>
+              <span class="no-commands-tip">{{ emptyStateTip }}</span>
             </div>
           </div>
           <div class="palette-footer">
@@ -335,10 +348,23 @@ const selectCommand = (cmd) => {
 }
 
 .no-commands-text {
-  max-width: 320px;
+  max-width: 340px;
   margin-top: 6px;
   font-size: 12px;
   line-height: 1.5;
+  text-align: center;
+}
+
+.no-commands-tip {
+  max-width: 340px;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--app-chip-border);
+  border-radius: 999px;
+  background: var(--app-chip-bg);
+  color: var(--app-chip-text);
+  font-size: 11px;
+  line-height: 1.4;
   text-align: center;
 }
 
