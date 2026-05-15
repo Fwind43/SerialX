@@ -58,6 +58,17 @@ const searchStatusText = computed(() => {
   const currentIndex = currentMatchIndex.value || 1
   return `第 ${currentIndex} / 共 ${searchMatchCount.value} 项`
 })
+const searchModeSummary = computed(() => {
+  const enabledModes = []
+  if (searchCaseSensitive.value) enabledModes.push('区分大小写')
+  if (searchWholeWord.value) enabledModes.push('全字匹配')
+  if (searchUseRegex.value) enabledModes.push('正则表达式')
+  return enabledModes.length ? `已启用：${enabledModes.join('、')}` : '默认搜索模式'
+})
+const searchResultAnnouncement = computed(() => {
+  const queryText = searchQuery.value ? `关键词：${searchQuery.value}。` : ''
+  return `${queryText}${searchStatusText.value}。${searchModeSummary.value}`
+})
 const isSearchEmpty = computed(() => searchQuery.value && !isSearchPending.value && (searchMatchCount.value === 0 || Boolean(searchError.value)))
 const canNavigateSearchMatches = computed(() => (
   Boolean(searchQuery.value) &&
@@ -1034,6 +1045,7 @@ defineExpose({
             class="search-input"
             placeholder="搜索终端内容..."
             :aria-describedby="`${searchStatusId} ${searchCountId}`"
+            :aria-label="`搜索终端内容，${searchResultAnnouncement}`"
             @keydown.enter.prevent="handleSearchKeyDown"
           />
           <span
@@ -1041,6 +1053,7 @@ defineExpose({
             :class="['search-status', { empty: isSearchEmpty }]"
             role="status"
             aria-live="polite"
+            aria-atomic="true"
           >
             {{ searchStatusText }}
           </span>
