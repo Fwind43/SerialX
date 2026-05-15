@@ -66,6 +66,11 @@ const canNavigateSearchMatches = computed(() => (
   searchMatchCount.value > 0
 ))
 
+const searchElementIdSuffix = computed(() => props.portPath.replace(/[^a-zA-Z0-9_-]/g, '-'))
+const searchInputId = computed(() => `terminal-search-input-${searchElementIdSuffix.value}`)
+const searchStatusId = computed(() => `terminal-search-status-${searchElementIdSuffix.value}`)
+const searchCountId = computed(() => `terminal-search-count-${searchElementIdSuffix.value}`)
+
 const showContextMenu = ref(false)
 const contextMenuPosition = ref({ x: 0, y: 0 })
 const selectedText = ref('')
@@ -1020,16 +1025,23 @@ defineExpose({
     <div v-if="showSearch" class="search-bar">
       <div class="search-widget">
         <div class="search-input-wrapper">
-          <span class="search-chip">查找</span>
+          <label class="search-chip" :for="searchInputId">查找</label>
           <input
+            :id="searchInputId"
             ref="searchInput"
             v-model="searchQuery"
             type="text"
             class="search-input"
             placeholder="搜索终端内容..."
+            :aria-describedby="`${searchStatusId} ${searchCountId}`"
             @keydown.enter.prevent="handleSearchKeyDown"
           />
-          <span :class="['search-status', { empty: isSearchEmpty }]">
+          <span
+            :id="searchStatusId"
+            :class="['search-status', { empty: isSearchEmpty }]"
+            role="status"
+            aria-live="polite"
+          >
             {{ searchStatusText }}
           </span>
           <button
@@ -1037,6 +1049,7 @@ defineExpose({
             type="button"
             :aria-pressed="searchCaseSensitive"
             title="区分大小写"
+            aria-label="切换区分大小写搜索"
             @click="searchCaseSensitive = !searchCaseSensitive"
           >
             Aa
@@ -1046,6 +1059,7 @@ defineExpose({
             type="button"
             :aria-pressed="searchWholeWord"
             title="全字匹配"
+            aria-label="切换全字匹配搜索"
             @click="searchWholeWord = !searchWholeWord"
           >
             W
@@ -1055,18 +1069,25 @@ defineExpose({
             type="button"
             :aria-pressed="searchUseRegex"
             title="正则表达式"
+            aria-label="切换正则表达式搜索"
             @click="searchUseRegex = !searchUseRegex"
           >
             .*
           </button>
           <div class="search-controls">
-            <span class="search-count">
+            <span
+              :id="searchCountId"
+              class="search-count"
+              role="status"
+              aria-live="polite"
+            >
               {{ !searchQuery ? '' : (searchMatchCount > 0 ? `${currentMatchIndex} / ${searchMatchCount}` : '0 / 0') }}
             </span>
             <button
               class="search-btn"
               :disabled="!canNavigateSearchMatches"
               title="上一个匹配 (Shift+Enter / Shift+F3)"
+              aria-label="上一个搜索匹配"
               @click="goToPreviousMatch"
             >
               <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
@@ -1077,13 +1098,14 @@ defineExpose({
               class="search-btn"
               :disabled="!canNavigateSearchMatches"
               title="下一个匹配 (Enter / F3)"
+              aria-label="下一个搜索匹配"
               @click="goToNextMatch"
             >
               <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
                 <path d="M6 9 10 5H2Z" fill="currentColor" />
               </svg>
             </button>
-            <button class="search-btn close" title="关闭 (Esc)" @click="clearSearch">
+            <button class="search-btn close" title="关闭 (Esc)" aria-label="关闭终端搜索" @click="clearSearch">
               <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
                 <path d="M2 2 10 10M10 2 2 10" stroke="currentColor" stroke-width="1.2" />
               </svg>
