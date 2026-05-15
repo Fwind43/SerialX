@@ -12,6 +12,11 @@
 
 项目仍处于快速迭代阶段，`docs/` 目录中维护了最近几个版本的计划和缺陷记录。
 
+- v0.1.0 计划：`docs/v0.1.0-plan.md`
+- v0.1.0 全面 ToDo：`docs/v0.1.0-todo.md`
+- v0.1.0 回归清单：`docs/v0.1.0-regression-checklist.md`
+- v0.1.0 Bug Log：`docs/v0.1.0-bug-log.md`
+
 ## 已实现能力
 
 ### 串口与终端
