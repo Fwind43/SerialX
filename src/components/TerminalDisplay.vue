@@ -89,6 +89,8 @@ const selectedText = ref('')
 let searchDebounceTimer = null
 let resizeDebounceTimer = null
 let resizeObserver = null
+let searchRequestToken = 0
+let activeSearchRequestToken = 0
 
 const portDisplaySettings = computed(() => serialStore.getPortDisplaySettings(props.portPath))
 const portControlSettings = computed(() => serialStore.getPortControlSettings(props.portPath))
@@ -414,6 +416,36 @@ const resetSearchResults = () => {
   isSearchPending.value = false
 }
 
+const beginSearchRequest = () => {
+  searchRequestToken += 1
+  activeSearchRequestToken = searchRequestToken
+  isSearchPending.value = true
+  return activeSearchRequestToken
+}
+
+const settleSearchRequest = (requestToken, found) => {
+  if (requestToken !== activeSearchRequestToken) return
+  if (found) return
+  resetSearchResults()
+}
+
+const runSearch = (direction = 'next') => {
+  if (!searchQuery.value || !terminal || !searchAddon) {
+    resetSearchResults()
+    return
+  }
+
+  const requestToken = beginSearchRequest()
+  const searchOptions = getSearchOptions()
+  const found = direction === 'previous'
+    ? searchAddon.findPrevious(searchQuery.value, searchOptions)
+    : searchAddon.findNext(searchQuery.value, searchOptions)
+
+  nextTick(() => {
+    settleSearchRequest(requestToken, found)
+  })
+}
+
 const isSearchPatternValid = () => {
   if (!searchUseRegex.value || !searchQuery.value) {
     searchError.value = ''
@@ -446,17 +478,14 @@ const refreshSearchResults = () => {
     clearSearchHighlights()
     return
   }
-  isSearchPending.value = true
   nextTick(() => {
-    searchAddon.findNext(searchQuery.value, getSearchOptions())
+    runSearch()
   })
 }
 
 const performSearch = () => {
   if (!terminal || !searchAddon) {
-    searchMatchCount.value = 0
-    currentMatchIndex.value = 0
-    isSearchPending.value = false
+    resetSearchResults()
     return
   }
 
@@ -474,8 +503,7 @@ const performSearch = () => {
   }
 
   clearSearchHighlights()
-  isSearchPending.value = true
-  searchAddon.findNext(searchQuery.value, getSearchOptions())
+  runSearch()
 }
 
 const debouncedSearch = () => {
@@ -488,12 +516,12 @@ const debouncedSearch = () => {
 
 const goToNextMatch = () => {
   if (!canNavigateSearchMatches.value || !terminal || !searchAddon) return
-  searchAddon.findNext(searchQuery.value, getSearchOptions())
+  runSearch()
 }
 
 const goToPreviousMatch = () => {
   if (!canNavigateSearchMatches.value || !terminal || !searchAddon) return
-  searchAddon.findPrevious(searchQuery.value, getSearchOptions())
+  runSearch('previous')
 }
 
 const handleSearchKeyDown = (event) => {
@@ -925,6 +953,11 @@ const initTerminal = () => {
   loadHistoryLogs()
 
   searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
+    if (!searchQuery.value) {
+      resetSearchResults()
+      return
+    }
+
     searchMatchCount.value = resultCount
     currentMatchIndex.value = resultIndex >= 0 ? resultIndex + 1 : 0
     isSearchPending.value = false
