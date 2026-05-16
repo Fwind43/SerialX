@@ -297,58 +297,86 @@ const handleOverlayClick = () => {
       </div>
 
       <transition name="command-editor-pop">
-        <div v-if="showEditModal" class="command-editor-popup" @click.stop>
+        <form
+          v-if="showEditModal"
+          class="command-editor-popup"
+          role="dialog"
+          aria-modal="true"
+          :aria-labelledby="isEditing ? 'command-editor-title-edit' : 'command-editor-title-add'"
+          :aria-describedby="editorValidationMessage ? 'command-editor-validation' : 'command-editor-help'"
+          @submit.prevent="saveCommand"
+          @click.stop
+        >
           <div class="modal-header">
-            <span class="modal-title">{{ isEditing ? '编辑命令' : '添加新命令' }}</span>
-            <button @click="closeEditModal" class="modal-close">✕</button>
+            <span
+              :id="isEditing ? 'command-editor-title-edit' : 'command-editor-title-add'"
+              class="modal-title"
+            >{{ isEditing ? '编辑命令' : '添加新命令' }}</span>
+            <button type="button" @click="closeEditModal" class="modal-close" aria-label="关闭命令编辑器">✕</button>
           </div>
           <div class="modal-body">
-            <div v-if="editorValidationMessage" class="form-alert" role="status">
+            <div
+              v-if="editorValidationMessage"
+              id="command-editor-validation"
+              class="form-alert"
+              role="alert"
+            >
               {{ editorValidationMessage }}
             </div>
+            <div id="command-editor-help" class="form-help">
+              可按 Enter 保存当前命令；保存按钮会在名称、内容重复或为空时保持禁用。
+            </div>
             <div class="form-group">
-              <label>命令名称</label>
+              <label for="command-name-input">命令名称</label>
               <input
+                id="command-name-input"
                 v-model="editingCommand.name"
                 type="text"
                 class="form-input"
                 placeholder="例：复位、状态查询"
+                :aria-invalid="showEditModal && !normalizeCommandText(editingCommand.name) ? 'true' : 'false'"
+                aria-describedby="command-editor-help command-editor-validation"
               />
             </div>
             <div class="form-group">
-              <label>命令内容</label>
+              <label for="command-content-input">命令内容</label>
               <input
+                id="command-content-input"
                 v-model="editingCommand.command"
                 type="text"
                 class="form-input"
                 placeholder="例：RESET、STATUS?"
+                :aria-invalid="showEditModal && !normalizeCommandText(editingCommand.command) ? 'true' : 'false'"
+                aria-describedby="command-editor-help command-editor-validation"
               />
             </div>
             <div class="form-group">
-              <label>命令分组</label>
+              <label for="command-group-input">命令分组</label>
               <input
+                id="command-group-input"
                 v-model="editingCommand.group"
                 type="text"
                 class="form-input"
                 list="command-group-suggestions"
                 placeholder="例：查询、设备控制、自定义"
+                aria-describedby="command-group-hint"
               />
               <datalist id="command-group-suggestions">
                 <option v-for="group in knownCommandGroups" :key="group" :value="group" />
               </datalist>
-              <span class="form-hint">输入新名称可创建分组，或从已有分组中快速选择。</span>
+              <span id="command-group-hint" class="form-hint">输入新名称可创建分组，或从已有分组中快速选择。</span>
             </div>
           </div>
           <div class="modal-footer">
-            <button @click="closeEditModal" class="modal-btn cancel">取消</button>
+            <button type="button" @click="closeEditModal" class="modal-btn cancel">取消</button>
             <button
-              @click="saveCommand"
+              type="submit"
               class="modal-btn save"
               :disabled="!canSaveCommand"
               :title="editorValidationMessage || '保存命令'"
             >保存</button>
           </div>
-        </div>
+        </form>
       </transition>
     </div>
   </div>
@@ -805,6 +833,13 @@ const handleOverlayClick = () => {
   color: var(--app-text);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.form-help {
+  margin: -4px 0 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--app-text-soft);
 }
 
 .form-input {
