@@ -90,6 +90,10 @@ const emptyStateTip = computed(() => {
   return '添加后可用 Ctrl/⌘ + K 快速打开命令面板。'
 })
 const currentSelectedCommand = computed(() => flatCommands.value[selectedIndex.value] || null)
+const paletteListId = 'command-palette-list'
+const selectedCommandOptionId = computed(() => (
+  currentSelectedCommand.value ? `command-option-${currentSelectedCommand.value.id}` : undefined
+))
 
 const scrollSelectedCommandIntoView = async () => {
   await nextTick()
@@ -174,19 +178,36 @@ const selectCommand = (cmd) => {
               type="text"
               class="palette-input"
               placeholder="搜索命令、分组..."
+              role="combobox"
+              aria-label="搜索常用命令"
+              aria-autocomplete="list"
+              :aria-expanded="modelValue"
+              :aria-controls="paletteListId"
+              :aria-activedescendant="selectedCommandOptionId"
               @keydown="handleKeyDown"
             />
           </div>
-          <div ref="paletteBodyRef" class="palette-body">
+          <div
+            :id="paletteListId"
+            ref="paletteBodyRef"
+            class="palette-body"
+            role="listbox"
+            aria-label="常用命令列表"
+          >
             <div v-if="hasResults && !canSendCommand" class="send-blocked-banner" role="status">
               <span class="send-blocked-icon">⚠️</span>
               <span>{{ sendBlockedReason }}</span>
             </div>
             <div v-for="groupBlock in groupedCommands" :key="groupBlock.group" class="command-group">
               <div class="command-group-label">{{ groupBlock.group }}</div>
-              <div
+              <button
                 v-for="cmd in groupBlock.commands"
+                :id="`command-option-${cmd.id}`"
                 :key="cmd.id"
+                type="button"
+                role="option"
+                :aria-selected="currentSelectedCommand?.id === cmd.id"
+                :aria-disabled="!canSendCommand"
                 :data-command-id="cmd.id"
                 :class="['command-item', { selected: currentSelectedCommand?.id === cmd.id, disabled: !canSendCommand }]"
                 :title="canSendCommand ? `发送：${cmd.command}` : sendBlockedReason"
@@ -197,7 +218,7 @@ const selectCommand = (cmd) => {
                 <span class="command-value-wrap">
                   <code class="command-value">{{ cmd.command }}</code>
                 </span>
-              </div>
+              </button>
             </div>
             <div v-if="!hasResults" class="no-commands">
               <span class="no-commands-icon">{{ hasEnabledCommands ? '🔍' : '⚡' }}</span>
