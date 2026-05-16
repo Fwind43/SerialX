@@ -216,6 +216,37 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  const validatePortControlSettingsSnapshot = (settings = {}, message = '控制设置格式无效') => {
+    ensurePlainSettingsObject(settings, message)
+
+    Object.entries(settings).forEach(([portPath, control]) => {
+      if (typeof portPath !== 'string' || !portPath) {
+        throw new Error(message)
+      }
+      ensurePlainSettingsObject(control, message)
+
+      ;['isAutoScroll', 'isLoopSend', 'hexSend'].forEach((key) => {
+        if (key in control && typeof control[key] !== 'boolean') {
+          throw new Error(message)
+        }
+      })
+
+      ;['loopInterval', 'loopStartDelay', 'loopMaxCount', 'loopFailureLimit', 'packetTimeout'].forEach((key) => {
+        if (key in control) {
+          const value = Number(control[key])
+          const allowZero = key === 'loopStartDelay' || key === 'loopMaxCount' || key === 'loopFailureLimit'
+          if (!Number.isFinite(value) || value < (allowZero ? 0 : 1)) {
+            throw new Error(message)
+          }
+        }
+      })
+
+      if ('sendLineEnding' in control && !['none', 'cr', 'lf', 'crlf'].includes(control.sendLineEnding)) {
+        throw new Error(message)
+      }
+    })
+  }
+
   const normalizeWorkspaceLayout = (layout = createDefaultWorkspaceLayout(), options = {}) => {
     const { strict = false } = options
     const fail = (message) => {
@@ -1328,7 +1359,7 @@ export const useSerialStore = defineStore('serial', () => {
     }
 
     if (snapshot.portControlSettings) {
-      ensurePlainSettingsObject(snapshot.portControlSettings, '控制设置格式无效')
+      validatePortControlSettingsSnapshot(snapshot.portControlSettings, '控制设置格式无效')
     }
 
     if (snapshot.portFilters) {
