@@ -13,6 +13,7 @@ const serialStore = useSerialStore()
 const searchQuery = ref('')
 const selectedIndex = ref(0)
 const inputRef = ref(null)
+const paletteBodyRef = ref(null)
 
 const enabledCommands = computed(() => serialStore.getEnabledCommands)
 const selectedPort = computed(() => serialStore.selectedPort || '')
@@ -90,6 +91,15 @@ const emptyStateTip = computed(() => {
 })
 const currentSelectedCommand = computed(() => flatCommands.value[selectedIndex.value] || null)
 
+const scrollSelectedCommandIntoView = async () => {
+  await nextTick()
+  const selectedCommand = currentSelectedCommand.value
+  if (!selectedCommand || !paletteBodyRef.value) return
+
+  const selectedElement = paletteBodyRef.value.querySelector(`[data-command-id="${selectedCommand.id}"]`)
+  selectedElement?.scrollIntoView({ block: 'nearest' })
+}
+
 const syncSelectedIndex = () => {
   if (!flatCommands.value.length) {
     selectedIndex.value = 0
@@ -101,11 +111,15 @@ const syncSelectedIndex = () => {
   }
 }
 
-watch(searchQuery, () => {
+watch(searchQuery, async () => {
   selectedIndex.value = 0
+  await scrollSelectedCommandIntoView()
 })
 
-watch(flatCommands, syncSelectedIndex)
+watch(flatCommands, () => {
+  syncSelectedIndex()
+  scrollSelectedCommandIntoView()
+})
 
 watch(() => props.modelValue, async (newVal) => {
   if (newVal) {
@@ -121,10 +135,12 @@ const handleKeyDown = (e) => {
     e.preventDefault()
     if (!flatCommands.value.length) return
     selectedIndex.value = (selectedIndex.value + 1) % flatCommands.value.length
+    scrollSelectedCommandIntoView()
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
     if (!flatCommands.value.length) return
     selectedIndex.value = (selectedIndex.value - 1 + flatCommands.value.length) % flatCommands.value.length
+    scrollSelectedCommandIntoView()
   } else if (e.key === 'Enter') {
     e.preventDefault()
     sendCommand(currentSelectedCommand.value)
@@ -161,7 +177,7 @@ const selectCommand = (cmd) => {
               @keydown="handleKeyDown"
             />
           </div>
-          <div class="palette-body">
+          <div ref="paletteBodyRef" class="palette-body">
             <div v-if="hasResults && !canSendCommand" class="send-blocked-banner" role="status">
               <span class="send-blocked-icon">⚠️</span>
               <span>{{ sendBlockedReason }}</span>
@@ -171,6 +187,7 @@ const selectCommand = (cmd) => {
               <div
                 v-for="cmd in groupBlock.commands"
                 :key="cmd.id"
+                :data-command-id="cmd.id"
                 :class="['command-item', { selected: currentSelectedCommand?.id === cmd.id, disabled: !canSendCommand }]"
                 :title="canSendCommand ? `发送：${cmd.command}` : sendBlockedReason"
                 @click="selectCommand(cmd)"
