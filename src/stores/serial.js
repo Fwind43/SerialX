@@ -208,6 +208,71 @@ export const useSerialStore = defineStore('serial', () => {
     splitPanes: [{ tabs: [], activeTab: '' }],
     paneWidths: []
   })
+  const normalizeWorkspaceLayout = (layout = createDefaultWorkspaceLayout(), options = {}) => {
+    const { strict = false } = options
+    const fail = (message) => {
+      if (strict) throw new Error(message)
+      return null
+    }
+
+    if (!layout || typeof layout !== 'object' || Array.isArray(layout)) {
+      fail('工作区布局格式无效')
+      return createDefaultWorkspaceLayout()
+    }
+
+    const sourcePanes = Array.isArray(layout.splitPanes) && layout.splitPanes.length
+      ? layout.splitPanes
+      : createDefaultWorkspaceLayout().splitPanes
+
+    const splitPanes = sourcePanes
+      .map((pane) => {
+        if (!pane || typeof pane !== 'object' || Array.isArray(pane)) {
+          return fail('工作区分屏格式无效')
+        }
+
+        if ('tabs' in pane && !Array.isArray(pane.tabs)) {
+          return fail('工作区标签页格式无效')
+        }
+        if ('activeTab' in pane && typeof pane.activeTab !== 'string') {
+          return fail('工作区活动标签格式无效')
+        }
+
+        const tabs = Array.isArray(pane.tabs)
+          ? pane.tabs.filter((tab) => typeof tab === 'string' && tab)
+          : []
+        if (strict && Array.isArray(pane.tabs) && tabs.length !== pane.tabs.length) {
+          return fail('工作区标签页格式无效')
+        }
+
+        const requestedActiveTab = typeof pane.activeTab === 'string' ? pane.activeTab : ''
+        const activeTab = requestedActiveTab && tabs.includes(requestedActiveTab)
+          ? requestedActiveTab
+          : (tabs[0] || '')
+
+        return { tabs, activeTab }
+      })
+      .filter(Boolean)
+
+    const normalizedPanes = splitPanes.length ? splitPanes : createDefaultWorkspaceLayout().splitPanes
+
+    if ('paneWidths' in layout && !Array.isArray(layout.paneWidths)) {
+      fail('工作区分屏宽度格式无效')
+    }
+    const paneWidths = Array.isArray(layout.paneWidths)
+      ? layout.paneWidths
+          .map((width) => Number(width))
+          .filter((width) => Number.isFinite(width) && width > 0)
+          .slice(0, normalizedPanes.length)
+      : []
+    if (strict && Array.isArray(layout.paneWidths) && paneWidths.length !== layout.paneWidths.length) {
+      fail('工作区分屏宽度格式无效')
+    }
+
+    return {
+      splitPanes: normalizedPanes,
+      paneWidths
+    }
+  }
   const createDefaultSavedWorkspaceSnapshots = () => []
   const createDefaultAutoLogSettings = () => ({
     enabled: true,
@@ -922,21 +987,7 @@ export const useSerialStore = defineStore('serial', () => {
   }
 
   const updateWorkspaceLayout = (layout = {}) => {
-    const nextPanes = Array.isArray(layout.splitPanes) && layout.splitPanes.length
-      ? layout.splitPanes.map((pane) => ({
-          tabs: Array.isArray(pane?.tabs) ? [...pane.tabs] : [],
-          activeTab: typeof pane?.activeTab === 'string' ? pane.activeTab : ''
-        }))
-      : createDefaultWorkspaceLayout().splitPanes
-
-    const nextWidths = Array.isArray(layout.paneWidths)
-      ? layout.paneWidths.map((width) => Number(width) || 0).filter((width) => width > 0)
-      : []
-
-    workspaceLayout.value = {
-      splitPanes: nextPanes,
-      paneWidths: nextWidths
-    }
+    workspaceLayout.value = normalizeWorkspaceLayout(layout)
     saveSessionState()
   }
 
@@ -1244,8 +1295,8 @@ export const useSerialStore = defineStore('serial', () => {
       throw new Error(`工作区快照版本过高，当前仅支持 v${WORKSPACE_SNAPSHOT_VERSION}`)
     }
 
-    if (snapshot.workspaceLayout && typeof snapshot.workspaceLayout !== 'object') {
-      throw new Error('工作区布局格式无效')
+    if (snapshot.workspaceLayout) {
+      normalizeWorkspaceLayout(snapshot.workspaceLayout, { strict: true })
     }
 
     if ('selectedPort' in snapshot && snapshot.selectedPort !== null && typeof snapshot.selectedPort !== 'string') {
@@ -1288,10 +1339,7 @@ export const useSerialStore = defineStore('serial', () => {
   const applyWorkspaceSnapshot = async (snapshot = {}) => {
     validateWorkspaceSnapshot(snapshot)
 
-    workspaceLayout.value = {
-      ...createDefaultWorkspaceLayout(),
-      ...(snapshot.workspaceLayout || {})
-    }
+    workspaceLayout.value = normalizeWorkspaceLayout(snapshot.workspaceLayout)
     selectedPort.value = typeof snapshot.selectedPort === 'string' ? snapshot.selectedPort : null
     appUiState.value = buildAppUiStateWithThemeScheme({
       ...createDefaultAppUiState(),
@@ -1352,8 +1400,8 @@ export const useSerialStore = defineStore('serial', () => {
       throw new Error('工作区快照列表格式无效')
     }
 
-    if (snapshot.workspaceLayout && typeof snapshot.workspaceLayout !== 'object') {
-      throw new Error('工作区布局格式无效')
+    if (snapshot.workspaceLayout) {
+      normalizeWorkspaceLayout(snapshot.workspaceLayout, { strict: true })
     }
 
     if ('selectedPort' in snapshot && snapshot.selectedPort !== null && typeof snapshot.selectedPort !== 'string') {
@@ -1394,10 +1442,7 @@ export const useSerialStore = defineStore('serial', () => {
     terminalAppearance.value = resolveTerminalAppearanceForMode(nextAppUiState.activeThemeSchemeId, snapshot.terminalAppearance || {})
     customAppearancePresets.value = normalizeCustomAppearancePresets(snapshot.customAppearancePresets)
     savedWorkspaceSnapshots.value = normalizeSavedWorkspaceSnapshots(snapshot.savedWorkspaceSnapshots)
-    workspaceLayout.value = {
-      ...createDefaultWorkspaceLayout(),
-      ...(snapshot.workspaceLayout || {})
-    }
+    workspaceLayout.value = normalizeWorkspaceLayout(snapshot.workspaceLayout)
     selectedPort.value = typeof snapshot.selectedPort === 'string' ? snapshot.selectedPort : null
     appUiState.value = nextAppUiState
     syncWorkspaceSnapshotSelection()
@@ -1507,10 +1552,7 @@ export const useSerialStore = defineStore('serial', () => {
           )
         }
         if (state.workspaceLayout) {
-          workspaceLayout.value = {
-            ...createDefaultWorkspaceLayout(),
-            ...state.workspaceLayout
-          }
+          workspaceLayout.value = normalizeWorkspaceLayout(state.workspaceLayout)
         }
         if (typeof state.selectedPort === 'string' || state.selectedPort === null) {
           selectedPort.value = state.selectedPort
