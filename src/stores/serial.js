@@ -2059,10 +2059,12 @@ export const useSerialStore = defineStore('serial', () => {
     if (!/^[0-9A-F]+$/.test(cleanHex)) {
       throw new Error('无效的 Hex 格式')
     }
-    const paddedHex = cleanHex.length % 2 === 1 ? '0' + cleanHex : cleanHex
-    const bytes = new Uint8Array(paddedHex.length / 2)
-    for (let i = 0; i < paddedHex.length; i += 2) {
-      bytes[i / 2] = parseInt(paddedHex.substr(i, 2), 16)
+    if (cleanHex.length % 2 !== 0) {
+      throw new Error('Hex 数据必须为偶数位')
+    }
+    const bytes = new Uint8Array(cleanHex.length / 2)
+    for (let i = 0; i < cleanHex.length; i += 2) {
+      bytes[i / 2] = parseInt(cleanHex.substr(i, 2), 16)
     }
     return bytes
   }
@@ -2100,7 +2102,7 @@ export const useSerialStore = defineStore('serial', () => {
   const isValidHex = (hexString) => {
     if (!hexString) return false
     const cleanHex = hexString.replace(/[\s,-]/g, '').toUpperCase()
-    return cleanHex.length > 0 && /^[0-9A-F]+$/.test(cleanHex)
+    return cleanHex.length > 0 && cleanHex.length % 2 === 0 && /^[0-9A-F]+$/.test(cleanHex)
   }
 
   // 字节转字符串（支持 ASCII 和 UTF-8 中文）
