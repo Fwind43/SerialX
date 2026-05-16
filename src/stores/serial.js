@@ -208,6 +208,14 @@ export const useSerialStore = defineStore('serial', () => {
     splitPanes: [{ tabs: [], activeTab: '' }],
     paneWidths: []
   })
+  const isPlainSettingsObject = (value) => value && typeof value === 'object' && !Array.isArray(value)
+
+  const ensurePlainSettingsObject = (value, message) => {
+    if (!isPlainSettingsObject(value)) {
+      throw new Error(message)
+    }
+  }
+
   const normalizeWorkspaceLayout = (layout = createDefaultWorkspaceLayout(), options = {}) => {
     const { strict = false } = options
     const fail = (message) => {
@@ -1303,36 +1311,36 @@ export const useSerialStore = defineStore('serial', () => {
       throw new Error('当前串口字段格式无效')
     }
 
-    if (snapshot.appUiState && typeof snapshot.appUiState !== 'object') {
-      throw new Error('界面状态格式无效')
+    if (snapshot.appUiState) {
+      ensurePlainSettingsObject(snapshot.appUiState, '界面状态格式无效')
     }
 
-    if (snapshot.defaultSettings && typeof snapshot.defaultSettings !== 'object') {
-      throw new Error('默认串口参数格式无效')
+    if (snapshot.defaultSettings) {
+      ensurePlainSettingsObject(snapshot.defaultSettings, '默认串口参数格式无效')
     }
 
-    if (snapshot.defaultPortDisplaySettings && typeof snapshot.defaultPortDisplaySettings !== 'object') {
-      throw new Error('默认显示设置格式无效')
+    if (snapshot.defaultPortDisplaySettings) {
+      ensurePlainSettingsObject(snapshot.defaultPortDisplaySettings, '默认显示设置格式无效')
     }
 
-    if (snapshot.portDisplaySettings && typeof snapshot.portDisplaySettings !== 'object') {
-      throw new Error('显示设置格式无效')
+    if (snapshot.portDisplaySettings) {
+      ensurePlainSettingsObject(snapshot.portDisplaySettings, '显示设置格式无效')
     }
 
-    if (snapshot.portControlSettings && typeof snapshot.portControlSettings !== 'object') {
-      throw new Error('控制设置格式无效')
+    if (snapshot.portControlSettings) {
+      ensurePlainSettingsObject(snapshot.portControlSettings, '控制设置格式无效')
     }
 
-    if (snapshot.portFilters && typeof snapshot.portFilters !== 'object') {
-      throw new Error('过滤设置格式无效')
+    if (snapshot.portFilters) {
+      ensurePlainSettingsObject(snapshot.portFilters, '过滤设置格式无效')
     }
 
-    if (snapshot.portSendingData && typeof snapshot.portSendingData !== 'object') {
-      throw new Error('发送草稿格式无效')
+    if (snapshot.portSendingData) {
+      ensurePlainSettingsObject(snapshot.portSendingData, '发送草稿格式无效')
     }
 
-    if (snapshot.portSendHistory && typeof snapshot.portSendHistory !== 'object') {
-      throw new Error('发送历史格式无效')
+    if (snapshot.portSendHistory) {
+      ensurePlainSettingsObject(snapshot.portSendHistory, '发送历史格式无效')
     }
   }
 
@@ -1372,24 +1380,28 @@ export const useSerialStore = defineStore('serial', () => {
       throw new Error(`设置文件版本过高，当前仅支持 v${SETTINGS_SNAPSHOT_VERSION}`)
     }
 
-    if (snapshot.defaultSettings && typeof snapshot.defaultSettings !== 'object') {
-      throw new Error('默认串口参数格式无效')
+    if (snapshot.defaultSettings) {
+      ensurePlainSettingsObject(snapshot.defaultSettings, '默认串口参数格式无效')
     }
 
-    if (snapshot.portDisplaySettings && typeof snapshot.portDisplaySettings !== 'object') {
-      throw new Error('显示设置格式无效')
+    if (snapshot.defaultPortDisplaySettings) {
+      ensurePlainSettingsObject(snapshot.defaultPortDisplaySettings, '默认显示设置格式无效')
     }
 
-    if (snapshot.portControlSettings && typeof snapshot.portControlSettings !== 'object') {
-      throw new Error('控制设置格式无效')
+    if (snapshot.portDisplaySettings) {
+      ensurePlainSettingsObject(snapshot.portDisplaySettings, '显示设置格式无效')
     }
 
-    if (snapshot.terminalAppearance && typeof snapshot.terminalAppearance !== 'object') {
-      throw new Error('终端外观设置格式无效')
+    if (snapshot.portControlSettings) {
+      ensurePlainSettingsObject(snapshot.portControlSettings, '控制设置格式无效')
     }
 
-    if (snapshot.appTheme && typeof snapshot.appTheme !== 'object') {
-      throw new Error('应用主题设置格式无效')
+    if (snapshot.terminalAppearance) {
+      ensurePlainSettingsObject(snapshot.terminalAppearance, '终端外观设置格式无效')
+    }
+
+    if (snapshot.appTheme) {
+      ensurePlainSettingsObject(snapshot.appTheme, '应用主题设置格式无效')
     }
 
     if (snapshot.customAppearancePresets && !Array.isArray(snapshot.customAppearancePresets)) {
@@ -1408,16 +1420,16 @@ export const useSerialStore = defineStore('serial', () => {
       throw new Error('当前串口字段格式无效')
     }
 
-    if (snapshot.appUiState && typeof snapshot.appUiState !== 'object') {
-      throw new Error('界面状态格式无效')
+    if (snapshot.appUiState) {
+      ensurePlainSettingsObject(snapshot.appUiState, '界面状态格式无效')
     }
 
     if (snapshot.commonCommands && !Array.isArray(snapshot.commonCommands)) {
       throw new Error('常用命令配置格式无效')
     }
 
-    if (snapshot.autoLogSettings && typeof snapshot.autoLogSettings !== 'object') {
-      throw new Error('自动日志配置格式无效')
+    if (snapshot.autoLogSettings) {
+      ensurePlainSettingsObject(snapshot.autoLogSettings, '自动日志配置格式无效')
     }
   }
 
