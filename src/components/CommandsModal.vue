@@ -62,6 +62,17 @@ const emptyStateDetail = computed(() => (
     ? '请尝试搜索命令名称、内容或分组中的其他关键词。'
     : '点击下方“添加新命令”创建常用命令，之后可在命令面板快速发送。'
 ))
+const emptyStateTips = computed(() => (
+  normalizedSearchQuery.value
+    ? [
+      '检查是否输入了分组名，例如“查询”或“设备控制”。',
+      '也可以清空搜索，查看全部已保存命令。'
+    ]
+    : [
+      '建议先添加只读查询命令，例如 STATUS? 或 VER。',
+      '为危险操作单独分组，保存后可先禁用避免误发。'
+    ]
+))
 
 // 编辑弹窗显示状态
 const showEditModal = computed(() => {
@@ -218,6 +229,9 @@ const handleOverlayClick = () => {
             <span class="empty-state-icon">{{ normalizedSearchQuery ? '🔍' : '⚡' }}</span>
             <span class="empty-state-title">{{ emptyStateTitle }}</span>
             <span class="empty-state-detail">{{ emptyStateDetail }}</span>
+            <ul class="empty-state-tips">
+              <li v-for="tip in emptyStateTips" :key="tip">{{ tip }}</li>
+            </ul>
           </div>
           <div v-for="groupBlock in groupedCommands" :key="groupBlock.group" class="command-group">
             <div class="command-group-header">
@@ -570,6 +584,24 @@ const handleOverlayClick = () => {
 .empty-state-detail {
   max-width: 360px;
   line-height: 1.5;
+}
+
+.empty-state-tips {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 420px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--app-text-soft);
+  line-height: 1.45;
+}
+
+.empty-state-tips li::before {
+  content: '•';
+  margin-right: 6px;
+  color: var(--app-accent);
 }
 
 .command-group {
