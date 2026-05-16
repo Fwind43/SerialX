@@ -49,6 +49,10 @@ const connectedPorts = computed(() => {
 })
 
 const allTabs = computed(() => splitPanes.value.flatMap((pane) => pane.tabs))
+const availableUnassignedPorts = computed(() => {
+  const assignedTabs = new Set(allTabs.value)
+  return connectedPorts.value.filter((port) => !assignedTabs.has(port))
+})
 const tabContextMenuPane = computed(() => splitPanes.value[tabContextMenu.value.paneIndex] || null)
 const tabContextMenuPortIndex = computed(() => (
   tabContextMenuPane.value ? tabContextMenuPane.value.tabs.indexOf(tabContextMenu.value.port) : -1
@@ -336,6 +340,20 @@ watch(paneWidths, (widths) => {
 const selectTab = (paneIndex, port) => {
   splitPanes.value[paneIndex].activeTab = port
   serialStore.selectedPort = port
+}
+
+const assignPortToPane = (paneIndex, port) => {
+  const pane = splitPanes.value[paneIndex]
+  if (!pane || !connectedPorts.value.includes(port)) return
+
+  removeTabFromPanes(port)
+  const targetPane = splitPanes.value[paneIndex]
+  if (!targetPane) return
+
+  if (!targetPane.tabs.includes(port)) {
+    targetPane.tabs.push(port)
+  }
+  selectTab(paneIndex, port)
 }
 
 const removeTabFromPanes = (port) => {
@@ -900,7 +918,18 @@ onUnmounted(() => {
             <div v-else class="empty-state">
               <span class="empty-icon">◎</span>
               <p>这个面板还没有串口</p>
-              <span class="empty-hint">连接设备后会自动出现在这里，也可以拖拽标签重新排布。</span>
+              <span class="empty-hint">连接设备后会自动出现在这里，也可以从下方选择已连接串口放入当前面板。</span>
+              <div v-if="availableUnassignedPorts.length" class="empty-port-actions">
+                <button
+                  v-for="port in availableUnassignedPorts"
+                  :key="`empty-${paneIndex}-${port}`"
+                  class="empty-port-btn"
+                  @click="assignPortToPane(paneIndex, port)"
+                >
+                  放入 {{ port }}
+                </button>
+              </div>
+              <span v-else-if="connectedPorts.length" class="empty-hint subtle">所有已连接串口都已在其他面板中显示，可拖拽标签调整布局。</span>
               <button class="delete-empty-btn" @click="removeEmptyPane(paneIndex)">
                 删除空面板
               </button>
@@ -1234,6 +1263,36 @@ onUnmounted(() => {
 .empty-hint {
   max-width: 340px;
   line-height: 1.6;
+}
+
+.empty-hint.subtle {
+  font-size: 12px;
+  opacity: 0.78;
+}
+
+.empty-port-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 380px;
+}
+
+.empty-port-btn {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border, rgba(148, 163, 184, 0.35));
+  background: var(--app-chip-bg);
+  color: var(--app-text);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.empty-port-btn:hover {
+  border-color: var(--app-accent);
+  color: var(--app-accent);
+  transform: translateY(-1px);
 }
 
 .delete-empty-btn {
