@@ -451,7 +451,7 @@ const openTabContextMenu = async (event, paneIndex, port) => {
   clampTabContextMenuPosition()
 }
 
-const moveTabToNewPane = (paneIndex, port) => {
+const moveTabToNewPane = (paneIndex, port, direction = 'right') => {
   const sourcePane = splitPanes.value[paneIndex]
   if (!sourcePane || !sourcePane.tabs.includes(port)) {
     closeTabContextMenu()
@@ -463,6 +463,7 @@ const moveTabToNewPane = (paneIndex, port) => {
     return
   }
 
+  const insertOnLeft = direction === 'left'
   const sourcePaneElement = paneRefs.value[paneIndex]
   const sourcePaneWidth = sourcePaneElement?.offsetWidth || 0
   const sourceTabIndex = sourcePane.tabs.indexOf(port)
@@ -476,7 +477,8 @@ const moveTabToNewPane = (paneIndex, port) => {
     sourcePane.activeTab = sourcePane.tabs[0] || ''
   }
 
-  splitPanes.value.splice(paneIndex + 1, 0, {
+  const insertIndex = insertOnLeft ? paneIndex : paneIndex + 1
+  splitPanes.value.splice(insertIndex, 0, {
     tabs: [port],
     activeTab: port
   })
@@ -488,12 +490,12 @@ const moveTabToNewPane = (paneIndex, port) => {
     const primaryWidth = Math.max(MIN_PANE_WIDTH, Math.floor(sourcePaneWidth / 2))
     const splitWidth = Math.max(MIN_PANE_WIDTH, sourcePaneWidth - primaryWidth)
     nextWidths[paneIndex] = primaryWidth
-    nextWidths.splice(paneIndex + 1, 0, splitWidth)
+    nextWidths.splice(insertIndex, 0, splitWidth)
     applyPaneWidths(nextWidths, splitPanes.value.length)
   }
 
   if (sourcePane.tabs.length === 0 && splitPanes.value.length > 1) {
-    removePaneAndWidth(paneIndex)
+    removePaneAndWidth(insertOnLeft ? paneIndex + 1 : paneIndex)
   }
 
   serialStore.selectedPort = port
@@ -947,8 +949,11 @@ onUnmounted(() => {
         :style="{ left: `${tabContextMenu.x}px`, top: `${tabContextMenu.y}px` }"
         @click.stop
       >
-        <button class="tab-context-item" :disabled="!canMoveTabToNewPane" @click="moveTabToNewPane(tabContextMenu.paneIndex, tabContextMenu.port)">
-          移动到新分屏
+        <button class="tab-context-item" :disabled="!canMoveTabToNewPane" @click="moveTabToNewPane(tabContextMenu.paneIndex, tabContextMenu.port, 'left')">
+          移动到左侧新分屏
+        </button>
+        <button class="tab-context-item" :disabled="!canMoveTabToNewPane" @click="moveTabToNewPane(tabContextMenu.paneIndex, tabContextMenu.port, 'right')">
+          移动到右侧新分屏
         </button>
         <button class="tab-context-item" :disabled="!canCloseTabsToRight" @click="closeTabsToRight(tabContextMenu.paneIndex, tabContextMenu.port)">
           关闭右侧标签
