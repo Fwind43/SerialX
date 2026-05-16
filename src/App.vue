@@ -430,7 +430,7 @@ const cancelResetAllSettings = () => {
   showResetConfirm.value = false
 }
 
-const handleSendCommand = (event) => {
+const handleSendCommand = async (event) => {
   const command = event.detail
   if (!command) return
 
@@ -441,7 +441,12 @@ const handleSendCommand = (event) => {
   }
 
   serialStore.setPortSendingData(portPath, command)
-  serialStore.sendData(portPath)
+  const result = await serialStore.sendData(portPath)
+  if (result?.success) {
+    showSettingsMessage(`快捷命令已发送到 ${portPath}`, 'success', '发送成功')
+  } else if (result?.error) {
+    showSettingsMessage(result.error, 'error', '发送失败')
+  }
 }
 
 const handleClickOutside = (event) => {
