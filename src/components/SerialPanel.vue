@@ -324,7 +324,9 @@ const clearSendHistory = () => {
   const historyCount = sendHistory.value.length
   if (!historyCount) return
 
-  const confirmed = window.confirm(`确定清空当前串口的 ${historyCount} 条发送历史吗？此操作不可撤销。`)
+  const confirmed = window.confirm(
+    `确定清空 ${props.portPath} 的 ${historyCount} 条发送历史吗？此操作不可撤销，并会清空当前发送输入草稿。`
+  )
   if (!confirmed) return
 
   serialStore.clearPortSendHistory(props.portPath)
@@ -333,7 +335,7 @@ const clearSendHistory = () => {
   sendHistoryDraft.value = ''
   sendingInput.value = ''
   serialStore.setPortSendingData(props.portPath, '')
-  serialStore.addPortLog(props.portPath, `已清空 ${historyCount} 条发送历史。`, 'info')
+  serialStore.addPortLog(props.portPath, `已清空 ${historyCount} 条发送历史，并清空发送输入草稿。`, 'info')
 }
 
 const handleClearLogs = () => {
