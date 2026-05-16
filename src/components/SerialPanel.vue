@@ -103,6 +103,18 @@ const isHexInputValid = computed(() => {
   return serialStore.isValidHex(data)
 })
 
+const hexInputErrorMessage = computed(() => {
+  if (!portControlSettings.value.hexSend || !sendingInput.value || isHexInputValid.value) return ''
+  return 'HEX 发送内容无效：请使用偶数位十六进制字符，可用空格分隔（例如 AA 55 0D 0A）'
+})
+
+const sendButtonTitle = computed(() => {
+  if (!isConnected.value) return '请先连接串口后再发送'
+  if (!sendingInput.value) return '请输入要发送的内容'
+  if (hexInputErrorMessage.value) return hexInputErrorMessage.value
+  return '发送当前输入内容'
+})
+
 const isSendDisabled = computed(() => {
   const data = sendingInput.value
   if (!isConnected.value) return true
@@ -686,13 +698,19 @@ onUnmounted(() => {
           class="send-input"
           :class="{ 'hex-invalid': portControlSettings.hexSend && !isHexInputValid, 'send-error': !!sendErrorMessage }"
           :placeholder="portControlSettings.hexSend ? hexPlaceholder : textPlaceholder"
+          :aria-invalid="!!hexInputErrorMessage"
+          :title="hexInputErrorMessage || ''"
           @input="handleSendingInput($event.target.value)"
           @keydown="handleSendingKeyDown"
           @blur="flushSendingInput"
         />
-        <button class="send-button" :disabled="isSendDisabled" @click="handleSend">
+        <button class="send-button" :disabled="isSendDisabled" :title="sendButtonTitle" @click="handleSend">
           发送
         </button>
+      </div>
+
+      <div v-if="hexInputErrorMessage" class="send-feedback notice error hex-input-error">
+        {{ hexInputErrorMessage }}
       </div>
 
       <div class="send-options">
