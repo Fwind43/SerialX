@@ -1188,12 +1188,12 @@ export const useSerialStore = defineStore('serial', () => {
   const normalizeSavedWorkspaceSnapshots = (snapshots = []) => (
     Array.isArray(snapshots)
       ? snapshots
-          .filter((item) => item && typeof item === 'object')
+          .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
           .map((item) => ({
             id: typeof item.id === 'string' && item.id ? item.id : `workspace-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : '未命名工作区',
             createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
-            snapshot: item.snapshot && typeof item.snapshot === 'object' ? item.snapshot : buildWorkspaceSnapshot()
+            snapshot: item.snapshot && typeof item.snapshot === 'object' && !Array.isArray(item.snapshot) ? item.snapshot : buildWorkspaceSnapshot()
           }))
       : []
   )
