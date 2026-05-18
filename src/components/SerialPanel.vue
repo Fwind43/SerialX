@@ -18,6 +18,7 @@ const sendErrorMessage = ref('')
 const sendSuccessMessage = ref('')
 const sendHistoryIndex = ref(-1)
 const sendHistoryDraft = ref('')
+const sendHistorySearch = ref('')
 const sendingInput = ref('')
 let sendFeedbackTimer = null
 let sendInputSyncTimer = null
@@ -33,10 +34,16 @@ const currentSendingData = computed(() => serialStore.getPortSendingData(props.p
 const themeMode = computed(() => serialStore.appUiState?.themeMode || 'dark')
 const enabledCommands = computed(() => serialStore.getEnabledCommands)
 const sendHistory = computed(() => serialStore.getPortSendHistory(props.portPath))
+const sendHistoryListId = computed(() => `send-history-list-${props.portPath.replace(/[^a-zA-Z0-9_-]/g, '-')}`)
+const filteredSendHistory = computed(() => {
+  const keyword = sendHistorySearch.value.trim().toLowerCase()
+  if (!keyword) return sendHistory.value
+  return sendHistory.value.filter((item) => item.toLowerCase().includes(keyword))
+})
 const selectedHistoryItem = ref('')
 const sendHistoryLimit = computed(() => serialStore.sendHistoryLimit)
 const sendHistoryLabel = computed(() => `最近发送 ${sendHistory.value.length}/${sendHistoryLimit.value}`)
-const pinnedSendHistory = computed(() => sendHistory.value.slice(0, 3))
+const pinnedSendHistory = computed(() => filteredSendHistory.value.slice(0, 3))
 const selectedHistoryValue = computed(() => selectedHistoryItem.value || sendHistory.value[0] || '')
 const selectedHistoryIndexLabel = computed(() => {
   const value = selectedHistoryValue.value
@@ -297,6 +304,7 @@ const applyHistoryItem = (value, event = null) => {
   serialStore.clearPortNotice(props.portPath)
   sendHistoryIndex.value = -1
   sendHistoryDraft.value = ''
+  sendHistorySearch.value = ''
 
   if (event?.target) {
     event.target.value = value
@@ -308,6 +316,19 @@ const sendSelectedHistoryItem = async () => {
   if (!value || isHistorySendDisabled.value) return
   applyHistoryItem(value)
   await handleSend()
+}
+
+const updateSendHistorySearch = (value) => {
+  sendHistorySearch.value = value
+  const exactMatch = sendHistory.value.find((item) => item === value)
+  if (exactMatch) {
+    applyHistoryItem(exactMatch)
+    selectedHistoryItem.value = exactMatch
+  }
+}
+
+const clearSendHistorySearch = () => {
+  sendHistorySearch.value = ''
 }
 
 const deleteSelectedSendHistory = () => {
@@ -730,6 +751,32 @@ onUnmounted(() => {
               #{{ index + 1 }} {{ item }}
             </button>
           </div>
+          <div class="history-search-group">
+            <input
+              class="history-search-input"
+              type="search"
+              :value="sendHistorySearch"
+              :list="sendHistoryListId"
+              placeholder="搜索发送历史"
+              :disabled="!sendHistory.length"
+              title="按内容搜索最近发送历史，完整匹配会回填输入框"
+              @input="updateSendHistorySearch($event.target.value)"
+              @keydown.enter.prevent="filteredSendHistory.length === 1 && applyHistoryItem(filteredSendHistory[0])"
+            />
+            <datalist :id="sendHistoryListId">
+              <option v-for="item in filteredSendHistory" :key="`history-option-${item}`" :value="item" />
+            </datalist>
+            <span v-if="sendHistorySearch" class="history-search-count">{{ filteredSendHistory.length }}/{{ sendHistory.length }}</span>
+            <button
+              v-if="sendHistorySearch"
+              class="history-action-btn subtle"
+              type="button"
+              title="清除发送历史搜索"
+              @click="clearSendHistorySearch"
+            >
+              清除搜索
+            </button>
+          </div>
           <select
             v-model="selectedHistoryItem"
             class="command-select history-select"
@@ -737,7 +784,7 @@ onUnmounted(() => {
             @change="applyHistoryItem($event.target.value, $event)"
           >
             <option value="">选择历史</option>
-            <option v-for="(item, index) in sendHistory" :key="item" :value="item">
+            <option v-for="(item, index) in filteredSendHistory" :key="item" :value="item">
               #{{ index + 1 }} {{ item }}
             </option>
           </select>
@@ -1384,6 +1431,54 @@ onUnmounted(() => {
   min-width: 150px;
   max-width: 150px;
   flex: 0 0 150px;
+}
+
+
+.history-search-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: min(360px, 100%);
+  flex: 1 1 280px;
+}
+
+.history-search-input {
+  height: 34px;
+  min-width: 180px;
+  flex: 1 1 220px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--app-border);
+  background: var(--app-workspace-soft);
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.history-search-input::placeholder {
+  color: var(--app-text-soft);
+  font-weight: 500;
+}
+
+.history-search-input:hover:not(:disabled),
+.history-search-input:focus {
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 2px var(--app-accent-soft);
+}
+
+.history-search-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.history-search-count {
+  min-width: 44px;
+  color: var(--app-text-soft);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: right;
 }
 
 .history-actions {
