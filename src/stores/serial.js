@@ -413,6 +413,7 @@ export const useSerialStore = defineStore('serial', () => {
   const defaultLogDirectory = ref('')
   const appUiState = ref(createDefaultAppUiState())
   let isApplyingExternalUiSnapshot = false
+  let commonCommandsSaveTimer = null
 
   const syncWorkspaceSnapshotSelection = (preferredSnapshotId = null) => {
     const snapshotIds = new Set(savedWorkspaceSnapshots.value.map((item) => item.id))
@@ -1733,9 +1734,19 @@ export const useSerialStore = defineStore('serial', () => {
     })
   }
 
-  // 监听常用命令变化，自动保存
+  const scheduleCommonCommandsSave = () => {
+    if (commonCommandsSaveTimer) {
+      clearTimeout(commonCommandsSaveTimer)
+    }
+    commonCommandsSaveTimer = setTimeout(() => {
+      commonCommandsSaveTimer = null
+      saveCommonCommands()
+    }, 250)
+  }
+
+  // 监听常用命令变化，自动保存；批量启用/导入大量命令时防抖写配置，避免频繁磁盘写入。
   watch(() => commonCommands.value, () => {
-    saveCommonCommands()
+    scheduleCommonCommandsSave()
     if (shouldSkipNextCommonCommandsSync) {
       shouldSkipNextCommonCommandsSync = false
       return
@@ -2548,8 +2559,9 @@ export const useSerialStore = defineStore('serial', () => {
 
   // 常用命令操作
   const addCommonCommand = (name, command, group = '默认') => {
+    const nextId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     commonCommands.value.push({
-      id: Date.now(),
+      id: nextId,
       name,
       command,
       group,

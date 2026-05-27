@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useSerialStore } from '../stores/serial'
 
 const serialStore = useSerialStore()
@@ -23,25 +23,31 @@ const isEditing = ref(false)
 const showEditModalInner = ref(false)
 const searchQuery = ref('')
 const normalizedSearchQuery = computed(() => searchQuery.value.trim().toLowerCase())
+const COMMAND_PAGE_SIZE = 100
+const visibleLimit = ref(COMMAND_PAGE_SIZE)
+const filteredCommands = computed(() => (
+  serialStore.commonCommands.filter((cmd) => {
+    if (!normalizedSearchQuery.value) return true
+    const haystack = [
+      cmd.name,
+      cmd.command,
+      cmd.group || '默认'
+    ].join(' ').toLowerCase()
+    return haystack.includes(normalizedSearchQuery.value)
+  })
+))
+const totalMatchedCommandCount = computed(() => filteredCommands.value.length)
+const visibleCommands = computed(() => filteredCommands.value.slice(0, visibleLimit.value))
+const hasMoreCommands = computed(() => totalMatchedCommandCount.value > visibleCommands.value.length)
 const groupedCommands = computed(() => {
   const groups = new Map()
-  serialStore.commonCommands
-    .filter((cmd) => {
-      if (!normalizedSearchQuery.value) return true
-      const haystack = [
-        cmd.name,
-        cmd.command,
-        cmd.group || '默认'
-      ].join(' ').toLowerCase()
-      return haystack.includes(normalizedSearchQuery.value)
-    })
-    .forEach((cmd) => {
+  visibleCommands.value.forEach((cmd) => {
     const key = cmd.group || '默认'
     if (!groups.has(key)) {
       groups.set(key, [])
     }
     groups.get(key).push(cmd)
-    })
+  })
   return Array.from(groups.entries()).map(([group, commands]) => {
     const enabledCount = commands.filter((cmd) => cmd.enabled !== false).length
     const disabledCount = commands.length - enabledCount
@@ -55,7 +61,22 @@ const groupedCommands = computed(() => {
     }
   })
 })
-const visibleCommandCount = computed(() => groupedCommands.value.reduce((sum, group) => sum + group.commands.length, 0))
+const visibleCommandCount = computed(() => visibleCommands.value.length)
+const remainingCommandCount = computed(() => Math.max(totalMatchedCommandCount.value - visibleCommandCount.value, 0))
+const loadMoreCommands = () => {
+  visibleLimit.value += COMMAND_PAGE_SIZE
+}
+const showAllCommands = () => {
+  visibleLimit.value = totalMatchedCommandCount.value
+}
+watch(normalizedSearchQuery, () => {
+  visibleLimit.value = COMMAND_PAGE_SIZE
+})
+watch(() => serialStore.commonCommands.length, () => {
+  if (visibleLimit.value > COMMAND_PAGE_SIZE) {
+    visibleLimit.value = Math.min(visibleLimit.value, Math.max(totalMatchedCommandCount.value, COMMAND_PAGE_SIZE))
+  }
+})
 const emptyStateTitle = computed(() => (normalizedSearchQuery.value ? '没有匹配的命令' : '还没有常用命令'))
 const emptyStateDetail = computed(() => (
   normalizedSearchQuery.value
@@ -210,7 +231,7 @@ const handleOverlayClick = () => {
         <div class="modal-title-group">
           <span class="modal-title">⚡ 常用命令配置</span>
           <span class="modal-subtitle">
-            {{ visibleCommandCount }} / {{ serialStore.commonCommands.length }} 条命令
+            已显示 {{ visibleCommandCount }} / 匹配 {{ totalMatchedCommandCount }} / 总计 {{ serialStore.commonCommands.length }} 条命令
           </span>
         </div>
         <button @click="closeModal" class="modal-close">✕</button>
@@ -300,6 +321,14 @@ const handleOverlayClick = () => {
                 </button>
               </div>
             </div>
+          </div>
+          <div v-if="hasMoreCommands" class="load-more-row">
+            <button type="button" class="load-more-btn" @click="loadMoreCommands">
+              再显示 {{ Math.min(COMMAND_PAGE_SIZE, remainingCommandCount) }} 条
+            </button>
+            <button type="button" class="load-more-btn secondary" @click="showAllCommands">
+              显示全部 {{ totalMatchedCommandCount }} 条
+            </button>
           </div>
         </div>
         <button @click="openCommandManager()" class="add-command-btn">
@@ -556,6 +585,32 @@ const handleOverlayClick = () => {
 
 .search-input::placeholder {
   color: var(--app-text-soft);
+}
+
+
+.load-more-row {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 0 4px;
+  flex-wrap: wrap;
+}
+
+.load-more-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 18px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.22);
+}
+
+.load-more-btn.secondary {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--text-primary);
+  box-shadow: none;
 }
 
 .empty-state {
