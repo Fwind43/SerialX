@@ -203,11 +203,9 @@ const ensurePaneStructure = () => {
     }
   })
 
-  while (splitPanes.value.length > 1 && splitPanes.value.some((pane) => pane.tabs.length === 0)) {
-    const emptyIndex = splitPanes.value.findIndex((pane) => pane.tabs.length === 0)
-    if (emptyIndex === -1) break
-    removePaneAndWidth(emptyIndex)
-  }
+  // 空分屏是用户手动拆分后的有效显示状态，模板中已提供空状态和
+  // “删除空分屏”操作。这里不能自动删除空分屏，否则单标签拆分后
+  // 原面板被清空又会立刻被移除，表现为分屏没有显示出来。
 }
 
 const syncSelectedPortWithPanes = () => {
@@ -571,14 +569,16 @@ const splitPane = (paneIndex) => {
 
   const sourcePaneElement = paneRefs.value[paneIndex]
   const sourcePaneWidth = sourcePaneElement?.offsetWidth || 0
-  const lastTab = pane.tabs.pop()
-  if (pane.activeTab === lastTab) {
+  const shouldMoveLastTab = pane.tabs.length > 1
+  const lastTab = shouldMoveLastTab ? pane.tabs.pop() : ''
+
+  if (shouldMoveLastTab && pane.activeTab === lastTab) {
     pane.activeTab = pane.tabs[0] || ''
   }
 
   splitPanes.value.splice(paneIndex + 1, 0, {
-    tabs: [lastTab],
-    activeTab: lastTab
+    tabs: shouldMoveLastTab ? [lastTab] : [],
+    activeTab: shouldMoveLastTab ? lastTab : ''
   })
 
   if (!sourcePaneWidth) {
