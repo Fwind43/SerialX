@@ -216,6 +216,38 @@ export const useSerialStore = defineStore('serial', () => {
     }
   }
 
+  const createDefaultPortControlSettings = () => ({
+    isAutoScroll: true,
+    isLoopSend: false,
+    loopInterval: 1000,
+    loopStartDelay: 0,
+    loopMaxCount: 0,
+    loopFailureLimit: 0,
+    hexSend: false,
+    sendLineEnding: 'none',
+    packetTimeout: 500 // 分包超时时间（毫秒）
+  })
+
+  const normalizePortControlSettings = (settings = {}) => {
+    const defaults = createDefaultPortControlSettings()
+    const source = isPlainSettingsObject(settings) ? settings : {}
+    const normalized = { ...defaults, ...source }
+
+    normalized.isAutoScroll = normalized.isAutoScroll !== false
+    normalized.isLoopSend = normalized.isLoopSend === true
+    normalized.hexSend = normalized.hexSend === true
+    normalized.loopInterval = Math.max(1, Number(normalized.loopInterval) || defaults.loopInterval)
+    normalized.loopStartDelay = Math.max(0, Number(normalized.loopStartDelay) || defaults.loopStartDelay)
+    normalized.loopMaxCount = Math.max(0, Number(normalized.loopMaxCount) || defaults.loopMaxCount)
+    normalized.loopFailureLimit = Math.max(0, Number(normalized.loopFailureLimit) || defaults.loopFailureLimit)
+    normalized.packetTimeout = Math.max(1, Number(normalized.packetTimeout) || defaults.packetTimeout)
+    normalized.sendLineEnding = ['none', 'cr', 'lf', 'crlf'].includes(normalized.sendLineEnding)
+      ? normalized.sendLineEnding
+      : defaults.sendLineEnding
+
+    return normalized
+  }
+
   const validatePortControlSettingsSnapshot = (settings = {}, message = '控制设置格式无效') => {
     ensurePlainSettingsObject(settings, message)
 
@@ -446,6 +478,7 @@ export const useSerialStore = defineStore('serial', () => {
       config.savedWorkspaceSnapshots = JSON.parse(JSON.stringify(savedWorkspaceSnapshots.value))
       config.defaultPortDisplaySettings = JSON.parse(JSON.stringify(defaultPortDisplaySettings.value))
       config.portDisplaySettings = JSON.parse(JSON.stringify(Object.fromEntries(portDisplaySettings.value)))
+      config.portControlSettings = JSON.parse(JSON.stringify(Object.fromEntries(portControlSettings.value)))
       await window.electronAPI.saveConfig(config)
     } catch (error) {
       console.error('[Store] Error saving UI preferences:', error)
@@ -607,17 +640,7 @@ export const useSerialStore = defineStore('serial', () => {
   // 获取串口控制设置
   const getPortControlSettings = (portPath) => {
     if (!portControlSettings.value.has(portPath)) {
-      portControlSettings.value.set(portPath, {
-        isAutoScroll: true,
-        isLoopSend: false,
-        loopInterval: 1000,
-        loopStartDelay: 0,
-        loopMaxCount: 0,
-        loopFailureLimit: 0,
-        hexSend: false,
-        sendLineEnding: 'none',
-        packetTimeout: 500 // 分包超时时间（毫秒）
-      })
+      portControlSettings.value.set(portPath, createDefaultPortControlSettings())
     }
     return portControlSettings.value.get(portPath)
   }
@@ -639,9 +662,10 @@ export const useSerialStore = defineStore('serial', () => {
       normalizedUpdates.sendLineEnding = 'none'
     }
 
-    portControlSettings.value.set(portPath, { ...current, ...normalizedUpdates })
+    portControlSettings.value.set(portPath, normalizePortControlSettings({ ...current, ...normalizedUpdates }))
     // 配置变更时自动保存
     saveSessionState()
+    persistUiPreferencesToConfig()
 
     if ('packetTimeout' in normalizedUpdates && openPorts.value.get(portPath)?.isConnected && window.electronAPI?.setPacketTimeout) {
       window.electronAPI.setPacketTimeout(portPath, normalizedUpdates.packetTimeout).catch(error => {
@@ -1649,6 +1673,11 @@ export const useSerialStore = defineStore('serial', () => {
         if (config?.portDisplaySettings && typeof config.portDisplaySettings === 'object') {
           portDisplaySettings.value = new Map(
             Object.entries(config.portDisplaySettings).map(([portPath, settings]) => [portPath, normalizePortDisplaySettings(settings)])
+          )
+        }
+        if (config?.portControlSettings && typeof config.portControlSettings === 'object') {
+          portControlSettings.value = new Map(
+            Object.entries(config.portControlSettings).map(([portPath, settings]) => [portPath, normalizePortControlSettings(settings)])
           )
         }
         if (config?.defaultSettings && typeof config.defaultSettings === 'object') {

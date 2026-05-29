@@ -285,13 +285,27 @@ const updateSendLineEnding = (value) => {
   serialStore.updatePortControlSettings(props.portPath, { sendLineEnding: value })
 }
 
-const executeCommand = (command) => {
+const fillSendingInput = (command, { log = false } = {}) => {
+  if (!command) return
   sendingInput.value = command
   serialStore.setPortSendingData(props.portPath, command)
   sendErrorMessage.value = ''
   sendSuccessMessage.value = ''
   serialStore.clearPortNotice(props.portPath)
-  serialStore.addPortLog(props.portPath, `命令 "${command}" 已填入输入框，请按 Enter 发送。`, 'info')
+  if (log) {
+    serialStore.addPortLog(props.portPath, `命令 "${command}" 已填入输入框，请按 Enter 发送。`, 'info')
+  }
+}
+
+const executeCommand = (command) => {
+  fillSendingInput(command, { log: true })
+}
+
+const fillDefaultCommandIfEmpty = (commands) => {
+  const defaultCommand = commands?.[0]?.command
+  if (!defaultCommand) return
+  if (serialStore.getPortSendingData(props.portPath) || sendingInput.value) return
+  fillSendingInput(defaultCommand)
 }
 
 const applyHistoryItem = (value, event = null) => {
@@ -559,6 +573,10 @@ watch(currentSendingData, (value) => {
   if (value !== sendingInput.value) {
     sendingInput.value = value
   }
+}, { immediate: true })
+
+watch(enabledCommands, (commands) => {
+  fillDefaultCommandIfEmpty(commands)
 }, { immediate: true })
 
 onUnmounted(() => {
