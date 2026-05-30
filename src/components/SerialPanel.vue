@@ -42,37 +42,8 @@ const filteredSendHistory = computed(() => {
 })
 const selectedHistoryItem = ref('')
 const sendHistoryLimit = computed(() => serialStore.sendHistoryLimit)
-const sendHistoryLabel = computed(() => `最近发送 ${sendHistory.value.length}/${sendHistoryLimit.value}`)
+const sendHistoryLabel = computed(() => `发送历史 ${sendHistory.value.length}/${sendHistoryLimit.value}`)
 const pinnedSendHistory = computed(() => filteredSendHistory.value.slice(0, 3))
-const selectedHistoryValue = computed(() => selectedHistoryItem.value || sendHistory.value[0] || '')
-const selectedHistoryIndexLabel = computed(() => {
-  const value = selectedHistoryValue.value
-  if (!value) return '未选择'
-  const index = sendHistory.value.indexOf(value)
-  return index >= 0 ? `#${index + 1}` : '自定义'
-})
-const selectedHistoryPreviewLabel = computed(() => {
-  const value = selectedHistoryValue.value
-  if (!value) return '暂无可复用的发送历史'
-  return value.length > 48 ? `${value.slice(0, 48)}…` : value
-})
-const isSelectedHistoryHexValid = computed(() => {
-  const value = selectedHistoryValue.value
-  if (!portControlSettings.value.hexSend || !value) return true
-  return serialStore.isValidHex(value)
-})
-const isHistorySendDisabled = computed(() => {
-  if (!selectedHistoryValue.value) return true
-  if (!isConnected.value) return true
-  if (portControlSettings.value.hexSend) return !isSelectedHistoryHexValid.value
-  return false
-})
-const historySendTitle = computed(() => {
-  if (!selectedHistoryValue.value) return '暂无可发送的历史记录'
-  if (!isConnected.value) return '请先连接串口后再发送历史'
-  if (portControlSettings.value.hexSend && !isSelectedHistoryHexValid.value) return '当前历史不是有效 HEX，无法发送'
-  return selectedHistoryItem.value ? '立即发送当前选择的历史' : '立即发送最近一条历史'
-})
 const groupedEnabledCommands = computed(() => {
   const groups = new Map()
   enabledCommands.value.forEach((cmd) => {
@@ -325,13 +296,6 @@ const applyHistoryItem = (value, event = null) => {
   }
 }
 
-const sendSelectedHistoryItem = async () => {
-  const value = selectedHistoryValue.value
-  if (!value || isHistorySendDisabled.value) return
-  applyHistoryItem(value)
-  await handleSend()
-}
-
 const updateSendHistorySearch = (value) => {
   sendHistorySearch.value = value
   const exactMatch = sendHistory.value.find((item) => item === value)
@@ -346,14 +310,14 @@ const clearSendHistorySearch = () => {
 }
 
 const deleteSelectedSendHistory = () => {
-  const value = selectedHistoryItem.value || sendHistory.value[0]
+  const value = selectedHistoryItem.value || filteredSendHistory.value[0] || sendHistory.value[0]
   if (!value) return
 
   const nextSelection = sendHistory.value.find((item) => item !== value) || ''
   const removed = serialStore.removePortSendHistoryItem(props.portPath, value)
   if (!removed) return
 
-  selectedHistoryItem.value = nextSelection
+  selectedHistoryItem.value = ''
   sendHistoryIndex.value = -1
   sendHistoryDraft.value = ''
 
@@ -363,7 +327,7 @@ const deleteSelectedSendHistory = () => {
   }
 
   serialStore.addPortLog(props.portPath, nextSelection
-    ? `已删除发送历史，并选中下一条：${nextSelection}`
+    ? `已删除发送历史：${value}`
     : '已删除最后一条发送历史。', 'info')
 }
 
@@ -766,7 +730,7 @@ onUnmounted(() => {
               :title="`填入最近发送 #${index + 1}：${item}`"
               @click="applyHistoryItem(item)"
             >
-              #{{ index + 1 }} {{ item }}
+              #{{ index + 1 }}
             </button>
           </div>
           <div class="history-search-group">
@@ -792,39 +756,16 @@ onUnmounted(() => {
               title="清除发送历史搜索"
               @click="clearSendHistorySearch"
             >
-              清除搜索
+              清除
             </button>
           </div>
-          <select
-            v-model="selectedHistoryItem"
-            class="command-select history-select"
-            title="选择最近发送内容填入输入框；输入框内也可用 ↑/↓ 浏览历史"
-            @change="applyHistoryItem($event.target.value, $event)"
-          >
-            <option value="">选择历史</option>
-            <option v-for="(item, index) in filteredSendHistory" :key="item" :value="item">
-              #{{ index + 1 }} {{ item }}
-            </option>
-          </select>
-          <div class="history-preview" :class="{ invalid: !isSelectedHistoryHexValid }" :title="selectedHistoryValue || '暂无发送历史'">
-            <span class="history-preview-index">{{ selectedHistoryIndexLabel }}</span>
-            <span class="history-preview-text">{{ selectedHistoryPreviewLabel }}</span>
-          </div>
-          <button
-            class="history-action-btn primary"
-            :disabled="isHistorySendDisabled"
-            :title="historySendTitle"
-            @click="sendSelectedHistoryItem"
-          >
-            发送历史
-          </button>
           <button
             class="history-action-btn"
             :disabled="!sendHistory.length"
-            title="删除当前选择的历史；未选择时删除最近一条"
+            title="删除当前搜索命中的第一条；无搜索时删除最近一条"
             @click="deleteSelectedSendHistory"
           >
-            删除所选
+            删除
           </button>
           <button
             class="history-action-btn danger"
@@ -832,7 +773,7 @@ onUnmounted(() => {
             title="清空当前串口的发送历史"
             @click="clearSendHistory"
           >
-            清空历史
+            清空
           </button>
         </div>
 
@@ -1415,15 +1356,15 @@ onUnmounted(() => {
 .history-shortcuts {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  max-width: 100%;
+  flex: 0 0 auto;
 }
 
 .history-shortcut-btn {
-  height: 34px;
-  max-width: 180px;
-  padding: 0 10px;
+  height: 28px;
+  width: 34px;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid var(--app-chip-border);
   background: var(--app-chip-bg);
@@ -1444,27 +1385,19 @@ onUnmounted(() => {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 12%, transparent);
 }
 
-.history-select {
-  width: 150px;
-  min-width: 150px;
-  max-width: 150px;
-  flex: 0 0 150px;
-}
-
-
 .history-search-group {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-width: min(360px, 100%);
-  flex: 1 1 280px;
+  gap: 4px;
+  min-width: 160px;
+  flex: 1 1 220px;
 }
 
 .history-search-input {
-  height: 34px;
-  min-width: 180px;
-  flex: 1 1 220px;
-  padding: 0 12px;
+  height: 28px;
+  min-width: 120px;
+  flex: 1 1 160px;
+  padding: 0 9px;
   border-radius: 10px;
   border: 1px solid var(--app-border);
   background: var(--app-workspace-soft);
@@ -1492,7 +1425,7 @@ onUnmounted(() => {
 }
 
 .history-search-count {
-  min-width: 44px;
+  min-width: 34px;
   color: var(--app-text-soft);
   font-size: 11px;
   font-weight: 600;
@@ -1500,16 +1433,20 @@ onUnmounted(() => {
 }
 
 .history-actions {
-  display: inline-flex;
+  display: flex;
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .history-count {
-  height: 34px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: 999px;
   border: 1px solid var(--app-border);
   background: var(--app-chip-bg);
@@ -1520,46 +1457,9 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.history-preview {
-  height: 34px;
-  min-width: 190px;
-  max-width: 260px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--app-accent) 28%, var(--app-border));
-  background: color-mix(in srgb, var(--app-accent-soft) 45%, var(--app-workspace-soft));
-  color: var(--app-text);
-  font-size: 11px;
-  line-height: 1;
-  overflow: hidden;
-}
-
-.history-preview.invalid {
-  border-color: var(--app-danger-border);
-  background: var(--app-danger-soft);
-  color: var(--app-danger-text);
-}
-
-.history-preview-index {
-  flex: 0 0 auto;
-  font-weight: 800;
-  color: var(--app-chip-text);
-}
-
-.history-preview-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--app-mono-font, 'SFMono-Regular', Consolas, monospace);
-}
-
 .history-action-btn {
-  height: 34px;
-  padding: 0 12px;
+  height: 28px;
+  padding: 0 9px;
   border-radius: 10px;
   border: 1px solid var(--app-border);
   background: var(--app-workspace-soft);

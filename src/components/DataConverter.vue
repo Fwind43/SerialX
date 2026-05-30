@@ -497,17 +497,17 @@ const clearAll = () => {
     <section class="toolbar-card">
       <div class="toolbar-title">
         <span class="toolbar-label">字节序</span>
-        <span class="toolbar-hint">切换后会按当前输入内容重新计算</span>
+        <span class="toolbar-hint">切换后自动重算</span>
       </div>
 
       <div class="toolbar-actions">
         <label class="toggle-pill">
           <input v-model="byteOrder" type="radio" value="little">
-          <span>小端 Little-Endian</span>
+          <span title="Little-Endian">小端</span>
         </label>
         <label class="toggle-pill">
           <input v-model="byteOrder" type="radio" value="big">
-          <span>大端 Big-Endian</span>
+          <span title="Big-Endian">大端</span>
         </label>
         <button class="ghost-btn" type="button" title="清空 (Ctrl+L)" @click="clearAll">清空</button>
       </div>
@@ -517,7 +517,7 @@ const clearAll = () => {
       <div class="format-section">
         <div class="section-head">
           <span class="section-title">常用格式</span>
-          <span class="section-note">适合直接粘贴原始收发数据</span>
+          <span class="section-note">原始收发数据</span>
         </div>
 
         <div
@@ -540,7 +540,7 @@ const clearAll = () => {
       <div class="format-section">
         <div class="section-head">
           <span class="section-title">整数格式</span>
-          <span class="section-note">按当前字节序解析 8 / 16 / 32 位整数</span>
+          <span class="section-note">8 / 16 / 32 位</span>
         </div>
 
         <div
@@ -563,7 +563,7 @@ const clearAll = () => {
       <div class="format-section">
         <div class="section-head">
           <span class="section-title">浮点格式</span>
-          <span class="section-note">兼容 IEEE 754 单精度和双精度表示</span>
+          <span class="section-note">IEEE 754</span>
         </div>
 
         <div
@@ -590,10 +590,10 @@ const clearAll = () => {
 .converter-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
   height: 100%;
   min-height: 0;
-  padding: 16px;
+  padding: 12px;
   overflow: auto;
   color: var(--converter-text);
   background: var(--converter-bg);
@@ -622,8 +622,8 @@ const clearAll = () => {
 .format-section {
   border: 1px solid var(--converter-border);
   background: var(--converter-panel);
-  box-shadow: var(--converter-shadow);
-  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(10px);
 }
 
 .window-titlebar {
@@ -747,9 +747,9 @@ const clearAll = () => {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 14px 16px;
-  border-radius: 16px;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
 }
 
 .toolbar-actions {
@@ -757,7 +757,7 @@ const clearAll = () => {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 6px;
 }
 
 .toolbar-title {
@@ -802,7 +802,7 @@ const clearAll = () => {
 .toggle-pill span {
   display: inline-flex;
   align-items: center;
-  padding: 9px 14px;
+  padding: 6px 10px;
   border: 1px solid var(--converter-border);
   border-radius: 999px;
   background: var(--converter-panel-strong);
@@ -820,24 +820,24 @@ const clearAll = () => {
 
 .converter-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
   min-height: 0;
 }
 
 .format-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 18px;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
 }
 
 .section-head {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding-bottom: 4px;
+  gap: 2px;
+  padding-bottom: 2px;
 }
 
 .section-title {
@@ -853,8 +853,8 @@ const clearAll = () => {
 
 .input-row {
   display: grid;
-  grid-template-columns: 78px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 66px minmax(0, 1fr);
+  gap: 8px;
   align-items: center;
 }
 
@@ -867,8 +867,8 @@ const clearAll = () => {
 .format-input {
   width: 100%;
   min-width: 0;
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 7px 10px;
+  border-radius: 9px;
   border: 1px solid var(--converter-border);
   background: var(--converter-input-bg);
   color: var(--converter-title);
@@ -895,7 +895,7 @@ const clearAll = () => {
 
 @media (max-width: 640px) {
   .converter-container {
-    padding: 12px;
+    padding: 10px;
   }
 
   .window-titlebar {
@@ -905,8 +905,8 @@ const clearAll = () => {
 
   .toolbar-card,
   .format-section {
-    padding: 14px;
-    border-radius: 16px;
+    padding: 10px;
+    border-radius: 12px;
   }
 
   .input-row {

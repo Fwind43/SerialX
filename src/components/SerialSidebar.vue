@@ -132,100 +132,87 @@ const handleOpenAutoLogDirectory = async () => {
       </div>
     </div>
 
-    <div class="settings-section">
+    <div class="settings-section compact-settings">
       <div class="section-header settings-header">
         <div class="settings-copy">
-          <span>默认串口参数</span>
-          <span class="settings-summary">{{ settingsSummary }}</span>
+          <span>连接设置</span>
+          <span class="settings-summary">{{ settingsSummary }} · {{ autoLogSummary }}</span>
         </div>
         <button
           class="settings-toggle"
-          :title="showSettings ? '收起默认参数' : '展开默认参数'"
+          :title="showSettings ? '收起连接设置' : '展开连接设置'"
           @click="showSettings = !showSettings"
         >
-          {{ showSettings ? '收起' : '编辑' }}
+          {{ showSettings ? '收起' : '设置' }}
         </button>
       </div>
 
-      <div v-if="showSettings" class="settings-grid">
-        <div class="setting-item">
-          <label>波特率</label>
-          <select v-model="serialStore.defaultSettings.baudRate" class="setting-select">
-            <option v-for="rate in serialStore.availableBaudRates" :key="rate" :value="rate">
-              {{ rate }}
-            </option>
-          </select>
-        </div>
-        <div class="setting-item">
-          <label>数据位</label>
-          <select v-model="serialStore.defaultSettings.dataBits" class="setting-select">
-            <option :value="8">8</option>
-            <option :value="7">7</option>
-            <option :value="6">6</option>
-            <option :value="5">5</option>
-          </select>
-        </div>
-        <div class="setting-item">
-          <label>停止位</label>
-          <select v-model="serialStore.defaultSettings.stopBits" class="setting-select">
-            <option :value="1">1</option>
-            <option :value="2">2</option>
-          </select>
-        </div>
-        <div class="setting-item">
-          <label>校验位</label>
-          <select v-model="serialStore.defaultSettings.parity" class="setting-select">
-            <option value="none">无</option>
-            <option value="even">偶</option>
-            <option value="odd">奇</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <div class="settings-section">
-      <div class="section-header settings-header">
-        <div class="settings-copy">
-          <span>自动日志保存</span>
-          <span class="settings-summary">{{ autoLogSummary }}</span>
-        </div>
-        <button
-          class="settings-toggle"
-          :title="showAutoLogSettings ? '收起自动日志保存' : '展开自动日志保存'"
-          @click="showAutoLogSettings = !showAutoLogSettings"
-        >
-          {{ showAutoLogSettings ? '收起' : '编辑' }}
-        </button>
-      </div>
-
-      <div v-if="showAutoLogSettings" class="auto-log-grid">
-        <label class="check-row">
-          <input
-            type="checkbox"
-            :checked="serialStore.autoLogSettings.enabled"
-            @change="serialStore.updateAutoLogSettings({ enabled: $event.target.checked })"
-          >
-          <span>连接期间自动落盘</span>
-        </label>
-
-        <div class="setting-item">
-          <label>保存格式</label>
-          <select
-            :value="serialStore.autoLogSettings.format"
-            class="setting-select"
-            @change="serialStore.updateAutoLogSettings({ format: $event.target.value })"
-          >
-            <option value="txt">TXT</option>
-            <option value="jsonl">JSONL</option>
-          </select>
+      <div v-if="showSettings" class="settings-stack">
+        <div class="settings-grid">
+          <div class="setting-item">
+            <label>波特率</label>
+            <select v-model="serialStore.defaultSettings.baudRate" class="setting-select">
+              <option v-for="rate in serialStore.availableBaudRates" :key="rate" :value="rate">
+                {{ rate }}
+              </option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label>数据位</label>
+            <select v-model="serialStore.defaultSettings.dataBits" class="setting-select">
+              <option :value="8">8</option>
+              <option :value="7">7</option>
+              <option :value="6">6</option>
+              <option :value="5">5</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label>停止位</label>
+            <select v-model="serialStore.defaultSettings.stopBits" class="setting-select">
+              <option :value="1">1</option>
+              <option :value="2">2</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label>校验位</label>
+            <select v-model="serialStore.defaultSettings.parity" class="setting-select">
+              <option value="none">无</option>
+              <option value="even">偶</option>
+              <option value="odd">奇</option>
+            </select>
+          </div>
         </div>
 
-        <div class="setting-item auto-log-dir">
-          <label>保存目录</label>
-          <div class="dir-path" :title="autoLogDirectoryLabel">{{ autoLogDirectoryLabel }}</div>
-          <div class="dir-actions">
-            <button class="secondary-btn" @click="handleSelectAutoLogDirectory">选择目录</button>
-            <button class="secondary-btn" @click="handleOpenAutoLogDirectory">打开目录</button>
+        <div class="settings-divider"></div>
+        <div class="auto-log-grid inline-log-grid">
+          <label class="check-row">
+            <input
+              type="checkbox"
+              :checked="serialStore.autoLogSettings.enabled"
+              @change="serialStore.updateAutoLogSettings({ enabled: $event.target.checked })"
+            >
+            <span>自动落盘</span>
+          </label>
+
+          <div class="setting-item log-format-item">
+            <label>格式</label>
+            <select
+              :value="serialStore.autoLogSettings.format"
+              class="setting-select"
+              @change="serialStore.updateAutoLogSettings({ format: $event.target.value })"
+            >
+              <option value="txt">TXT</option>
+              <option value="jsonl">JSONL</option>
+            </select>
+          </div>
+
+          <div class="setting-item auto-log-dir">
+            <label>目录</label>
+            <div class="dir-path" :title="autoLogDirectoryLabel">{{ autoLogDirectoryLabel }}</div>
+            <div class="dir-actions">
+              <button class="secondary-btn" @click="handleSelectAutoLogDirectory">选择</button>
+              <button class="secondary-btn" @click="handleOpenAutoLogDirectory">打开</button>
+            </div>
           </div>
         </div>
       </div>
@@ -465,16 +452,17 @@ const handleOpenAutoLogDirectory = async () => {
 .port-action-btn.disconnect:hover { background: color-mix(in srgb, var(--app-danger) 18%, transparent); }
 
 .settings-section {
-  margin: 0 10px 10px;
-  padding: 2px 0 0;
+  margin: 0 10px 8px;
+  padding: 0;
   border-radius: 12px;
   border: 1px solid var(--app-border);
   background: var(--app-sidebar-soft);
+  overflow: hidden;
 }
 
 .settings-header {
   justify-content: space-between;
-  padding-bottom: 6px;
+  padding: 8px 10px;
 }
 
 .settings-copy {
@@ -502,18 +490,30 @@ const handleOpenAutoLogDirectory = async () => {
 
 .settings-toggle:hover { background: var(--app-accent-soft); }
 
+.settings-stack {
+  padding: 0 8px 8px;
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  padding: 8px;
 }
 
 .auto-log-grid {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 8px;
+}
+
+.inline-log-grid {
+  gap: 8px;
+}
+
+.settings-divider {
+  height: 1px;
+  margin: 8px 0;
+  background: var(--app-border);
 }
 
 .setting-item {
@@ -580,7 +580,9 @@ const handleOpenAutoLogDirectory = async () => {
   color: var(--app-text);
   font-size: 11px;
   line-height: 1.45;
-  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dir-actions {

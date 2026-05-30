@@ -231,7 +231,7 @@ const handleOverlayClick = () => {
         <div class="modal-title-group">
           <span class="modal-title">⚡ 常用命令配置</span>
           <span class="modal-subtitle">
-            已显示 {{ visibleCommandCount }} / 匹配 {{ totalMatchedCommandCount }} / 总计 {{ serialStore.commonCommands.length }} 条命令
+            显示 {{ visibleCommandCount }} / 匹配 {{ totalMatchedCommandCount }} / 总计 {{ serialStore.commonCommands.length }}
           </span>
         </div>
         <button @click="closeModal" class="modal-close">✕</button>
@@ -266,18 +266,18 @@ const handleOverlayClick = () => {
                 <button
                   class="group-action-btn"
                   :disabled="groupBlock.allEnabled"
-                  :title="groupBlock.allEnabled ? '该分组已全部启用' : '启用该分组内全部命令'"
+                  :title="groupBlock.allEnabled ? '该分组已启用' : '启用该分组内全部命令'"
                   @click="setCommandGroupEnabled(groupBlock.commands, true)"
                 >
-                  全部启用
+                  启用
                 </button>
                 <button
                   class="group-action-btn"
                   :disabled="groupBlock.allDisabled"
-                  :title="groupBlock.allDisabled ? '该分组已全部禁用' : '禁用该分组内全部命令'"
+                  :title="groupBlock.allDisabled ? '该分组已禁用' : '禁用该分组内全部命令'"
                   @click="setCommandGroupEnabled(groupBlock.commands, false)"
                 >
-                  全部禁用
+                  禁用
                 </button>
               </div>
             </div>
@@ -367,7 +367,7 @@ const handleOverlayClick = () => {
               {{ editorValidationMessage }}
             </div>
             <div id="command-editor-help" class="form-help">
-              可按 Enter 保存当前命令；保存按钮会在名称、内容重复或为空时保持禁用。
+              Enter 保存；名称、内容重复或为空时不可保存。
             </div>
             <div class="form-group">
               <label for="command-name-input">命令名称</label>
@@ -549,26 +549,26 @@ const handleOverlayClick = () => {
 .modal-body {
   flex: 1;
   overflow-y: auto;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .commands-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .toolbar-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .search-input {
   width: 100%;
-  padding: 11px 14px;
+  padding: 8px 12px;
   background: var(--app-workspace-shell);
   border: 1px solid var(--app-border);
   border-radius: 10px;
@@ -617,8 +617,8 @@ const handleOverlayClick = () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 26px 18px;
+  gap: 5px;
+  padding: 18px 14px;
   border: 1px dashed var(--app-border);
   border-radius: 12px;
   background: var(--app-workspace-shell);
@@ -662,14 +662,14 @@ const handleOverlayClick = () => {
 .command-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .command-group-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   padding: 0 2px;
 }
 
@@ -696,11 +696,11 @@ const handleOverlayClick = () => {
 .command-group-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .group-action-btn {
-  padding: 4px 8px;
+  padding: 3px 7px;
   border-radius: 999px;
   border: 1px solid var(--app-border);
   background: var(--app-workspace-shell);
@@ -726,7 +726,7 @@ const handleOverlayClick = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: var(--app-workspace-shell);
   border: 1px solid var(--app-border);
   border-radius: 8px;
@@ -764,7 +764,7 @@ const handleOverlayClick = () => {
 
 .command-actions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
@@ -772,8 +772,8 @@ const handleOverlayClick = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -878,7 +878,7 @@ const handleOverlayClick = () => {
   z-index: 1002;
   width: min(420px, calc(100% - 32px));
   max-width: calc(100% - 32px);
-  padding: 22px;
+  padding: 18px;
   border-radius: 16px;
   border: 1px solid var(--app-modal-border);
   background: linear-gradient(145deg, var(--app-modal-bg) 0%, var(--app-modal-soft) 100%);
@@ -900,8 +900,8 @@ const handleOverlayClick = () => {
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 6px;
+  margin-bottom: 12px;
 }
 
 .form-group label {
@@ -923,14 +923,14 @@ const handleOverlayClick = () => {
 }
 
 .form-help {
-  margin: -4px 0 14px;
+  margin: -2px 0 10px;
   font-size: 12px;
   line-height: 1.5;
   color: var(--app-text-soft);
 }
 
 .form-input {
-  padding: 12px 14px;
+  padding: 9px 12px;
   background: var(--app-workspace-shell);
   border: 1px solid var(--app-border);
   border-radius: 8px;

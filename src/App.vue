@@ -988,8 +988,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 48px;
-  padding: 0 14px;
+  min-height: 40px;
+  padding: 0 10px;
   background: var(--app-header-bg);
   border-bottom: 1px solid var(--app-border);
   flex-shrink: 0;
@@ -1008,7 +1008,7 @@ onUnmounted(() => {
 .header-center {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -1018,8 +1018,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
 }
 
@@ -1037,7 +1037,7 @@ onUnmounted(() => {
 
 .menubar-item {
   position: relative;
-  padding: 6px 10px;
+  padding: 4px 8px;
   border-radius: 999px;
   cursor: pointer;
   -webkit-app-region: no-drag;
@@ -1383,8 +1383,8 @@ onUnmounted(() => {
 .status-bar {
   display: flex;
   align-items: center;
-  min-height: 34px;
-  padding: 0 10px 8px;
+  min-height: 28px;
+  padding: 0 10px 6px;
   background: transparent;
   color: var(--app-text);
   font-size: 12px;
@@ -1398,8 +1398,8 @@ onUnmounted(() => {
 .status-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 4px 8px;
   border-radius: 999px;
   background: var(--app-status-bg);
   border: 1px solid var(--app-border);

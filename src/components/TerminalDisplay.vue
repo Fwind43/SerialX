@@ -1187,23 +1187,23 @@ defineExpose({
           </span>
           <span>复制</span>
         </div>
-        <div class="context-menu-item" @click="copyVisibleScreen">
+        <div class="context-menu-item" title="复制当前终端可见屏幕内容" @click="copyVisibleScreen">
           <span class="menu-icon" aria-hidden="true">
             <svg viewBox="0 0 16 16" width="14" height="14">
               <path d="M3 4h10v8H3z" fill="none" stroke="currentColor" stroke-width="1.2" />
               <path d="M5 6h6M5 8h6M5 10h4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
           </span>
-          <span>复制当前屏幕</span>
+          <span>复制屏幕</span>
         </div>
-        <div class="context-menu-item" @click="copyAllLogs">
+        <div class="context-menu-item" title="复制当前串口的全部日志" @click="copyAllLogs">
           <span class="menu-icon" aria-hidden="true">
             <svg viewBox="0 0 16 16" width="14" height="14">
               <path d="M4 3h8v10H4z" fill="none" stroke="currentColor" stroke-width="1.2" />
               <path d="M6 6h4M6 8h4M6 10h4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
           </span>
-          <span>复制全部日志</span>
+          <span>复制日志</span>
         </div>
         <div class="context-menu-item" @click="selectAll">
           <span class="menu-icon" aria-hidden="true">
@@ -1214,23 +1214,23 @@ defineExpose({
           </span>
           <span>全选</span>
         </div>
-        <div class="context-menu-item" @click="exportTerminalLogs('json')">
+        <div class="context-menu-item" title="导出结构化 JSON 日志" @click="exportTerminalLogs('json')">
           <span class="menu-icon" aria-hidden="true">
             <svg viewBox="0 0 16 16" width="14" height="14">
               <path d="M8 2v7.2l2.1-2.1.9.9L8 11 5 8l.9-.9L8 9.2V2Z" fill="currentColor" />
               <path d="M3 12h10v2H3z" fill="currentColor" />
             </svg>
           </span>
-          <span>导出日志 (JSON)</span>
+          <span>导出 JSON</span>
         </div>
-        <div class="context-menu-item" @click="exportTerminalLogs('text')">
+        <div class="context-menu-item" title="导出纯文本 TXT 日志" @click="exportTerminalLogs('text')">
           <span class="menu-icon" aria-hidden="true">
             <svg viewBox="0 0 16 16" width="14" height="14">
               <path d="M4 3h8v10H4z" fill="none" stroke="currentColor" stroke-width="1.2" />
               <path d="M6 6h4M6 8h4M6 10h3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
           </span>
-          <span>导出纯文本 (TXT)</span>
+          <span>导出 TXT</span>
         </div>
         <div class="context-menu-divider"></div>
         <div class="context-menu-item danger" @click="clearTerminalLogs">
@@ -1267,7 +1267,9 @@ defineExpose({
 
 .search-bar {
   flex-shrink: 0;
-  padding: 10px 12px 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 8px 0;
 }
 
 .terminal-container {
@@ -1380,9 +1382,12 @@ defineExpose({
 
 .search-widget {
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
   margin-left: auto;
-  padding: 5px 6px;
-  border-radius: 999px;
+  padding: 4px;
+  border-radius: 12px;
   border: 1px solid var(--app-border);
   background: var(--app-modal-bg);
   box-shadow: var(--app-shadow-lg);
@@ -1392,14 +1397,17 @@ defineExpose({
 .search-input-wrapper {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
 }
 
 .search-chip {
   display: inline-flex;
   align-items: center;
-  padding: 0 8px;
-  height: 24px;
+  padding: 0 7px;
+  height: 22px;
   border-radius: 999px;
   background: var(--app-accent-soft);
   color: var(--app-chip-text);
@@ -1409,9 +1417,9 @@ defineExpose({
 }
 
 .search-input {
-  width: 180px;
-  height: 24px;
-  padding: 0 10px;
+  width: clamp(120px, 24vw, 180px);
+  height: 22px;
+  padding: 0 8px;
   background: var(--app-workspace-shell);
   border: 1px solid var(--app-border);
   border-radius: 999px;
@@ -1438,7 +1446,7 @@ defineExpose({
 .search-status {
   display: inline-flex;
   align-items: center;
-  min-width: 96px;
+  max-width: 120px;
   padding: 0 6px;
   height: 22px;
   border-radius: 999px;
@@ -1447,6 +1455,8 @@ defineExpose({
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .search-status.empty {
@@ -1458,9 +1468,9 @@ defineExpose({
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  height: 24px;
-  padding: 0 7px;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 6px;
   border-radius: 999px;
   border: 1px solid var(--app-border);
   background: var(--app-chip-bg);
@@ -1496,8 +1506,8 @@ defineExpose({
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   background: var(--app-chip-bg);
   border: 1px solid var(--app-border);
   border-radius: 999px;
@@ -1525,9 +1535,9 @@ defineExpose({
 
 .context-menu {
   position: fixed;
-  min-width: 148px;
-  padding: 6px;
-  border-radius: 10px;
+  min-width: 132px;
+  padding: 4px;
+  border-radius: 9px;
   background: var(--app-modal-bg);
   border: 1px solid var(--app-modal-border);
   box-shadow: var(--app-shadow-lg);
@@ -1551,11 +1561,12 @@ defineExpose({
 .context-menu-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 8px;
+  min-height: 28px;
+  padding: 5px 8px;
   color: var(--app-text);
   font-size: 12px;
-  border-radius: 8px;
+  border-radius: 7px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -1581,7 +1592,7 @@ defineExpose({
 
 .context-menu-divider {
   height: 1px;
-  margin: 6px 2px;
+  margin: 4px 2px;
   background: var(--app-border);
 }
 
