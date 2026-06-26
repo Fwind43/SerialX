@@ -90,7 +90,7 @@
 ### 本地开发
 
 ```bash
-git clone https://gitcode.com/Fwind43/SerialX.git
+git clone https://github.com/Fwind43/SerialX.git
 cd SerialX
 npm install
 npm run dev
@@ -105,6 +105,22 @@ npm run build
 ### 打包
 
 ```bash
+npm run dist:win
+```
+
+## 自动化构建
+
+项目已迁移到 GitHub，并通过 GitHub Actions 自动执行 Windows 构建：
+
+- 推送到 `main` 或提交 Pull Request 时：安装依赖、执行 `npm run build`、打包 Windows 安装程序并上传工作流产物。
+- 推送 `v*` 标签时：在完成构建后自动创建 GitHub Release，并上传安装包与更新清单。
+- 手动触发：可在 GitHub Actions 页面通过 `workflow_dispatch` 运行构建。
+
+本地验证命令：
+
+```bash
+npm ci
+npm run build
 npm run dist:win
 ```
 
@@ -172,5 +188,5 @@ ISC
 
 ## 仓库
 
-- 仓库地址：[https://gitcode.com/Fwind43/SerialX](https://gitcode.com/Fwind43/SerialX)
-- 问题反馈：[https://gitcode.com/Fwind43/SerialX/issues](https://gitcode.com/Fwind43/SerialX/issues)
+- 仓库地址：[https://github.com/Fwind43/SerialX](https://github.com/Fwind43/SerialX)
+- 问题反馈：[https://github.com/Fwind43/SerialX/issues](https://github.com/Fwind43/SerialX/issues)

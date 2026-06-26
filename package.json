@@ -10,11 +10,12 @@
     "pack": "electron-vite build && electron-builder --dir",
     "dist": "electron-vite build && electron-builder",
     "dist:win": "electron-vite build && electron-builder --win",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run build",
+    "ci": "npm run build"
   },
   "repository": {
     "type": "git",
-    "url": "https://gitcode.com/Fwind43/SerialX"
+    "url": "https://github.com/Fwind43/SerialX.git"
   },
   "keywords": [],
   "author": "",
@@ -77,5 +78,9 @@
     "asar": true,
     "compression": "maximum",
     "npmRebuild": false
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/Fwind43/SerialX/issues"
+  },
+  "homepage": "https://github.com/Fwind43/SerialX#readme"
 }
