@@ -5,6 +5,8 @@ export const useSerialStore = defineStore('serial', () => {
   const SETTINGS_SNAPSHOT_VERSION = 1
   const WORKSPACE_SNAPSHOT_VERSION = 1
   const SEND_HISTORY_LIMIT = 12
+  const DEFAULT_PACKET_TIMEOUT = 50
+  const LEGACY_DEFAULT_PACKET_TIMEOUT = 500
 
   const createTerminalAppearancePreset = (mode = 'dark') => {
     if (mode === 'light') {
@@ -225,10 +227,10 @@ export const useSerialStore = defineStore('serial', () => {
     loopFailureLimit: 0,
     hexSend: false,
     sendLineEnding: 'none',
-    packetTimeout: 500 // 分包超时时间（毫秒）
+    packetTimeout: DEFAULT_PACKET_TIMEOUT // 分包聚合窗口（毫秒）
   })
 
-  const normalizePortControlSettings = (settings = {}) => {
+  const normalizePortControlSettings = (settings = {}, options = {}) => {
     const defaults = createDefaultPortControlSettings()
     const source = isPlainSettingsObject(settings) ? settings : {}
     const normalized = { ...defaults, ...source }
@@ -241,6 +243,11 @@ export const useSerialStore = defineStore('serial', () => {
     normalized.loopMaxCount = Math.max(0, Number(normalized.loopMaxCount) || defaults.loopMaxCount)
     normalized.loopFailureLimit = Math.max(0, Number(normalized.loopFailureLimit) || defaults.loopFailureLimit)
     normalized.packetTimeout = Math.max(1, Number(normalized.packetTimeout) || defaults.packetTimeout)
+    // SerialX 1.0.8 once persisted an accidental 500 ms default. Only migrate values
+    // while loading stored snapshots/config; live UI edits can still choose 500 ms.
+    if (options.migrateLegacyPacketTimeout && normalized.packetTimeout === LEGACY_DEFAULT_PACKET_TIMEOUT) {
+      normalized.packetTimeout = defaults.packetTimeout
+    }
     normalized.sendLineEnding = ['none', 'cr', 'lf', 'crlf'].includes(normalized.sendLineEnding)
       ? normalized.sendLineEnding
       : defaults.sendLineEnding
@@ -655,7 +662,7 @@ export const useSerialStore = defineStore('serial', () => {
     }
 
     if ('packetTimeout' in normalizedUpdates) {
-      normalizedUpdates.packetTimeout = Math.max(1, Number(normalizedUpdates.packetTimeout) || 500)
+      normalizedUpdates.packetTimeout = Math.max(1, Number(normalizedUpdates.packetTimeout) || DEFAULT_PACKET_TIMEOUT)
     }
 
     if ('sendLineEnding' in normalizedUpdates && !['none', 'cr', 'lf', 'crlf'].includes(normalizedUpdates.sendLineEnding)) {
@@ -1414,7 +1421,9 @@ export const useSerialStore = defineStore('serial', () => {
       ...(snapshot.defaultSettings || {})
     }
     portDisplaySettings.value = new Map(Object.entries(snapshot.portDisplaySettings || {}))
-    portControlSettings.value = new Map(Object.entries(snapshot.portControlSettings || {}))
+    portControlSettings.value = new Map(
+      Object.entries(snapshot.portControlSettings || {}).map(([portPath, settings]) => [portPath, normalizePortControlSettings(settings, { migrateLegacyPacketTimeout: true })])
+    )
     portFilters.value = new Map(Object.entries(snapshot.portFilters || {}))
     portSendingData.value = new Map(Object.entries(snapshot.portSendingData || {}))
     portSendHistory.value = new Map(Object.entries(snapshot.portSendHistory || {}))
@@ -1501,7 +1510,9 @@ export const useSerialStore = defineStore('serial', () => {
     portDisplaySettings.value = new Map(
       Object.entries(snapshot.portDisplaySettings || {}).map(([portPath, settings]) => [portPath, normalizePortDisplaySettings(settings)])
     )
-    portControlSettings.value = new Map(Object.entries(snapshot.portControlSettings || {}))
+    portControlSettings.value = new Map(
+      Object.entries(snapshot.portControlSettings || {}).map(([portPath, settings]) => [portPath, normalizePortControlSettings(settings, { migrateLegacyPacketTimeout: true })])
+    )
     const nextAppUiState = buildAppUiStateWithThemeScheme({
       ...createDefaultAppUiState(),
       ...(snapshot.appUiState || {})
@@ -1586,7 +1597,9 @@ export const useSerialStore = defineStore('serial', () => {
           )
         }
         if (state.portControlSettings) {
-          portControlSettings.value = new Map(Object.entries(state.portControlSettings))
+          portControlSettings.value = new Map(
+            Object.entries(state.portControlSettings).map(([portPath, settings]) => [portPath, normalizePortControlSettings(settings, { migrateLegacyPacketTimeout: true })])
+          )
         }
         if (state.commonCommands) {
           commonCommands.value = normalizeCommonCommands(state.commonCommands)
@@ -1677,7 +1690,7 @@ export const useSerialStore = defineStore('serial', () => {
         }
         if (config?.portControlSettings && typeof config.portControlSettings === 'object') {
           portControlSettings.value = new Map(
-            Object.entries(config.portControlSettings).map(([portPath, settings]) => [portPath, normalizePortControlSettings(settings)])
+            Object.entries(config.portControlSettings).map(([portPath, settings]) => [portPath, normalizePortControlSettings(settings, { migrateLegacyPacketTimeout: true })])
           )
         }
         if (config?.defaultSettings && typeof config.defaultSettings === 'object') {

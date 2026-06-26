@@ -482,7 +482,7 @@ class SerialManager {
 
   normalizePacketTimeout(value) {
     const timeout = Number(value)
-    if (!Number.isFinite(timeout)) return 500
+    if (!Number.isFinite(timeout)) return 50
     return Math.max(1, Math.min(60000, Math.round(timeout)))
   }
 
@@ -536,7 +536,7 @@ class SerialManager {
   }
 
   async openPort(options) {
-    const { path: portPath, baudRate = 9600, dataBits = 8, stopBits = 1, parity = 'none', packetTimeout = 500 } = options || {}
+    const { path: portPath, baudRate = 9600, dataBits = 8, stopBits = 1, parity = 'none', packetTimeout = 50 } = options || {}
 
     if (!portPath) {
       return { success: false, error: '端口路径不能为空' }
@@ -572,7 +572,8 @@ class SerialManager {
       // 初始化该串口的缓冲区
       this.dataBuffers.set(portPath, [])
       this.setPacketTimeout(portPath, packetTimeout)
-      // 按“分包超时”聚合接收数据：超时窗口内持续收到数据则延后刷新。
+      // 按“分包超时”聚合接收数据：首个数据块开启固定刷新窗口。
+      // 窗口内继续收到数据不会延后刷新，避免高频数据把 Rx 推迟到空闲后才发出。
       // 为避免异常大流量无限堆积，达到安全阈值时仍立即刷新。
       const MAX_BUFFER_SIZE = 1024 * 1024 // 1MB 直接触发立即刷新
       const MAX_CHUNK_COUNT = 1024 // 1024 个数据块直接触发立即刷新
@@ -605,11 +606,9 @@ class SerialManager {
 
       const scheduleFlushByPacketTimeout = () => {
         const pendingTimer = this.flushTimers.get(portPath)
-        if (pendingTimer) {
-          clearTimeout(pendingTimer)
-        }
+        if (pendingTimer) return
 
-        const timeout = this.packetTimeouts.get(portPath) ?? 500
+        const timeout = this.packetTimeouts.get(portPath) ?? 50
         const timer = setTimeout(() => {
           this.flushTimers.delete(portPath)
           flushBuffer()

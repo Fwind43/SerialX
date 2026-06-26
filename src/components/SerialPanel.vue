@@ -910,9 +910,9 @@ onUnmounted(() => {
             type="number"
             class="interval-input"
             :value="portControlSettings.packetTimeout"
-            :min="100"
-            :step="100"
-            title="超过该时间未收到后续数据时，将当前数据视为一个完整分包"
+            :min="1"
+            :step="1"
+            title="分包聚合窗口，默认 50ms；窗口内收到的数据会合并为一次 Rx 输出"
             @input="updatePacketTimeout($event.target.value)"
           />
           <span class="interval-unit">ms</span>
