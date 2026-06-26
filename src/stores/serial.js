@@ -5,7 +5,7 @@ export const useSerialStore = defineStore('serial', () => {
   const SETTINGS_SNAPSHOT_VERSION = 1
   const WORKSPACE_SNAPSHOT_VERSION = 1
   const SEND_HISTORY_LIMIT = 12
-  const DEFAULT_PACKET_TIMEOUT = 50
+  const DEFAULT_PACKET_TIMEOUT = 20
   const LEGACY_DEFAULT_PACKET_TIMEOUT = 500
 
   const createTerminalAppearancePreset = (mode = 'dark') => {
@@ -225,7 +225,7 @@ export const useSerialStore = defineStore('serial', () => {
     loopStartDelay: 0,
     loopMaxCount: 0,
     loopFailureLimit: 0,
-    hexSend: false,
+    hexSend: true,
     sendLineEnding: 'none',
     packetTimeout: DEFAULT_PACKET_TIMEOUT // 分包聚合窗口（毫秒）
   })

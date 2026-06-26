@@ -38,8 +38,19 @@ const searchError = ref('')
 const searchMatchCount = ref(0)
 const currentMatchIndex = ref(0)
 const isSearchPending = ref(false)
+const showJumpToLatest = ref(false)
+const pendingNewLogCount = ref(0)
+const searchKeywordColors = [
+  '#38bdf8',
+  '#f59e0b',
+  '#22c55e',
+  '#e879f9',
+  '#fb7185',
+  '#a78bfa'
+]
+let keywordSearchAddons = []
 const searchStatusText = computed(() => {
-  if (!searchQuery.value) {
+  if (searchKeywords.value.length === 0) {
     return '输入内容开始搜索'
   }
 
@@ -58,6 +69,15 @@ const searchStatusText = computed(() => {
   const currentIndex = currentMatchIndex.value || 1
   return `第 ${currentIndex} / 共 ${searchMatchCount.value} 项`
 })
+const searchKeywords = computed(() => (
+  searchQuery.value
+    .split(/[；;]/)
+    .map((keyword) => keyword.trim())
+    .filter(Boolean)
+))
+
+const hasMultipleSearchKeywords = computed(() => searchKeywords.value.length > 1)
+
 const searchModeSummary = computed(() => {
   const enabledModes = []
   if (searchCaseSensitive.value) enabledModes.push('区分大小写')
@@ -66,12 +86,12 @@ const searchModeSummary = computed(() => {
   return enabledModes.length ? `已启用：${enabledModes.join('、')}` : '默认搜索模式'
 })
 const searchResultAnnouncement = computed(() => {
-  const queryText = searchQuery.value ? `关键词：${searchQuery.value}。` : ''
+  const queryText = searchKeywords.value.length ? `关键词：${searchKeywords.value.join('、')}。` : ''
   return `${queryText}${searchStatusText.value}。${searchModeSummary.value}`
 })
-const isSearchEmpty = computed(() => searchQuery.value && !isSearchPending.value && (searchMatchCount.value === 0 || Boolean(searchError.value)))
+const isSearchEmpty = computed(() => searchKeywords.value.length > 0 && !isSearchPending.value && (searchMatchCount.value === 0 || Boolean(searchError.value)))
 const canNavigateSearchMatches = computed(() => (
-  Boolean(searchQuery.value) &&
+  searchKeywords.value.length > 0 &&
   !isSearchPending.value &&
   !searchError.value &&
   searchMatchCount.value > 0
@@ -247,7 +267,7 @@ const openSearch = () => {
   closeContextMenu()
   searchMatchCount.value = 0
   currentMatchIndex.value = 0
-  isSearchPending.value = Boolean(searchQuery.value)
+  isSearchPending.value = searchKeywords.value.length > 0
   focusSearchInput()
 }
 
@@ -396,19 +416,57 @@ const getTerminalTheme = () => ({
   brightWhite: '#ffffff'
 })
 
-const getSearchOptions = () => ({
-  caseSensitive: searchCaseSensitive.value,
-  wholeWord: searchWholeWord.value,
-  regex: searchUseRegex.value,
-  decorations: {
-    matchBackground: effectiveSearchPalette.value.matchBackground,
-    matchBorder: effectiveSearchPalette.value.matchBorder,
-    matchOverviewRuler: effectiveSearchPalette.value.overviewRuler,
-    activeMatchBackground: effectiveSearchPalette.value.activeMatchBackground,
-    activeMatchBorder: effectiveSearchPalette.value.activeMatchBorder,
-    activeMatchColorOverviewRuler: effectiveSearchPalette.value.overviewRuler
+
+const escapeSearchRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const getSearchPattern = () => {
+  const keywords = searchKeywords.value
+  if (keywords.length === 0) return ''
+  if (keywords.length === 1) return keywords[0]
+  const parts = searchUseRegex.value
+    ? keywords.map((keyword) => `(?:${keyword})`)
+    : keywords.map((keyword) => `(?:${escapeSearchRegex(keyword)})`)
+  return parts.join('|')
+}
+
+const getKeywordSearchOptions = (index = 0, forceRegex = false) => {
+  const color = searchKeywordColors[index % searchKeywordColors.length]
+  const background = `${color}38`
+  const activeBackground = `${color}55`
+  return {
+    caseSensitive: searchCaseSensitive.value,
+    wholeWord: searchWholeWord.value,
+    regex: forceRegex || searchUseRegex.value,
+    decorations: {
+      matchBackground: background,
+      matchBorder: `${color}cc`,
+      matchOverviewRuler: `${color}cc`,
+      activeMatchBackground: activeBackground,
+      activeMatchBorder: color,
+      activeMatchColorOverviewRuler: color
+    }
   }
-})
+}
+
+const getSearchOptions = () => {
+  if (hasMultipleSearchKeywords.value) {
+    return getKeywordSearchOptions(0, true)
+  }
+
+  return {
+    caseSensitive: searchCaseSensitive.value,
+    wholeWord: searchWholeWord.value,
+    regex: searchUseRegex.value,
+    decorations: {
+      matchBackground: effectiveSearchPalette.value.matchBackground,
+      matchBorder: effectiveSearchPalette.value.matchBorder,
+      matchOverviewRuler: effectiveSearchPalette.value.overviewRuler,
+      activeMatchBackground: effectiveSearchPalette.value.activeMatchBackground,
+      activeMatchBorder: effectiveSearchPalette.value.activeMatchBorder,
+      activeMatchColorOverviewRuler: effectiveSearchPalette.value.overviewRuler
+    }
+  }
+}
 
 const resetSearchResults = () => {
   searchMatchCount.value = 0
@@ -429,8 +487,43 @@ const settleSearchRequest = (requestToken, found) => {
   resetSearchResults()
 }
 
+
+const ensureKeywordSearchAddons = () => {
+  if (!terminal) return
+  const keywordCount = Math.max(0, searchKeywords.value.length - 1)
+  while (keywordSearchAddons.length < keywordCount) {
+    const addon = new SearchAddon()
+    terminal.loadAddon(addon)
+    keywordSearchAddons.push(addon)
+  }
+  while (keywordSearchAddons.length > keywordCount) {
+    const addon = keywordSearchAddons.pop()
+    addon?.clearDecorations?.()
+    addon?.dispose?.()
+  }
+}
+
+const clearKeywordSearchHighlights = () => {
+  keywordSearchAddons.forEach((addon) => addon?.clearDecorations?.())
+}
+
+const refreshKeywordSearchHighlights = () => {
+  if (!terminal || !hasMultipleSearchKeywords.value) {
+    clearKeywordSearchHighlights()
+    return
+  }
+  ensureKeywordSearchAddons()
+  searchKeywords.value.slice(1).forEach((keyword, addonIndex) => {
+    const addon = keywordSearchAddons[addonIndex]
+    if (!addon) return
+    addon.clearDecorations?.()
+    addon.findNext(keyword, getKeywordSearchOptions(addonIndex + 1))
+  })
+}
+
 const runSearch = (direction = 'next') => {
-  if (!searchQuery.value || !terminal || !searchAddon) {
+  const pattern = getSearchPattern()
+  if (!pattern || !terminal || !searchAddon) {
     resetSearchResults()
     return
   }
@@ -438,22 +531,29 @@ const runSearch = (direction = 'next') => {
   const requestToken = beginSearchRequest()
   const searchOptions = getSearchOptions()
   const found = direction === 'previous'
-    ? searchAddon.findPrevious(searchQuery.value, searchOptions)
-    : searchAddon.findNext(searchQuery.value, searchOptions)
+    ? searchAddon.findPrevious(pattern, searchOptions)
+    : searchAddon.findNext(pattern, searchOptions)
 
   nextTick(() => {
+    refreshKeywordSearchHighlights()
     settleSearchRequest(requestToken, found)
   })
 }
 
 const isSearchPatternValid = () => {
-  if (!searchUseRegex.value || !searchQuery.value) {
+  const pattern = getSearchPattern()
+  if (!pattern) {
+    searchError.value = ''
+    return true
+  }
+
+  if (!searchUseRegex.value && !hasMultipleSearchKeywords.value) {
     searchError.value = ''
     return true
   }
 
   try {
-    new RegExp(searchQuery.value)
+    new RegExp(pattern)
     searchError.value = ''
     return true
   } catch {
@@ -469,10 +569,12 @@ const clearSearchHighlights = () => {
   if (searchAddon?.clearDecorations) {
     searchAddon.clearDecorations()
   }
+  clearKeywordSearchHighlights()
 }
 
+
 const refreshSearchResults = () => {
-  if (!showSearch.value || !searchQuery.value || !terminal || !searchAddon) return
+  if (!showSearch.value || searchKeywords.value.length === 0 || !terminal || !searchAddon) return
   if (!isSearchPatternValid()) {
     resetSearchResults()
     clearSearchHighlights()
@@ -489,7 +591,7 @@ const performSearch = () => {
     return
   }
 
-  if (!searchQuery.value) {
+  if (searchKeywords.value.length === 0) {
     searchError.value = ''
     clearSearchHighlights()
     resetSearchResults()
@@ -508,7 +610,7 @@ const performSearch = () => {
 
 const debouncedSearch = () => {
   clearSearchDebounce()
-  isSearchPending.value = Boolean(searchQuery.value)
+  isSearchPending.value = searchKeywords.value.length > 0
   searchDebounceTimer = setTimeout(() => {
     performSearch()
   }, 150)
@@ -557,6 +659,26 @@ const applyTerminalAppearance = () => {
   refreshSearchResults()
 }
 
+
+const isTerminalNearBottom = () => {
+  if (!terminal) return true
+  const buffer = terminal.buffer?.active
+  if (!buffer) return true
+  return buffer.baseY - buffer.viewportY <= 1
+}
+
+const markNewLogsAwayFromBottom = (count = 1) => {
+  pendingNewLogCount.value += count
+  showJumpToLatest.value = true
+}
+
+const scrollToLatest = () => {
+  if (!terminal) return
+  terminal.scrollToBottom()
+  pendingNewLogCount.value = 0
+  showJumpToLatest.value = false
+}
+
 const loadHistoryLogs = () => {
   if (!terminal || !portLogs.value) return
 
@@ -584,25 +706,30 @@ const loadHistoryLogs = () => {
   renderedLogCount = logs.length
   renderedFirstLogId = renderedLogs[0]?.id ?? null
   renderedLastLogId = renderedLogs[renderedLogs.length - 1]?.id ?? null
-  terminal.scrollToBottom()
+  if (portControlSettings.value.isAutoScroll && isTerminalNearBottom()) {
+    scrollToLatest()
+  }
 }
 
 const addLogEntry = (log) => {
   if (!terminal) return
 
+  const shouldStickToBottom = portControlSettings.value.isAutoScroll && isTerminalNearBottom()
   const line = formatLogLine(log)
   terminal.writeln(line)
   logEntries.push({
     id: log.id,
-    line: terminal.rows - 1
+    line: terminal.buffer?.active?.baseY ?? Math.max(0, terminal.rows - 1)
   })
 
   if (logEntries.length > MAX_LOG_COUNT) {
     logEntries.shift()
   }
 
-  if (portControlSettings.value.isAutoScroll) {
-    terminal.scrollToBottom()
+  if (shouldStickToBottom) {
+    scrollToLatest()
+  } else if (portControlSettings.value.isAutoScroll) {
+    markNewLogsAwayFromBottom()
   }
 }
 
@@ -621,6 +748,8 @@ const syncTerminalLogs = () => {
     logEntries = []
     clearFormattedLogCache()
     resetRenderedLogState()
+    pendingNewLogCount.value = 0
+    showJumpToLatest.value = false
     performSearch()
     return
   }
@@ -953,7 +1082,7 @@ const initTerminal = () => {
   loadHistoryLogs()
 
   searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
-    if (!searchQuery.value) {
+    if (searchKeywords.value.length === 0) {
       resetSearchResults()
       return
     }
@@ -1053,6 +1182,9 @@ onUnmounted(() => {
     terminalContainer.value.removeEventListener('contextmenu', handleContextMenu)
   }
 
+  keywordSearchAddons.forEach((addon) => addon?.dispose?.())
+  keywordSearchAddons = []
+
   if (terminal) {
     terminal.dispose()
     terminal = null
@@ -1076,7 +1208,7 @@ defineExpose({
             v-model="searchQuery"
             type="text"
             class="search-input"
-            placeholder="搜索终端内容..."
+            placeholder="多个关键词用；分隔..."
             :aria-describedby="`${searchStatusId} ${searchCountId}`"
             :aria-label="`搜索终端内容，${searchResultAnnouncement}`"
             @keydown.enter.prevent="handleSearchKeyDown"
@@ -1090,6 +1222,16 @@ defineExpose({
           >
             {{ searchStatusText }}
           </span>
+          <div v-if="searchKeywords.length > 1" class="search-keyword-palette" aria-label="多关键词高亮颜色">
+            <span
+              v-for="(keyword, index) in searchKeywords"
+              :key="`${keyword}-${index}`"
+              class="search-keyword-chip"
+              :style="{ '--keyword-color': searchKeywordColors[index % searchKeywordColors.length] }"
+            >
+              {{ keyword }}
+            </span>
+          </div>
           <button
             :class="['search-toggle', { active: searchCaseSensitive }]"
             type="button"
@@ -1245,6 +1387,16 @@ defineExpose({
       </div>
     </Teleport>
 
+    <button
+      v-if="showJumpToLatest"
+      type="button"
+      class="jump-latest-toast"
+      aria-label="跳转到最新串口数据"
+      @click="scrollToLatest"
+    >
+      {{ pendingNewLogCount > 1 ? `${pendingNewLogCount} 条新数据` : '有新数据' }}，查看最新
+    </button>
+
     <div ref="terminalContainer" class="terminal-container"></div>
   </div>
 </template>
@@ -1270,6 +1422,56 @@ defineExpose({
   display: flex;
   justify-content: flex-end;
   padding: 6px 8px 0;
+}
+
+
+.search-keyword-palette {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 260px;
+  overflow: hidden;
+}
+
+.search-keyword-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 88px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--keyword-color) 70%, transparent);
+  background: color-mix(in srgb, var(--keyword-color) 18%, transparent);
+  color: var(--terminal-foreground);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jump-latest-toast {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 8;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(94, 160, 255, 0.38);
+  background: rgba(14, 22, 34, 0.88);
+  color: #e0f2fe;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.jump-latest-toast:hover {
+  transform: translateY(-1px);
+  border-color: rgba(94, 160, 255, 0.72);
+  background: rgba(18, 30, 48, 0.94);
 }
 
 .terminal-container {
